@@ -35,7 +35,8 @@ sources:
       "WI", "MN", "IA", "MO", "AR",
       "LA", "MS", "ND", "SD"]
 
-embedding:
-  model: sentence-transformers/all-mpnet-base-v2
+embeddings:
+  # model: sentence-transformers/all-mpnet-base-v2
+  model: sentence-transformers/multi-qa-mpnet-base-dot-v1
   batch_size: 32
-  text_columsn: ["title", "text"]
+  text_columns: ["title", "text"]

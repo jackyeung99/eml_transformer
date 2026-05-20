@@ -171,8 +171,7 @@ def run_all(
         # config=rt.embedding_config,
     ).run(rt.embedding_config, rt.source_configs)
 
-    typer.echo("Pipeline complete.")
-
+  
 
 if __name__ == "__main__":
     setup_logging(level=logging.INFO, log_file=None, force=True)

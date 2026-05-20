@@ -37,33 +37,18 @@ class IngestionPipeline:
         self,
         source_configs: dict[str, dict],
     ) -> list[IngestionResult]:
-        logger.info(
-            "Starting ingestion for %s sources",
-            len(source_configs),
-        )
-
-        results = [
+        return [
             self.run_source(source_name, source_kwargs)
             for source_name, source_kwargs in source_configs.items()
         ]
-
-        successful = sum(
-            result.status == "success"
-            for result in results
-        )
-
-        logger.info(
-            "Ingestion complete | successful=%s/%s",
-            successful,
-            len(results),
-        )
-
-        return results
 
     def run_source(
         self,
         source_name: str,
         source_kwargs: dict[str, Any],
+        from_date: str | None = None,
+        to_date: str | None = None,
+        update_checkpoint: bool = True,
     ) -> IngestionResult:
         run_time = datetime.now(timezone.utc)
         run_id = run_time.strftime("%Y%m%dT%H%M%SZ")
@@ -71,48 +56,36 @@ class IngestionPipeline:
         bronze_key: str | None = None
         dedupe_key: str | None = None
 
-        logger.info(
-            "Starting ingestion | source=%s | run_id=%s",
-            source_name,
-            run_id,
-        )
-
         try:
             source = create_source(source_name, **source_kwargs)
 
             bronze_key = self.paths.bronze_records(source.name)
             dedupe_key = self.paths.dedupe_state(source.name)
 
-            logger.info(
-                "Fetching raw records | source=%s | update_mode=%s",
-                source.name,
-                source.update_mode,
-            )
+            effective_from_date = from_date
 
-            checkpoint = None
-            since = None
-
-            if source.update_mode == "incremental":
+            if source.update_mode == "incremental" and effective_from_date is None:
                 checkpoint = self._load_checkpoint(source.name)
 
                 if checkpoint is not None:
-                    since = checkpoint.get("last_published_at")
+                    effective_from_date = checkpoint.get("last_checkpoint_value")
 
-                logger.info("Incremental data source | last_updated=%s", since)
-                raw = source.fetch_raw(from_date=since)
-            else:
-                raw = source.fetch_raw()
+            logger.info(
+                "Fetching raw records | source=%s | update_mode=%s | from=%s | to=%s",
+                source.name,
+                source.update_mode,
+                effective_from_date,
+                to_date,
+            )
+
+            raw = source.fetch_raw(
+                from_date=effective_from_date,
+                to_date=to_date,
+            )
 
             raw_records = source.parse_records(raw)
 
-            logger.info(
-                "Fetched %s records | source=%s",
-                len(raw_records),
-                source.name,
-            )
-
             seen_hashes = self._load_seen(dedupe_key)
-
             bronze_rows = []
 
             for raw_record in raw_records:
@@ -137,52 +110,26 @@ class IngestionPipeline:
             records_skipped = len(raw_records) - records_written
 
             if bronze_rows:
-                logger.info(
-                    "Writing %s new bronze records | source=%s",
-                    records_written,
-                    source.name,
-                )
-
                 self.storage.append_jsonl(
                     bronze_rows,
                     bronze_key,
                 )
-            else:
-                logger.info(
-                    "No new bronze records to write | source=%s",
-                    source.name,
-                )
 
             self._save_seen(dedupe_key, seen_hashes)
 
-            if source.update_mode == "incremental" and raw_records:
-                checkpoint_values = [
-                    source.get_checkpoint_value(record)
-                    for record in raw_records
-                ]
-
-                checkpoint_values = [
-                    value for value in checkpoint_values
-                    if value is not None
-                ]
-
-                if checkpoint_values:
-                    self._save_checkpoint(
-                        source.name,
-                        {
-                            "source": source.name,
-                            "last_successful_run_id": run_id,
-                            "last_checkpoint_value": max(checkpoint_values),
-                        },
-                    )
-
-            logger.info(
-                "Finished ingestion | source=%s | fetched=%s | written=%s | skipped=%s",
-                source.name,
-                len(raw_records),
-                records_written,
-                records_skipped,
+            should_update_checkpoint = (
+                source.update_mode == "incremental"
+                and update_checkpoint
+                and to_date is None
+                and raw_records
             )
+
+            if should_update_checkpoint:
+                self._update_checkpoint(
+                    source=source,
+                    run_id=run_id,
+                    raw_records=raw_records,
+                )
 
             return IngestionResult(
                 status="success",
@@ -214,59 +161,53 @@ class IngestionPipeline:
                 dedupe_key=dedupe_key,
             )
 
-    def _update_checkpoint_from_raw_records(
+    def _update_checkpoint(
         self,
-        source_name: str,
+        source: Any,
         run_id: str,
         raw_records: list[dict[str, Any]],
     ) -> None:
-        published_times = [
-            record.get("published_at")
+        checkpoint_values = [
+            source.get_checkpoint_value(record)
             for record in raw_records
-            if record.get("published_at") is not None
         ]
 
-        if not published_times:
+        checkpoint_values = [
+            value for value in checkpoint_values
+            if value is not None
+        ]
+
+        if not checkpoint_values:
             logger.info(
-                "No published_at values found; checkpoint not updated | source=%s",
-                source_name,
+                "No checkpoint values found | source=%s",
+                source.name,
             )
             return
 
+        last_checkpoint_value = max(checkpoint_values)
+
         self._save_checkpoint(
-            source_name,
+            source.name,
             {
-                "source": source_name,
+                "source": source.name,
                 "last_successful_run_id": run_id,
-                "last_published_at": max(published_times),
+                "last_checkpoint_value": last_checkpoint_value,
             },
         )
 
         logger.info(
-            "Checkpoint updated | source=%s | last_published_at=%s",
-            source_name,
-            max(published_times),
+            "Checkpoint updated | source=%s | value=%s",
+            source.name,
+            last_checkpoint_value,
         )
 
     def _load_checkpoint(self, key: str) -> dict[str, Any] | None:
         checkpoint_key = self.paths.checkpoint_key(key)
 
         if not self.storage.exists(checkpoint_key):
-            logger.info(
-                "No checkpoint found | key=%s",
-                checkpoint_key,
-            )
             return None
 
-        checkpoint = self.storage.read_json(checkpoint_key)
-
-        logger.info(
-            "Loaded checkpoint | key=%s | last_published_at=%s",
-            checkpoint_key,
-            checkpoint.get("last_published_at"),
-        )
-
-        return checkpoint
+        return self.storage.read_json(checkpoint_key)
 
     def _save_checkpoint(
         self,
@@ -284,21 +225,10 @@ class IngestionPipeline:
 
     def _load_seen(self, key: str) -> set[str]:
         if not self.storage.exists(key):
-            logger.info(
-                "No dedupe state found | key=%s",
-                key,
-            )
             return set()
 
         state = self.storage.read_json(key)
-        seen = set(state.get("seen", []))
-
-        logger.info(
-            "Loaded dedupe state | seen=%s",
-            len(seen),
-        )
-
-        return seen
+        return set(state.get("seen", []))
 
     def _save_seen(self, key: str, seen: set[str]) -> None:
         self.storage.write_json(
@@ -308,9 +238,4 @@ class IngestionPipeline:
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
             key,
-        )
-
-        logger.info(
-            "Saved dedupe state | seen=%s",
-            len(seen),
         )

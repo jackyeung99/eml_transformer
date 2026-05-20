@@ -45,8 +45,11 @@ class EmbeddingPipeline:
         embedding_config: dict[str, Any],
         source_configs: dict[str, dict[str, Any]],
     ) -> EmbeddingResult:
+        
+
+
         model_name = embedding_config.get(
-            "model_name",
+            "model",
             "sentence-transformers/all-MiniLM-L6-v2",
         )
 
