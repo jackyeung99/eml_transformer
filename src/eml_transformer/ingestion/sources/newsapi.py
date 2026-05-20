@@ -26,7 +26,7 @@ class NewsAPISource(TextSource):
         language: str = "en",
         sort_by: str = "relevancy",
         page_size: int = 100,
-        max_pages: int = 10,
+        max_pages: int = 1,
         from_date: str | None = None,
         to_date: str | None = None,
         timeout: int = 30,

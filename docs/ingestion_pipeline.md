@@ -27,28 +27,46 @@ This separation improves:
 
 ## 1. Raw Ingestion (Bronze Layer)
 
-The first stage is responsible for retrieving data from external sources and storing the raw responses without modification.
+The bronze layer is responsible for collecting raw data from multiple external sources and storing the original responses without modification.
+
+To support many different providers consistently, the ingestion system uses a shared source abstraction. Each source implements the same high-level interface while handling its own API logic internally.
 
 Examples of sources include:
+
 - MISO notifications
 - NewsAPI articles
 - National Weather Service alerts
 
+Even though these sources return different response formats, they all follow the same ingestion workflow:
+
+```python
+fetch_raw()
+parse_records()
+standardize_records()
+```
+
+This abstraction allows the pipeline to:
+- reuse ingestion logic across sources
+- simplify adding new data providers
+- maintain a consistent downstream schema
+- separate source-specific logic from pipeline orchestration
+
 ### Goals
 
-- Preserve the original source response
+- Preserve original source responses
 - Support reproducibility and auditing
 - Allow reprocessing without re-querying APIs
-- Track ingestion timestamps and checkpoints
+- Track ingestion timestamps and duplicate values
 - Handle incremental updates
+- Support modular multi-source ingestion
 
 ### Operations
 
 ```python
 ingest_raw
-  fetch API
+  fetch API data
   write raw JSON/JSONL
-  update checkpoint
+  update duplicate values
 ```
 
 ### Bronze Storage
@@ -59,23 +77,50 @@ Raw responses are stored in:
 bronze/
 ```
 
-Typical formats:
+Typical formats include:
 - `.json`
 - `.jsonl`
 
-The bronze layer should remain append-only whenever possible.
+The bronze layer should remain append-only whenever possible so historical raw responses are preserved.
 
 ### Example Bronze Record
 
 ```json
 {
-  "retrieved_at": "2026-05-19T12:00:00Z",
-  "source": "newsapi",
+  "source": "miso_notifications",
+  "record_id": "53ef5ce06c06474ad3a88b23fca73a944c828ee736df61b68f57bd542c3df5ac",
+  "content_hash": "f1ca4716c08f2d730a8a3369a190f53236ef17d89acb0b469712309cc68aee84",
+  "dedupe_key": "53ef5ce06c06474ad3a88b23fca73a944c828ee736df61b68f57bd542c3df5ac:f1ca4716c08f2d730a8a3369a190f53236ef17d89acb0b469712309cc68aee84",
+  "retrieved_at": "2026-05-19T17:20:29.696968+00:00",
+  "run_id": "20260519T172029Z",
   "raw": {
     ...
   }
 }
 ```
+
+### Record Components
+
+- `source`  
+  Identifies which ingestion source produced the record.
+
+- `record_id`  
+  Stable identifier for the logical record.
+
+- `content_hash`  
+  Hash of the raw content used to detect changes in the source payload.
+
+- `dedupe_key`  
+  Combined identifier used for incremental ingestion and deduplication.
+
+- `retrieved_at`  
+  UTC timestamp indicating when the record was collected.
+
+- `run_id`  
+  Identifier for the ingestion pipeline execution.
+
+- `raw`  
+  Original unmodified source response.
 
 ## 2. Standardization (Silver Layer)
 

@@ -13,6 +13,7 @@ from eml_transformer.utils.stamping import stable_hash
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class IngestionResult:
     status: str
@@ -36,10 +37,28 @@ class IngestionPipeline:
         self,
         source_configs: dict[str, dict],
     ) -> list[IngestionResult]:
-        return [
+        logger.info(
+            "Starting ingestion for %s sources",
+            len(source_configs),
+        )
+
+        results = [
             self.run_source(source_name, source_kwargs)
             for source_name, source_kwargs in source_configs.items()
         ]
+
+        successful = sum(
+            result.status == "success"
+            for result in results
+        )
+
+        logger.info(
+            "Ingestion complete | successful=%s/%s",
+            successful,
+            len(results),
+        )
+
+        return results
 
     def run_source(
         self,
@@ -52,14 +71,31 @@ class IngestionPipeline:
         bronze_key: str | None = None
         dedupe_key: str | None = None
 
+        logger.info(
+            "Starting ingestion | source=%s | run_id=%s",
+            source_name,
+            run_id,
+        )
+
         try:
             source = create_source(source_name, **source_kwargs)
 
             bronze_key = self.paths.bronze_records(source.name)
             dedupe_key = self.paths.dedupe_state(source.name)
 
+            logger.info(
+                "Fetching raw records | source=%s",
+                source.name,
+            )
+
             raw = source.fetch_raw()
             raw_records = source.parse_records(raw)
+
+            logger.info(
+                "Fetched %s records | source=%s",
+                len(raw_records),
+                source.name,
+            )
 
             seen_hashes = self._load_seen(dedupe_key)
 
@@ -83,25 +119,50 @@ class IngestionPipeline:
 
                 seen_hashes.add(raw_hash)
 
+            records_written = len(bronze_rows)
+            records_skipped = len(raw_records) - records_written
+
             if bronze_rows:
-                self.storage.append_jsonl(bronze_rows, bronze_key)
+                logger.info(
+                    "Writing %s new bronze records | source=%s",
+                    records_written,
+                    source.name,
+                )
+
+                self.storage.append_jsonl(
+                    bronze_rows,
+                    bronze_key,
+                )
+            else:
+                logger.info(
+                    "No new bronze records to write | source=%s",
+                    source.name,
+                )
 
             self._save_seen(dedupe_key, seen_hashes)
+
+            logger.info(
+                "Finished ingestion | source=%s | fetched=%s | written=%s | skipped=%s",
+                source.name,
+                len(raw_records),
+                records_written,
+                records_skipped,
+            )
 
             return IngestionResult(
                 status="success",
                 source=source.name,
                 run_id=run_id,
                 records_fetched=len(raw_records),
-                records_written=len(bronze_rows),
-                records_skipped=len(raw_records) - len(bronze_rows),
+                records_written=records_written,
+                records_skipped=records_skipped,
                 bronze_key=bronze_key,
                 dedupe_key=dedupe_key,
             )
 
         except Exception as e:
             logger.exception(
-                "Ingestion failed | source=%s run_id=%s",
+                "Ingestion failed | source=%s | run_id=%s",
                 source_name,
                 run_id,
             )
@@ -117,14 +178,25 @@ class IngestionPipeline:
                 bronze_key=bronze_key,
                 dedupe_key=dedupe_key,
             )
-        
+
     def _load_seen(self, key: str) -> set[str]:
         if not self.storage.exists(key):
+            logger.info(
+                "No dedupe state found | key=%s",
+                key,
+            )
             return set()
 
         state = self.storage.read_json(key)
-        return set(state.get("seen", []))
-    
+        seen = set(state.get("seen", []))
+
+        logger.info(
+            "Loaded dedupe state | seen=%s",
+            len(seen),
+        )
+
+        return seen
+
     def _save_seen(self, key: str, seen: set[str]) -> None:
         self.storage.write_json(
             {
@@ -133,4 +205,9 @@ class IngestionPipeline:
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
             key,
+        )
+
+        logger.info(
+            "Saved dedupe state | seen=%s",
+            len(seen),
         )

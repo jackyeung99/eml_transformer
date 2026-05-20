@@ -34,3 +34,8 @@ sources:
       ["IN", "IL", "MI", "OH", "KY",
       "WI", "MN", "IA", "MO", "AR",
       "LA", "MS", "ND", "SD"]
+
+embedding:
+  model: sentence-transformers/all-mpnet-base-v2
+  batch_size: 32
+  text_columsn: ["title", "text"]

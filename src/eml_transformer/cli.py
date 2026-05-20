@@ -4,7 +4,8 @@ import pandas as pd
 import typer
 from dotenv import load_dotenv
 
-
+from eml_transformer.logging import setup_logging
+import logging
 
 from eml_transformer.ingestion.registry import (
     available_sources,
@@ -23,8 +24,9 @@ from eml_transformer.pipelines.standardization_pipeline import (
 from eml_transformer.runtime import build_runtime
 
 load_dotenv()
-
 app = typer.Typer()
+
+
 
 def print_ingestion_preview(
     df: pd.DataFrame,
@@ -60,6 +62,17 @@ def print_ingestion_preview(
         )
 
         typer.echo("-" * 90)
+
+
+@app.callback()
+def main(
+    log_level: str = typer.Option("INFO"),
+):
+    setup_logging(
+        level=logging.INFO,
+        log_file=None,
+        force=False,
+    )
 
 @app.command()
 def sources():
@@ -116,6 +129,7 @@ def clean_standardize(
 
 @app.command()
 def embed(
+    source: str = typer.Option("all"),
     config: str = typer.Option("configs/dev.yaml"),
 ):
     rt = build_runtime(config)
@@ -123,39 +137,43 @@ def embed(
     pipeline = EmbeddingPipeline(
         storage=rt.storage,
         paths=rt.paths,
+    )    
+    
+    result = pipeline.run(
+        embedding_config=rt.embedding_config,
+        source_configs=rt.source_configs,
     )
-
-    result = pipeline.run(rt.embeddings)
 
     typer.echo(result)
 
 
 @app.command("run-all")
 def run_all(
-    config: str = typer.Option("configs/pipeline.yaml"),
+    config: str = typer.Option("configs/dev.yaml"),
 ):
     rt = build_runtime(config)
 
     IngestionPipeline(
         storage=rt.storage,
         paths=rt.paths,
-        config=rt.ingestion_config,
+        # config=rt.ingestion_config,
     ).run_all(rt.source_configs)
 
     StandardizationPipeline(
         storage=rt.storage,
         paths=rt.paths,
-        config=rt.standardization_config,
+        # config=rt.standardization_config,
     ).run_all(rt.source_configs)
 
     EmbeddingPipeline(
         storage=rt.storage,
         paths=rt.paths,
-        config=rt.embedding_config,
-    ).run()
+        # config=rt.embedding_config,
+    ).run(rt.embedding_config, rt.source_configs)
 
     typer.echo("Pipeline complete.")
 
 
 if __name__ == "__main__":
+    setup_logging(level=logging.INFO, log_file=None, force=True)
     app()

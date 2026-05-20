@@ -11,6 +11,7 @@ from eml_transformer.ingestion.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
 from eml_transformer.text_processing.cleaning import clean_text
+from eml_transformer.ingestion.schema import TextRecord
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,19 @@ class StandardizationPipeline:
         self,
         source_configs: dict[str, dict],
     ) -> list[StandardizationResult]:
-        return [
+        logger.info(
+            "Starting standardization for %s sources",
+            len(source_configs),
+        )
+
+        results = [
             self.run_source(source_name, source_kwargs)
             for source_name, source_kwargs in source_configs.items()
         ]
+
+        logger.info("Standardization complete")
+
+        return results
 
     def run_source(
         self,
@@ -55,6 +65,11 @@ class StandardizationPipeline:
     ) -> StandardizationResult:
         bronze_key: str | None = None
         silver_key: str | None = None
+
+        logger.info(
+            "Starting standardization | source=%s",
+            source_name,
+        )
 
         try:
             source = create_source(source_name, **source_kwargs)
@@ -68,6 +83,11 @@ class StandardizationPipeline:
             )
 
             if not self.storage.exists(bronze_key):
+                logger.warning(
+                    "No bronze data found | source=%s",
+                    source.name,
+                )
+
                 return StandardizationResult(
                     status="skipped",
                     source=source.name,
@@ -80,6 +100,12 @@ class StandardizationPipeline:
 
             bronze_rows = self.storage.read_jsonl(bronze_key)
 
+            logger.info(
+                "Loaded bronze records | source=%s | rows=%s",
+                source.name,
+                len(bronze_rows),
+            )
+
             records = []
             failed_records = 0
 
@@ -88,11 +114,11 @@ class StandardizationPipeline:
                     raw_record = row["raw"]
 
                     text_record = source.standardize_record(
-                        raw_record
+                        raw_record,
                     )
 
                     text_record = self._clean_record(
-                        text_record
+                        text_record,
                     )
 
                     records.append(text_record)
@@ -106,10 +132,35 @@ class StandardizationPipeline:
                     )
 
             df = self._records_to_dataframe(records)
+            before_dedupe = len(df)
+
             df = self._deduplicate(df)
 
+            logger.info(
+                "Standardized records | source=%s | input=%s | output=%s | failed=%s | duplicates_removed=%s",
+                source.name,
+                len(bronze_rows),
+                len(df),
+                failed_records,
+                before_dedupe - len(df),
+            )
+
             if not df.empty:
-                self.storage.write_csv(df, silver_key)
+                self.storage.write_csv(
+                    df,
+                    silver_key,
+                )
+
+                logger.info(
+                    "Wrote silver records | source=%s | key=%s",
+                    source.name,
+                    silver_key,
+                )
+            else:
+                logger.warning(
+                    "No silver records written | source=%s",
+                    source.name,
+                )
 
             return StandardizationResult(
                 status="success",
@@ -140,23 +191,17 @@ class StandardizationPipeline:
 
     def _clean_record(
         self,
-        record,
-    ):
-        data = record.model_dump()
+        record: TextRecord,
+    ) -> TextRecord:
+        record.title = clean_text(
+            record.title or "",
+        )
 
-        title = data.get("title") or ""
-        text = data.get("text") or ""
+        record.text = clean_text(
+            record.text or "",
+        )
 
-        title = clean_text(title)
-        text = clean_text(text)
-
-        if data.get("source") == "weather_alerts":
-            text = remove_weather_boilerplate(text)
-
-        data["title"] = title
-        data["text"] = text
-
-        return record.__class__(**data)
+        return record
 
     def _records_to_dataframe(
         self,
@@ -175,7 +220,7 @@ class StandardizationPipeline:
             else:
                 rows.append(record)
 
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows).sort_values(by=['published_at'])
 
     def _deduplicate(
         self,
@@ -187,7 +232,10 @@ class StandardizationPipeline:
         if "record_id" not in df.columns:
             return df.drop_duplicates()
 
-        return df.drop_duplicates(
-            subset=["record_id"],
-            keep="last",
-        ).reset_index(drop=True)
+        return (
+            df.drop_duplicates(
+                subset=["record_id"],
+                keep="last",
+            )
+            .reset_index(drop=True)
+        )

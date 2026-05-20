@@ -12,6 +12,13 @@ _LOG_FORMAT = (
 
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+# supress noisy libraries
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+logging.getLogger("transformers").setLevel(logging.WARNING)
+
 
 def setup_logging(
     level: int = logging.INFO,

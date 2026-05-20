@@ -50,11 +50,29 @@ class StoragePaths:
         return _p(
             self.root,
             "silver",
-            "text_records",
             f"source={_clean(source)}",
             # f"ingest_date={ingest_date}",
             "records.csv",
         )
+
+    
+    # ------------------------------------------------------------------
+    # Gold
+    # ------------------------------------------------------------------
+
+    def gold_records( 
+        self, 
+        model_name: str
+    ) -> str:
+
+        model_name = model_name.replace('sentence-transformers/', '')
+        return _p(
+                self.root,
+                "gold",
+                f"model={_clean(model_name)}",
+                "embeddings.csv" 
+        ) 
+        
 
     # ------------------------------------------------------------------
     # Metadata
@@ -64,6 +82,7 @@ class StoragePaths:
         self,
         source: str,
     ) -> str:
+        
         return _p(
             self.root,
             "metadata",
