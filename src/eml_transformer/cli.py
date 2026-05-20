@@ -11,15 +11,10 @@ from eml_transformer.ingestion.registry import (
     available_sources,
 )
 
-from eml_transformer.pipelines.ingestion_pipeline import (
-    IngestionPipeline,
-)
-from eml_transformer.pipelines.embedding_pipeline import ( 
-    EmbeddingPipeline
-)
-from eml_transformer.pipelines.standardization_pipeline import (
-    StandardizationPipeline
-)
+from eml_transformer.pipelines.ingestion_pipeline import IngestionPipeline
+from eml_transformer.pipelines.embedding_pipeline import EmbeddingPipeline
+from eml_transformer.pipelines.standardization_pipeline import StandardizationPipeline
+from eml_transformer.pipelines.backfill_pipeline import BackfillPipeline
 
 from eml_transformer.runtime import build_runtime
 
@@ -130,22 +125,33 @@ def clean_standardize(
 @app.command()
 def embed(
     source: str = typer.Option("all"),
+    model_name: str | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Embedding model name to use such as sentence-transformers/multi-qa-mpnet-base-dot-v1",
+    ),
     config: str = typer.Option("configs/dev.yaml"),
 ):
     rt = build_runtime(config)
 
+    embedding_config = dict(rt.embedding_config)
+
+    if model_name is not None:
+        embedding_config["model_name"] = model_name
+
     pipeline = EmbeddingPipeline(
         storage=rt.storage,
         paths=rt.paths,
-    )    
-    
+    )
+
     result = pipeline.run(
-        embedding_config=rt.embedding_config,
+        embedding_config=embedding_config,
         source_configs=rt.source_configs,
+        source=source,
     )
 
     typer.echo(result)
-
 
 @app.command("run-all")
 def run_all(
@@ -171,8 +177,45 @@ def run_all(
         # config=rt.embedding_config,
     ).run(rt.embedding_config, rt.source_configs)
 
-  
+@app.command()
+def backfill(
+    source: str = typer.Option(..., "--source", "-s"),
+    start_date: str = typer.Option(..., "--start-date"),
+    end_date: str = typer.Option(..., "--end-date"),
+    window_days: int = typer.Option(30, "--window-days"),
+    config: str = typer.Option("configs/dev.yaml", "--config", "-c"),
+):
+    rt = build_runtime(config)
+
+    ingest_pipeline = IngestionPipeline(
+        storage=rt.storage,
+        paths=rt.paths,
+    )
+
+    pipeline = BackfillPipeline(
+        ingestion_pipeline=ingest_pipeline,
+    )
+
+    if source.lower() == "all":
+        results = pipeline.run_all(
+            source_configs=rt.source_configs,
+            start_date=start_date,
+            end_date=end_date,
+            window_days=window_days,
+        )
+    else:
+        source_config = rt.source_configs[source]
+
+        results = pipeline.run_source(
+            source_name=source,
+            source_config=source_config,
+            start_date=start_date,
+            end_date=end_date,
+            window_days=window_days,
+        )
+
+    typer.echo(results)
+
 
 if __name__ == "__main__":
-    setup_logging(level=logging.INFO, log_file=None, force=True)
     app()

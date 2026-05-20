@@ -19,6 +19,7 @@ class NewsAPISource(TextSource):
     name = "newsapi"
     source_type = "api"
     update_mode = "incremental"
+    supports_backfill = True
 
     def __init__(
         self,

@@ -19,6 +19,7 @@ class WeatherAlertSource(TextSource):
     name = "weather_alerts"
     source_type = "api"
     update_mode = "snapshot"
+    supports_backfill = False
 
     def __init__(
         self,

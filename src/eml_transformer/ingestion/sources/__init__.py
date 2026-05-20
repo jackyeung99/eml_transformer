@@ -1,9 +1,17 @@
-from eml_transformer.ingestion.sources.weather_alerts import WeatherAlertSource
-from eml_transformer.ingestion.sources.miso import MISONotificationSource
-from eml_transformer.ingestion.sources.newsapi import NewsAPISource
 
-__all__ = [
-    "WeatherAlertSource",
-    "MisoNotificationSource",
-    "NewsAPISource",
-]
+from pathlib import Path
+import importlib
+
+
+package_dir = Path(__file__).parent
+
+for path in package_dir.glob("*.py"):
+    if path.stem.startswith("_"):
+        continue
+
+    if path.stem == "__init__":
+        continue
+
+    importlib.import_module(
+        f"{__name__}.{path.stem}"
+    )

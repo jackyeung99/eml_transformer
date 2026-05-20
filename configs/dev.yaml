@@ -25,7 +25,7 @@ sources:
     language: en
     page_size: 100
 
-  miso_notifications:
+  miso:
     enabled: true
 
   weather_alerts:

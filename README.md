@@ -78,27 +78,63 @@ NEWSAPI_KEY=your_key_here
 
 # Running the Pipeline
 
+List all available sources 
 
-Run all sources
 ```bash
-eml_transformer --ingest all 
+eml_transformer sources
 ```
 
-News
+## Ingestion
+
+Run all sources:
+
 ```bash
-eml_transformer --ingest news
+eml_transformer ingest --source all
 ```
 
-Weather Alerts
+Run NewsAPI ingestion:
 
 ```bash
-eml_transformer --ingest weather
+eml_transformer ingest --source newsapi
 ```
 
-MISO Notifications
+Run Weather Alerts ingestion:
 
 ```bash
-eml_transformer --ingest miso
+eml_transformer ingest --source weather_alerts
+```
+
+Run MISO Notifications ingestion:
+
+```bash
+eml_transformer ingest --source miso_notifications
+```
+
+---
+
+## Standardization
+
+Standardize all sources:
+
+```bash
+eml_transformer standardize --source all
+```
+
+Standardize a single source:
+
+```bash
+eml_transformer standardize --source newsapi
+```
+
+---
+
+## Embeddings
+
+Generate embeddings using a model:
+
+```bash
+eml_transformer embed \
+    --model sentence-transformers/all-mpnet-base-v2
 ```
 
 # Output Structure
