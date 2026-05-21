@@ -153,7 +153,7 @@ class EmbeddingPipeline:
                 output_key,
             )
 
-            self.storage.write_csv(
+            self.storage.write_parquet(
                 valid_df,
                 output_key,
             )
@@ -192,7 +192,7 @@ class EmbeddingPipeline:
         for source in sources:
             key = self.paths.silver_records(source)
 
-            df = self.storage.read_csv(key)
+            df = self.storage.read_parquet(key)
 
             if df.empty:
                 logger.warning(

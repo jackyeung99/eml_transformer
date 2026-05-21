@@ -146,7 +146,7 @@ class StandardizationPipeline:
             )
 
             if not df.empty:
-                self.storage.write_csv(
+                self.storage.write_parquet(
                     df,
                     silver_key,
                 )
