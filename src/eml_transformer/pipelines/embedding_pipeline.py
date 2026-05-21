@@ -5,10 +5,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
-from sentence_transformers import SentenceTransformer
 
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
+from eml_transformer.text_processing.embeddings import (
+    SentenceTransformerEmbedder
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,17 +47,15 @@ class EmbeddingPipeline:
         embedding_config: dict[str, Any],
         source_configs: dict[str, dict[str, Any]],
     ) -> EmbeddingResult:
-        
-
 
         model_name = embedding_config.get(
             "model",
-            "sentence-transformers/all-MiniLM-L6-v2",
+            "nvidia/llama-nemotron-embed-vl-1b-v2",
         )
 
-        text_columns = embedding_config.get(
-            "text_columns",
-            ["title", "text"],
+        input_type = embedding_config.get(
+            "input_type",
+            "passage",
         )
 
         batch_size = embedding_config.get(
@@ -63,9 +63,9 @@ class EmbeddingPipeline:
             32,
         )
 
-        normalize_embeddings = embedding_config.get(
-            "normalize_embeddings",
-            True,
+        text_columns = embedding_config.get(
+            "text_columns",
+            ["title", "text"],
         )
 
         output_key = self.paths.gold_records(
@@ -75,11 +75,9 @@ class EmbeddingPipeline:
         sources = list(source_configs.keys())
 
         logger.info(
-            "Starting embedding pipeline | model=%s | sources=%s | batch_size=%s | normalize=%s",
+            "Starting embedding pipeline | model=%s | sources=%s",
             model_name,
             sources,
-            batch_size,
-            normalize_embeddings,
         )
 
         try:
@@ -87,18 +85,7 @@ class EmbeddingPipeline:
 
             records_read = len(df)
 
-            logger.info(
-                "Loaded standardized records | records=%s | sources=%s",
-                records_read,
-                len(sources),
-            )
-
             if df.empty:
-                logger.warning(
-                    "No standardized records found | sources=%s",
-                    sources,
-                )
-
                 return EmbeddingResult(
                     status="empty",
                     model_name=model_name,
@@ -108,7 +95,6 @@ class EmbeddingPipeline:
                     output_key=output_key,
                     records=df,
                 )
-
 
             df["embedding_text"] = df.apply(
                 lambda row: self._build_embedding_text(
@@ -122,21 +108,14 @@ class EmbeddingPipeline:
                 df["embedding_text"]
                 .fillna("")
                 .str.strip()
-                .ne("")
+                .ne("") 
             )
 
             valid_df = df.loc[valid_mask].copy()
 
             embeddings_skipped = len(df) - len(valid_df)
 
-    
-
             if valid_df.empty:
-                logger.warning(
-                    "No valid text available for embedding | records=%s",
-                    records_read,
-                )
-
                 return EmbeddingResult(
                     status="no_valid_text",
                     model_name=model_name,
@@ -147,45 +126,35 @@ class EmbeddingPipeline:
                     records=df,
                 )
 
-            logger.info(
-                "Loading embedding model | model=%s",
-                model_name,
+
+            client = SentenceTransformerEmbedder(
+                model_name=model_name,
+                device=embedding_config.get("device"),
             )
 
-            model = self._load_model(model_name)
-
             logger.info(
-                "Encoding records | records=%s | batch_size=%s",
+                "Generating embeddings | rows=%s | batch_size=%s",
                 len(valid_df),
                 batch_size,
             )
 
-            embeddings = model.encode(
+            embeddings = client.embed(
                 valid_df["embedding_text"].tolist(),
                 batch_size=batch_size,
-                show_progress_bar=True,
-                convert_to_numpy=True,
-                normalize_embeddings=normalize_embeddings,
             )
 
-            valid_df["embedding"] = embeddings.tolist()
+            valid_df["embedding"] = embeddings
             valid_df["embedding_model"] = model_name
+            valid_df["embedding_input_type"] = input_type
 
             logger.info(
-                "Writing embeddings | output_key=%s | rows=%s",
-                output_key,
+                "Writing embeddings | rows=%s | output_key=%s",
                 len(valid_df),
+                output_key,
             )
 
             self.storage.write_csv(
                 valid_df,
-                output_key,
-            )
-
-            logger.info(
-                "Embedding pipeline complete | status=success | created=%s | skipped=%s | output_key=%s",
-                len(valid_df),
-                embeddings_skipped,
                 output_key,
             )
 
@@ -201,9 +170,7 @@ class EmbeddingPipeline:
 
         except Exception as exc:
             logger.exception(
-                "Embedding pipeline failed | model=%s | output_key=%s",
-                model_name,
-                output_key,
+                "Embedding pipeline failed"
             )
 
             return EmbeddingResult(
@@ -216,22 +183,11 @@ class EmbeddingPipeline:
                 error=str(exc),
             )
 
-    def _load_model(
-        self,
-        model_name: str,
-    ) -> SentenceTransformer:
-        return SentenceTransformer(model_name)
-
     def _load_records(
         self,
         sources: list[str],
     ) -> pd.DataFrame:
         dfs = []
-
-        logger.info(
-            "Loading silver records | sources=%s",
-            sources,
-        )
 
         for source in sources:
             key = self.paths.silver_records(source)
@@ -240,24 +196,14 @@ class EmbeddingPipeline:
 
             if df.empty:
                 logger.warning(
-                    "No silver records found | source=%s | key=%s",
+                    "No silver records found | source=%s",
                     source,
-                    key,
                 )
                 continue
-
-            logger.info(
-                "Loaded source records | source=%s | rows=%s",
-                source,
-                len(df),
-            )
 
             dfs.append(df)
 
         if not dfs:
-            logger.warning(
-                "No silver records loaded from any source"
-            )
             return pd.DataFrame()
 
         merged = pd.concat(
@@ -265,20 +211,10 @@ class EmbeddingPipeline:
             ignore_index=True,
         )
 
-        before_dedupe = len(merged)
-
-        merged = merged.drop_duplicates(
-            subset=["record_id"],
-        ).sort_values(by=['published_at'])
-
-
-        after_dedupe = len(merged)
-
-        logger.info(
-            "Merged silver records | before_dedupe=%s | after_dedupe=%s | duplicates_removed=%s",
-            before_dedupe,
-            after_dedupe,
-            before_dedupe - after_dedupe,
+        merged = (
+            merged
+            .drop_duplicates(subset=["record_id"])
+            .sort_values(by=["published_at"])
         )
 
         return merged

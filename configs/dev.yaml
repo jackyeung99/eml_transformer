@@ -35,8 +35,13 @@ sources:
       "WI", "MN", "IA", "MO", "AR",
       "LA", "MS", "ND", "SD"]
 
-embeddings:
-  # model: sentence-transformers/all-mpnet-base-v2
-  model: sentence-transformers/multi-qa-mpnet-base-dot-v1
-  batch_size: 32
-  text_columns: ["title", "text"]
+embedding:
+  provider: sentence_transformer
+  # model: nvidia/NV-Embed-v2
+  batch_size: 16
+  device: cuda
+  normalize_embeddings: true
+  trust_remote_code: true
+  text_columns:
+    - title
+    - text

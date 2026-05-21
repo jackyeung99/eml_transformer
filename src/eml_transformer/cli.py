@@ -129,7 +129,7 @@ def embed(
         None,
         "--model",
         "-m",
-        help="Embedding model name to use such as sentence-transformers/multi-qa-mpnet-base-dot-v1",
+        help="Embedding model name to use such as ",
     ),
     config: str = typer.Option("configs/dev.yaml"),
 ):
@@ -148,7 +148,6 @@ def embed(
     result = pipeline.run(
         embedding_config=embedding_config,
         source_configs=rt.source_configs,
-        source=source,
     )
 
     typer.echo(result)

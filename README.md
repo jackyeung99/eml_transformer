@@ -130,12 +130,13 @@ eml_transformer standardize --source newsapi
 
 ## Embeddings
 
-Generate embeddings using a model:
+Generate embeddings using NVIDIA NeMo Retriever NIM embedding models for scalable GPU-accelerated inference.
 
 ```bash
 eml_transformer embed \
-    --model sentence-transformers/all-mpnet-base-v2
+    --model nvidia/nv-embedqa-e5-v5
 ```
+
 
 ## Backfilling Historical Data 
 
@@ -148,6 +149,8 @@ eml_transformer backfill   --source newsapi   --start-date 2026-04-20   --end-da
 ** this command is limited to data sources with supports_backfill=True and is also rate limited depending on source 
 
 # Output Structure
+The textual ingestion pipeline is built around the medallion architecture with the following data design structure 
+
 
 ### Bronze Layer
 
@@ -166,7 +169,7 @@ data/silver/source=
 ```
 
 ### Gold Layer 
-text pre processing and embeddings 
+text embeddings 
 
 ```text 
 data/gold/
