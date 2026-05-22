@@ -68,7 +68,7 @@ sources:
       "WI", "MN", "IA", "MO", "AR",
       "LA", "MS", "ND", "SD"]
 
-embedding:
+embeddings:
   provider: sentence_transformer
   model: nvidia/NV-Embed-v2
   batch_size: 16

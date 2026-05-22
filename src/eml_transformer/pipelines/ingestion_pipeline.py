@@ -123,8 +123,8 @@ class IngestionPipeline:
 
             if bronze_rows:
                 self.storage.append_jsonl(
-                    bronze_rows,
                     bronze_key,
+                    bronze_rows,
                 )
 
             self._save_seen(dedupe_key, seen_hashes)

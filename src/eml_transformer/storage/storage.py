@@ -161,13 +161,22 @@ class LocalStorage(Storage):
             json.dump(obj, f, indent=2, sort_keys=True, default=str)
         tmp.replace(path)
 
-    def append_jsonl(self, records: list[dict[str, Any]], key: str) -> None:
+    def append_jsonl(self, key: str, rows: list[dict[str, Any]]) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        if path.exists() and path.stat().st_size > 0:
+            with path.open("rb+") as f:
+                f.seek(-1, 2)
+                last_char = f.read(1)
+
+                if last_char != b"\n":
+                    f.write(b"\n")
+
         with path.open("a", encoding="utf-8") as f:
-            for record in records:
-                f.write(json.dumps(record, default=str, ensure_ascii=False) + "\n")
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False))
+                f.write("\n")
 
     def read_jsonl(
         self,

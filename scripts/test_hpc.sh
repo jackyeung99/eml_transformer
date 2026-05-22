@@ -1,5 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=test_ingest
+#SBATCH -J test_job
+#SBATCH -A r01850
 #SBATCH --output=/N/project/eml_ai_forecasting/eml_transformer/logs/test_%j.out
 #SBATCH --error=/N/project/eml_ai_forecasting/eml_transformer/logs/test_%j.err
 #SBATCH --time=00:10:00
