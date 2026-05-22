@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH -J test_job
 #SBATCH -A r01850
+#SBATCH --export=ALL
 #SBATCH --nodes=1
 #SBATCH -o output/run_%J.txt
 #SBATCH -e output/run_%J.err
@@ -25,7 +26,7 @@ cd /N/project/eml_ai_forecasting/eml_transformer
 
 
 # run
-python -m eml_transformer.cli ingest \
+eml_transformer ingest \
     --source all \
     --config configs/dev.yaml
 

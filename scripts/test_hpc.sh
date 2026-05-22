@@ -5,6 +5,7 @@
 #SBATCH --error=/N/project/eml_ai_forecasting/eml_transformer/logs/test_%j.err
 #SBATCH --time=00:10:00
 #SBATCH --cpus-per-task=2
+#SBATCH --export=ALL
 
 echo "JOB STARTED"
 echo "Working directory:"
@@ -25,8 +26,9 @@ pwd
 
 python --version
 
-python -m eml_transformer.cli ingest \
-    --source all \
-    --config configs/dev.yaml
-
 echo "JOB FINISHED"
+
+echo "Resubmitting..."
+
+sbatch --begin=now+2minutes \
+    /N/project/eml_ai_forecasting/eml_transformer/scripts/test_hpc.sh
