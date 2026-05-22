@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J test_job
+#SBATCH -J ingestion
 #SBATCH -A r01850
 #SBATCH --export=ALL
 #SBATCH --nodes=1
@@ -25,10 +25,9 @@ cd /N/project/eml_ai_forecasting/eml_transformer
 
 
 # run
-eml_transformer ingest \
+python -m eml_transformer.cli ingest \
     --source all \
     --config configs/dev.yaml
-
 
 # repeat every 12 hours
 sbatch --begin=now+12hour /N/project/eml_ai_forecasting/eml_transformer/scripts/run_ingest.sh
