@@ -76,11 +76,11 @@ class IngestionPipeline:
                         run_time - timedelta(days=lookback_days)
                     ).date().isoformat()
 
-            if effective_from_date is None:
-                raise ValueError(
-                    f"No from_date, checkpoint, or default_start_date found for "
-                    f"incremental source {source.name}"
-                )
+                if effective_from_date is None:
+                    raise ValueError(
+                        f"No from_date, checkpoint, or default_start_date found for "
+                        f"incremental source {source.name}"
+                    )
 
             logger.info(
                 "Fetching raw records | source=%s | update_mode=%s | from=%s | to=%s",
