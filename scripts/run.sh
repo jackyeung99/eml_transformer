@@ -14,9 +14,8 @@
 #SBATCH -p gpu-debug
 
 #Set up environment
-module load python/gpu/3.12.5
+module load python/gpu/3.10.10
 export OMP_NUM_THREADS=10
-
 
 # Check GPUs allocated
 # nvidia-smi

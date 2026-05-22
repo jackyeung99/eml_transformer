@@ -12,7 +12,6 @@ from eml_transformer.ingestion.registry import (
 )
 
 from eml_transformer.pipelines.ingestion_pipeline import IngestionPipeline
-from eml_transformer.pipelines.embedding_pipeline import EmbeddingPipeline
 from eml_transformer.pipelines.standardization_pipeline import StandardizationPipeline
 from eml_transformer.pipelines.backfill_pipeline import BackfillPipeline
 
@@ -47,6 +46,7 @@ def print_ingestion_preview(
         )
 
         typer.echo(
+
             f"URL: {row.get('url')}"
         )
 
@@ -133,6 +133,7 @@ def embed(
     ),
     config: str = typer.Option("configs/dev.yaml"),
 ):
+    from eml_transformer.pipelines.embedding_pipeline import EmbeddingPipeline
     rt = build_runtime(config)
 
     embedding_config = dict(rt.embedding_config)
