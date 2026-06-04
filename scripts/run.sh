@@ -11,7 +11,7 @@
 #SBATCH --time=20:00
 #SBATCH --mail-user=jayeun@iu.edu
 #SBATCH --mail-type=BEGIN,FAIL,END
-#SBATCH -p gpu-debug
+#SBATCH -p general
 
 #Set up environment
 module load python/gpu/3.10.10
