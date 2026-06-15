@@ -5,7 +5,8 @@ from io import BytesIO
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
 
-DATE = "2025-01-01"
+START_DATE = "2025-11-01"
+END_DATE = "2025-11-07"
 
 GKG_COLUMNS = [
     "GKGRECORDID", "DATE", "SourceCollectionIdentifier",
@@ -18,17 +19,35 @@ GKG_COLUMNS = [
 ]
 
 CORE_THEMES = {
-    "NATURAL_DISASTER_EXTREME_WEATHER",
-    "NATURAL_DISASTER_SEVERE_WEATHER",
-    "NATURAL_DISASTER_FLOODING",
-    "NATURAL_DISASTER_HURRICANE",
-    "NATURAL_DISASTER_TORNADO",
-    "NATURAL_DISASTER_WILDFIRE",
-    "POWER_OUTAGE",
-    "MANMADE_DISASTER_POWER_OUTAGE",
-    "MANMADE_DISASTER_POWER_OUTAGES",
-    "MANMADE_DISASTER_WITHOUT_POWER",
-    "MANMADE_DISASTER_WITHOUT_ELECTRICITY",
+    # "NATURAL_DISASTER_EXTREME_WEATHER",
+    # "NATURAL_DISASTER_SEVERE_WEATHER",
+    # "NATURAL_DISASTER_FLOODING",
+    # "NATURAL_DISASTER_HURRICANE",
+    # "NATURAL_DISASTER_TORNADO",
+    # "NATURAL_DISASTER_WILDFIRE",
+    # "POWER_OUTAGE",
+    # "MANMADE_DISASTER_POWER_OUTAGE",
+    # "MANMADE_DISASTER_POWER_OUTAGES",
+    # "MANMADE_DISASTER_WITHOUT_POWER",
+    # "MANMADE_DISASTER_WITHOUT_ELECTRICITY",
+    # "ECON_ELECTRICALGRID",
+    # "ENV_WINDPOWER",
+    # "WB_508_POWER_SYSTEMS",
+    # "WB_527_HYDROPOWER",
+    # "ENV_NUCLEARPOWER",
+    "WB_515_POWER_SECTOR_POLICY_AND_INSTITUTIONS",
+    "MANMADE_DISASTER_POWER_FAILURE",
+    # "WB_511_COAL_FIRED_POWER",
+    # "WB_1753_GAS_TO_POWER",
+    # "WB_513_OIL_FIRED_POWER",
+    "MANMADE_DISASTER_RESTORE_POWER",
+    "NATURAL_DISASTER_POWERFUL_STORM",
+    "MANMADE_DISASTER_DOWNED_POWER_LINES",
+    "MANMADE_DISASTER_KNOCKED_OUT_POWER",
+    "WB_510_POWER_TRANSMISSION",
+    "WB_1703_POWER_DISTRIBUTION",
+    "ECON_NEWPOWERPLANT"
+    
 }
 
 URL_KEYWORDS = {
@@ -45,11 +64,13 @@ BAD_DOMAINS = {
 }
 
 
-def timestamps_for_day(date: str) -> list[str]:
-    start = datetime.strptime(date, "%Y-%m-%d")
+def timestamps_for_range(start_date: str, end_date: str) -> list[str]:
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    days = (end - start).days + 1
     return [
         (start + timedelta(minutes=15 * i)).strftime("%Y%m%d%H%M%S")
-        for i in range(96)
+        for i in range(96 * days)
     ]
 
 
@@ -129,9 +150,8 @@ def filter_gkg(df: pd.DataFrame) -> pd.DataFrame:
     )
     df["_theme_count"] = df["_matched_themes"].apply(len)
 
-    theme_mask = df["_theme_count"] >= 1
+    theme_mask = df["_theme_count"] >= 2
     us_mask = df["Locations"].apply(is_us_location)
-    url_mask = df["DocumentIdentifier"].apply(url_has_keyword)
 
     df["_domain"] = df["DocumentIdentifier"].apply(clean_domain)
     domain_mask = ~df["_domain"].isin(BAD_DOMAINS)
@@ -139,7 +159,6 @@ def filter_gkg(df: pd.DataFrame) -> pd.DataFrame:
     filtered = df[
         theme_mask &
         us_mask &
-        url_mask &
         domain_mask
     ].copy()
 
@@ -149,7 +168,7 @@ def filter_gkg(df: pd.DataFrame) -> pd.DataFrame:
 all_filtered = []
 raw_rows = 0
 
-for timestamp in timestamps_for_day(DATE):
+for timestamp in timestamps_for_range(START_DATE, END_DATE):
     print(f"Processing {timestamp}")
 
     df = load_gkg_file(timestamp)
@@ -226,7 +245,7 @@ if not daily.empty:
         print("LOCATIONS:", row["Locations"])
         print("TONE:", row["Tone"])
 
-    output_path = f"gdelt_ultra_strict_us_weather_{DATE}.csv"
+    output_path = f"gdelt_ultra_strict_us_weather_{START_DATE}_{END_DATE}.csv"
     daily.drop(columns=["_theme_set"], errors="ignore").to_csv(output_path, index=False)
 
     print(f"\nSaved: {output_path}")
