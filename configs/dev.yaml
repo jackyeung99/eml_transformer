@@ -85,7 +85,7 @@ sources:
     enabled: true
     embedding_input: articles
 
-    standardization:
+    ingestion:
       min_filter_matches: 2
       target_themes:
         -NATURAL_DISASTER_EXTREME_WEATHER,
@@ -147,20 +147,20 @@ sources:
         - Southern Company
 
       target_locations:
-        - INDIANA
-        - ILLINOIS
-        - MICHIGAN
-        - OHIO
-        - KENTUCKY
-        - WISCONSIN
-        - MINNESOTA
-        - IOWA
-        - MISSOURI
-        - ARKANSAS
-        - LOUISIANA
-        - MISSISSIPPI
-        - NORTH DAKOTA
-        - SOUTH DAKOTA
+        - USIN
+        - USIL
+        - USMI
+        - USOH
+        - USKY
+        - USWI
+        - USMN
+        - USIA
+        - USMO
+        - USAR
+        - USLA
+        - USMS
+        - USND
+        - USSD
 
     scraping:
       enabled: true

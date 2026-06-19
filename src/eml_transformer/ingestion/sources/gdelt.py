@@ -44,7 +44,6 @@ class GDELTSource(TextSource):
         target_organizations: set[str] | None = None,
         min_filter_matches: int = 2,
     ):  
-        # two themes and location or organization
         self.target_themes = {
             value.upper()
             for value in (target_themes or set())
@@ -61,6 +60,11 @@ class GDELTSource(TextSource):
         }
 
         self.min_filter_matches = min_filter_matches
+
+        logger.debug("target_themes=%d", len(self.target_themes))
+        logger.debug("target_organizations=%d", len(self.target_organizations))
+        logger.debug("target_locations=%d", len(self.target_locations))
+       
 
 
     def fetch_records(
@@ -81,23 +85,16 @@ class GDELTSource(TextSource):
             len(timestamps),
         )
 
-        records = self._get_records(timestamps)
-
-        logger.info(
-            "Loaded GDELT records | raw_records=%d",
-            len(records),
-        )
-
-        filtered_df = self._filter_records(records)
+        filtered_records, total_records_seen = self._get_records(timestamps)
 
         logger.info(
             "Finished GDELT fetch | raw_records=%d | filtered_records=%d | removed=%d",
-            len(records),
-            len(filtered_df),
-            len(records) - len(filtered_df),
+            total_records_seen,
+            len(filtered_records),
+            total_records_seen - len(filtered_records),
         )
 
-        return filtered_df.to_dict(orient="records")
+        return filtered_records.to_dict(orient="records")
     
 
     def standardize_record(self, record: dict[str, Any]) -> TextRecord:
@@ -166,41 +163,52 @@ class GDELTSource(TextSource):
 
         records = records.copy()
 
-        records["theme_match"] = self._filter_themes(records)
+        records["theme_match"] = self._filter_themes(records, required_themes=self.min_filter_matches)
         records["organization_match"] = self._filter_organizations(records)
         records["location_match"] = self._filter_locations(records)
 
-        match_columns = [
-            "theme_match",
-            "organization_match",
-            "location_match",
-        ]
+        # Two filter mechanics 
 
-        records["filter_match_count"] = records[match_columns].sum(axis=1)
+        # 1. require any two match type 
+        # match_columns = [
+        #     "theme_match",
+        #     "organization_match",
+        #     "location_match",
+        # ]
 
+        # records["filter_match_count"] = records[match_columns].sum(axis=1)
+
+        # filtered = records.loc[
+        #     records["filter_match_count"] >= self.min_filter_matches
+        # ]
+
+
+        # 2. filtering based on n theme matches and location or organization match
+        filter_criteria = (records["theme_match"] & records["location_match"]) | (records["organization_match"])
+     
         filtered = records.loc[
-            records["filter_match_count"] >= self.min_filter_matches
+            filter_criteria
         ]
 
-        logger.info(
-            "Filtered GDELT records | input=%d | output=%d | removed=%d | min_matches=%d",
+        logger.debug(
+            "Filtered GDELT records | input=%d | output=%d | removed=%d | min theme matches=%d",
             len(records),
             len(filtered),
             len(records) - len(filtered),
             self.min_filter_matches,
         )
 
-        logger.info(
+        logger.debug(
             "GDELT filter matches | theme=%d | organization=%d | location=%d",
             int(records["theme_match"].sum()),
             int(records["organization_match"].sum()),
             int(records["location_match"].sum()),
         )
 
-        logger.info(
-            "GDELT match count distribution | counts=%s",
-            records["filter_match_count"].value_counts().sort_index().to_dict(),
-        )
+        # logger.info(
+        #     "GDELT match count distribution | counts=%s",
+        #     records["filter_match_count"].value_counts().sort_index().to_dict(),
+        # )
 
         return filtered
 
@@ -217,16 +225,20 @@ class GDELTSource(TextSource):
             if theme.strip()
         }
 
-
     def _filter_themes(
         self,
         records: pd.DataFrame,
+        required_themes: int=1,
     ) -> pd.Series:
-        return records["Themes"].apply(
-            lambda value: bool(
+        
+        theme_count = records["Themes"].apply(
+            lambda value: len(
                 self._parse_themes(value) & self.target_themes
             )
         )
+
+        return theme_count >= required_themes
+
 
     def _parse_organizations(
         self,
@@ -252,39 +264,28 @@ class GDELTSource(TextSource):
             )
         )
     
-    def _parse_locations(
-        self,
-        value: Any,
-    ) -> set[str]:
+    def _parse_locations(self, value) -> set[str]:
         if pd.isna(value):
             return set()
 
         parsed_locations: set[str] = set()
 
         for location in str(value).split(";"):
-            location = location.strip()
-
-            if not location:
-                continue
-
             parts = location.split("#")
 
-            # Always keep the full raw location too.
-            parsed_locations.add(location.upper())
+            country_code = parts[2].strip().upper() if len(parts) > 2 else ""
+            adm1_code = parts[3].strip().upper() if len(parts) > 3 else ""
 
-            # GDELT location fields often look roughly like:
-            # type#full_name#country_code#adm1_code#lat#lon#feature_id
-            if len(parts) > 1 and parts[1].strip():
-                parsed_locations.add(parts[1].strip().upper())
+            if country_code:
+                parsed_locations.add(country_code)
 
-            if len(parts) > 2 and parts[2].strip():
-                parsed_locations.add(parts[2].strip().upper())
+            if adm1_code:
+                parsed_locations.add(adm1_code)
 
-            if len(parts) > 3 and parts[3].strip():
-                parsed_locations.add(parts[3].strip().upper())
+            if country_code and adm1_code:
+                parsed_locations.add(f"{country_code}-{adm1_code}")
 
         return parsed_locations
-
 
     def _filter_locations(
         self,
@@ -308,7 +309,7 @@ class GDELTSource(TextSource):
         if match:
             return match.group(1).strip()
 
-        return record.get("DocumentIdentifier", "")
+        return ''
 
     def _parse_gdelt_timestamp(self, timestamp: str) -> str:
         """
@@ -333,11 +334,12 @@ class GDELTSource(TextSource):
     def _get_records(
         self,
         timestamps: list[str],
-    ) -> pd.DataFrame:
+    ) -> tuple[pd.DataFrame, int]:
         dfs = []
         failed = 0
 
         max_workers = min(8, len(timestamps))
+        total_records_seen = 0
 
         logger.info(
             "Downloading GDELT files in parallel | files=%d | workers=%d",
@@ -355,7 +357,7 @@ class GDELTSource(TextSource):
                 timestamp = futures[future]
 
                 try:
-                    df = future.result()
+                    filtered_df, total_records = future.result()
                 except Exception:
                     logger.warning(
                         "GDELT download failed | timestamp=%s",
@@ -364,16 +366,17 @@ class GDELTSource(TextSource):
                     )
                     failed += 1
                     continue
-
-                if df is not None and not df.empty:
-                    dfs.append(df)
+                
+                total_records_seen += total_records
+                if filtered_df is not None and not filtered_df.empty:
+                    dfs.append(filtered_df)
 
                 logger.debug(
                     "GDELT download progress | completed=%d/%d | timestamp=%s | rows=%s",
                     i,
                     len(timestamps),
                     timestamp,
-                    0 if df is None else len(df),
+                    0 if filtered_df is None else len(filtered_df),
                 )
 
         if not dfs:
@@ -382,7 +385,7 @@ class GDELTSource(TextSource):
                 len(timestamps),
                 failed,
             )
-            return pd.DataFrame(columns=GKG_COLUMNS)
+            return pd.DataFrame(columns=GKG_COLUMNS), total_records_seen
 
         combined = pd.concat(dfs, ignore_index=True)
 
@@ -393,12 +396,12 @@ class GDELTSource(TextSource):
             len(combined),
         )
 
-        return combined
+        return combined, total_records_seen
 
     def _load_gkg_file(
         self,
         timestamp: str,
-    ) -> pd.DataFrame | None:
+    ) -> tuple[pd.DataFrame | None ,  int]:
         url = f"http://data.gdeltproject.org/gdeltv2/{timestamp}.gkg.csv.zip"
 
         try:
@@ -421,13 +424,16 @@ class GDELTSource(TextSource):
             df["GDELT_TIMESTAMP"] = timestamp
             df["GDELT_URL"] = url
 
+
+            filtered = self._filter_records(df)
+
             logger.debug(
                 "Loaded GDELT file | timestamp=%s | rows=%d",
                 timestamp,
                 len(df),
             )
 
-            return df
+            return filtered, len(df)
 
         except Exception:
             logger.warning(
@@ -436,7 +442,7 @@ class GDELTSource(TextSource):
                 url,
                 exc_info=True,
             )
-            return None
+            return None, 0
 
 
 

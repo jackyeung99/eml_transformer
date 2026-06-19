@@ -234,7 +234,7 @@ def backfill(
         )
     else:
         source_config = get_source_config(source, rt.source_configs)
-
+    
         results = [
             pipeline.run_source(
                 source_name=source,

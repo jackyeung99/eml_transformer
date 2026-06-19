@@ -61,7 +61,7 @@ class BackfillPipeline:
         for source_name, source_config in source_configs.items():
             source = create_source(
                 source_name,
-                **source_config,
+                **source_config.get('ingestion', {}),
             )
 
             if not source.supports_backfill:
@@ -86,9 +86,11 @@ class BackfillPipeline:
         window_days: int = 30,
         seed_checkpoint: bool = False,
     ) -> BackfillResult:
+        
+
         source = create_source(
             source_name,
-            **source_config,
+            **source_config.get('ingestion', {}),
         )
 
         if source.update_mode != "incremental":
@@ -120,7 +122,7 @@ class BackfillPipeline:
         for from_date, to_date in windows:
             result = self.ingestion_pipeline.run_source(
                 source_name=source_name,
-                source_kwargs=source_config,
+                source_config=source_config,
                 from_date=from_date,
                 to_date=to_date,
                 update_checkpoint=False,
