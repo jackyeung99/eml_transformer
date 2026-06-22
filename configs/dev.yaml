@@ -173,8 +173,8 @@ sources:
 
 embeddings:
   provider: sentence_transformer
-  model: nvidia/NV-Embed-v2
-  batch_size: 16
+  model: nvidia/llama-nemotron-embed-vl-1b-v2
+  batch_size: 32
   device: cuda
   normalize_embeddings: true
   trust_remote_code: true
