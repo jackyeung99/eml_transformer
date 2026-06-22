@@ -168,6 +168,8 @@ sources:
       output: articles
       url_column: url
       timeout: 30
+      batch_size: 100
+      max_concurrency: 5
 
 embeddings:
   provider: sentence_transformer

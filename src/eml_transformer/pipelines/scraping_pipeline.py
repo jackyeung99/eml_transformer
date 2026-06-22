@@ -193,37 +193,62 @@ class ScrapingPipeline:
                     records=existing_df,
                 )
 
-            scraped_df = asyncio.run(
-                self._scrape_dataframe_async(
-                    df=to_scrape_df,
-                    scraping_config=scraping_config,
+            batch_size = scraping_config.get("batch_size", 100)
+            total_failed = 0
+            total_scraped = 0
+
+            for batch_start in range(0, len(to_scrape_df), batch_size):
+                batch_df = to_scrape_df.iloc[
+                    batch_start : batch_start + batch_size
+                ]
+
+                scraped_batch_df = asyncio.run(
+                    self._scrape_dataframe_async(
+                        df=batch_df,
+                        scraping_config=scraping_config,
+                    )
                 )
-            )
 
-            final_df = pd.concat(
-                [existing_df, scraped_df],
-                ignore_index=True,
-            )
+                final_df = pd.concat(
+                    [existing_df, scraped_batch_df],
+                    ignore_index=True,
+                )
 
-            final_df = (
-                final_df
-                .drop_duplicates(subset=["record_id"], keep="last")
-                .reset_index(drop=True)
-            )
+                final_df = (
+                    final_df
+                    .drop_duplicates(subset=["record_id"], keep="last")
+                    .reset_index(drop=True)
+                )
 
-            self.storage.write_parquet(final_df, output_key)
+                self.storage.write_parquet(final_df, output_key)
 
-            records_failed = (
-                int(final_df["scrape_status"].ne("success").sum())
-                if "scrape_status" in final_df.columns
-                else 0
-            )
+                batch_failed = (
+                    int(scraped_batch_df["scrape_status"].ne("success").sum())
+                    if "scrape_status" in scraped_batch_df.columns
+                    else 0
+                )
+
+                total_failed += batch_failed
+                total_scraped += len(scraped_batch_df)
+
+                logger.info(
+                    "Scraping batch complete | source=%s | batch_start=%s | batch_size=%s | scraped=%s | failed=%s | total_written=%s",
+                    source.name,
+                    batch_start,
+                    len(batch_df),
+                    len(scraped_batch_df),
+                    batch_failed,
+                    len(final_df),
+                )
+                existing_df = final_df
+
 
             logger.info(
-                "Scraping complete | source=%s | read=%s | scraped=%s | total=%s | output=%s",
+                "Scraping complete | source=%s | read=%s | scraped=%s | failed=%s | total=%s | output=%s",
                 source.name,
                 len(input_df),
-                len(scraped_df),
+                total_scraped,
+                total_failed,
                 len(final_df),
                 output_key,
             )
@@ -235,7 +260,7 @@ class ScrapingPipeline:
                 output_artifact=output_artifact,
                 records_read=len(input_df),
                 records_out=len(final_df),
-                records_failed=records_failed,
+                records_failed=total_failed,
                 input_key=input_key,
                 output_key=output_key,
                 records=final_df,
@@ -264,6 +289,7 @@ class ScrapingPipeline:
     ) -> pd.DataFrame:
         request_timeout = scraping_config.get("request_timeout", 15)
         playwright_timeout = scraping_config.get("playwright_timeout", 30_000)
+        max_concurrency = scraping_config.get("max_concurrency", 10)
 
         scraper = HybridArticleScraper(
             ArticleScraperConfig(
@@ -273,23 +299,43 @@ class ScrapingPipeline:
             )
         )
 
-        rows = []
+        semaphore = asyncio.Semaphore(max_concurrency)
 
-        async with aiohttp.ClientSession() as session:
-            for _, record in df.iterrows():
-                record_dict = record.to_dict()
+        async def scrape_one(session: aiohttp.ClientSession, record: pd.Series) -> dict[str, Any]:
+            record_dict = record.to_dict()
 
-                result = await scraper.scrape(
-                    session=session,
-                    url=record_dict["url"],
-                )
+            async with semaphore:
+                try:
+                    result = await scraper.scrape(
+                        session=session,
+                        url=record_dict["url"],
+                    )
 
-                rows.append(
-                    {
+                    return {
                         **record_dict,
                         **result,
                     }
-                )
+
+                except Exception as exc:
+                    logger.exception(
+                        "Record scrape failed | record_id=%s | url=%s",
+                        record_dict.get("record_id"),
+                        record_dict.get("url"),
+                    )
+
+                    return {
+                        **record_dict,
+                        "scrape_status": "failed",
+                        "error": str(exc),
+                    }
+
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                scrape_one(session, record)
+                for _, record in df.iterrows()
+            ]
+
+            rows = await asyncio.gather(*tasks)
 
         return pd.DataFrame(rows)
 
