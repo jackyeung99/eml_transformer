@@ -9,9 +9,12 @@ import aiohttp
 import pandas as pd
 
 import eml_transformer.ingestion.sources  # noqa: F401
+from eml_transformer.logging import silence_loggers
 from eml_transformer.ingestion.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
+
+from tqdm.auto import tqdm
 
 from eml_transformer.extraction.scraper import (
     ArticleScraperConfig,
@@ -194,53 +197,67 @@ class ScrapingPipeline:
                 )
 
             batch_size = scraping_config.get("batch_size", 100)
+
             total_failed = 0
             total_scraped = 0
 
-            for batch_start in range(0, len(to_scrape_df), batch_size):
-                batch_df = to_scrape_df.iloc[
-                    batch_start : batch_start + batch_size
-                ]
+            # suppress errors
+            logging.getLogger("trafilatura").setLevel(logging.ERROR)
+            logging.getLogger("trafilatura.metadata").setLevel(logging.ERROR)
 
-                scraped_batch_df = asyncio.run(
-                    self._scrape_dataframe_async(
-                        df=batch_df,
-                        scraping_config=scraping_config,
+            with tqdm(
+                total=len(to_scrape_df),
+                desc=f"Scraping {source.name}",
+                unit="url",
+                dynamic_ncols=True,
+            ) as pbar:
+
+                for batch_start in range(0, len(to_scrape_df), batch_size):
+                    batch_df = to_scrape_df.iloc[
+                        batch_start : batch_start + batch_size
+                    ]
+
+                    
+                    scraped_batch_df = asyncio.run(
+                        self._scrape_dataframe_async(
+                            df=batch_df,
+                            scraping_config=scraping_config,
+                        )
                     )
-                )
 
-                final_df = pd.concat(
-                    [existing_df, scraped_batch_df],
-                    ignore_index=True,
-                )
 
-                final_df = (
-                    final_df
-                    .drop_duplicates(subset=["record_id"], keep="last")
-                    .reset_index(drop=True)
-                )
+                    final_df = pd.concat(
+                        [existing_df, scraped_batch_df],
+                        ignore_index=True,
+                    )
 
-                self.storage.write_parquet(final_df, output_key)
+                    final_df = (
+                        final_df
+                        .drop_duplicates(subset=["record_id"], keep="last")
+                        .reset_index(drop=True)
+                    )
 
-                batch_failed = (
-                    int(scraped_batch_df["scrape_status"].ne("success").sum())
-                    if "scrape_status" in scraped_batch_df.columns
-                    else 0
-                )
+                    self.storage.write_parquet(final_df, output_key)
 
-                total_failed += batch_failed
-                total_scraped += len(scraped_batch_df)
+                    batch_failed = (
+                        int(scraped_batch_df["scrape_status"].ne("success").sum())
+                        if "scrape_status" in scraped_batch_df.columns
+                        else 0
+                    )
 
-                logger.info(
-                    "Scraping batch complete | source=%s | batch_start=%s | batch_size=%s | scraped=%s | failed=%s | total_written=%s",
-                    source.name,
-                    batch_start,
-                    len(batch_df),
-                    len(scraped_batch_df),
-                    batch_failed,
-                    len(final_df),
-                )
-                existing_df = final_df
+                    total_failed += batch_failed
+                    total_scraped += len(scraped_batch_df)
+
+                    postfix = {
+                        "Scraped": total_scraped,
+                        "Failed": total_failed,
+                        "Total Scraped Records": len(final_df)
+                    }
+
+                    pbar.set_postfix(**postfix)
+                    pbar.update(len(batch_df))
+
+                    existing_df = final_df
 
 
             logger.info(

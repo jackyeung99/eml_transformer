@@ -4,6 +4,10 @@ from datetime import date, timedelta
 from dataclasses import dataclass
 from typing import Any
 
+from tqdm.auto import tqdm
+
+
+from eml_transformer.logging import silence_loggers
 from eml_transformer.ingestion.registry import create_source
 from eml_transformer.pipelines.ingestion_pipeline import (
     IngestionPipeline,
@@ -109,6 +113,7 @@ class BackfillPipeline:
         start = date.fromisoformat(start_date)
         end = date.fromisoformat(end_date)
 
+
         windows = list(
             self._iter_date_windows(
                 start=start,
@@ -117,30 +122,60 @@ class BackfillPipeline:
             )
         )
 
+
         ingestion_results = []
 
-        for from_date, to_date in windows:
-            result = self.ingestion_pipeline.run_source(
-                source_name=source_name,
-                source_config=source_config,
-                from_date=from_date,
-                to_date=to_date,
-                update_checkpoint=False,
-            )
 
-            ingestion_results.append(result)
+        with tqdm(
+            total=len(windows),
+            desc=f"Backfill {source_name}",
+            unit="window",
+            dynamic_ncols=True,
+        ) as pbar:
 
-            if result.status != "success":
-                return self._summarize_backfill(
-                    source_name=source_name,
-                    start_date=start_date,
-                    end_date=end_date,
-                    window_days=window_days,
-                    windows_total=len(windows),
-                    ingestion_results=ingestion_results,
-                    status="failed",
-                    error=result.error,
+            for window_index, (from_date, to_date) in enumerate(windows, start=1):
+                pbar.set_postfix(
+                    window=f"{from_date}→{to_date}",
+                    completed=f"{window_index - 1}/{len(windows)}",
                 )
+
+                with silence_loggers(
+                    "eml_transformer.pipelines.ingestion_pipeline",
+                    "eml_transformer.ingestion",
+                ):
+                    result = self.ingestion_pipeline.run_source(
+                        source_name=source_name,
+                        source_config=source_config,
+                        from_date=from_date,
+                        to_date=to_date,
+                        update_checkpoint=False,
+                    )
+
+                ingestion_results.append(result)
+
+                pbar.set_postfix(
+                    window=f"{from_date}→{to_date}",
+                    status=result.status,
+                    fetched=result.records_fetched,
+                    written=result.records_written,
+                    skipped=result.records_skipped,
+                    completed=f"{window_index}/{len(windows)}",
+                )
+
+                pbar.update(1)
+        
+
+        if result.status != "success":
+            return self._summarize_backfill(
+                source_name=source_name,
+                start_date=start_date,
+                end_date=end_date,
+                window_days=window_days,
+                windows_total=len(windows),
+                ingestion_results=ingestion_results,
+                status="failed",
+                error=result.error,
+            )
 
         if seed_checkpoint and ingestion_results:
             final_end = windows[-1][1]
