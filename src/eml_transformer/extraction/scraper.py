@@ -7,6 +7,7 @@ from typing import Any
 
 import aiohttp
 import trafilatura
+from bs4 import BeautifulSoup
 from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
     async_playwright,
@@ -118,7 +119,7 @@ class HybridArticleScraper:
                     response = await page.goto(
                         url,
                         wait_until="networkidle",
-                        timeout=self.config.playwright_timeout_ms,
+                        timeout=self.config.playwright_timeout,
                     )
 
                     html = await page.content()
@@ -204,6 +205,34 @@ class HybridArticleScraper:
                 error_type="extract_error",
                 error_message=str(exc),
             )
+
+    def _extract_published_at_with_bs4(self, html: str) -> str | None:
+        soup = BeautifulSoup(html, "html.parser")
+
+        selectors = [
+            ("meta", {"property": "article:published_time"}),
+            ("meta", {"property": "og:published_time"}),
+            ("meta", {"name": "pubdate"}),
+            ("meta", {"name": "publishdate"}),
+            ("meta", {"name": "timestamp"}),
+            ("meta", {"name": "date"}),
+            ("meta", {"itemprop": "datePublished"}),
+        ]
+
+        for tag_name, attrs in selectors:
+            tag = soup.find(tag_name, attrs=attrs)
+            if tag:
+                value = tag.get("content") or tag.get("datetime")
+                if value:
+                    return value.strip()
+
+        time_tag = soup.find("time")
+        if time_tag:
+            value = time_tag.get("datetime") or time_tag.get_text(strip=True)
+            if value:
+                return value.strip()
+
+        return None
 
     def _build_result(
         self,

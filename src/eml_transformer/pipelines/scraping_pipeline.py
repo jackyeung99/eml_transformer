@@ -7,14 +7,7 @@ from typing import Any
 
 import aiohttp
 import pandas as pd
-
-import eml_transformer.ingestion.sources  # noqa: F401
-from eml_transformer.logging import silence_loggers
-from eml_transformer.ingestion.registry import create_source
-from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage
-from eml_transformer.text_processing.cleaning import clean_text
-from tqdm.auto import tqdm
+import json 
 
 from eml_transformer.extraction.scraper import (
     ArticleScraperConfig,
@@ -22,7 +15,6 @@ from eml_transformer.extraction.scraper import (
 )
 
 logger = logging.getLogger(__name__)
-
 
 NON_RETRYABLE_STATUSES = {
     "success",
@@ -55,236 +47,114 @@ class ScrapingResult:
             "status": self.status,
             "input_artifact": self.input_artifact,
             "output_artifact": self.output_artifact,
-            "read": self.records_read,
-            "out": self.records_out,
-            "failed": self.records_failed,
-            "input": self.input_key,
-            "output": self.output_key,
+            "records_read": self.records_read,
+            "records_out": self.records_out,
+            "records_failed": self.records_failed,
+            "input_key": self.input_key,
+            "output_key": self.output_key,
             "error": self.error,
         }
 
 
 class ScrapingPipeline:
-    DEFAULT_INPUT_ARTIFACT = "records"
-    DEFAULT_OUTPUT_ARTIFACT = "extracted_articles"
-
     def __init__(
         self,
-        storage: Storage,
-        paths: StoragePaths,
-    ):
+        storage,
+        paths,
+        max_concurrency: int = 10,
+        retry_failed: bool = True,
+        scraper_config: ArticleScraperConfig | None = None,
+    ) -> None:
         self.storage = storage
         self.paths = paths
+        self.max_concurrency = max_concurrency
+        self.retry_failed = retry_failed
+        self.scraper_config = scraper_config or ArticleScraperConfig()
 
-    def run_all(
-        self,
-        source_configs: dict[str, dict],
-    ) -> list[ScrapingResult]:
-        logger.info("Starting scraping for %s sources", len(source_configs))
+    def run_one(self, source_config: dict[str, Any]) -> ScrapingResult:
+        source_name = source_config["name"]
 
-        results = []
-
-        for source_name, source_kwargs in source_configs.items():
-            if not source_kwargs.get("enabled", True):
-                continue
-
-            scraping_config = source_kwargs.get("scraping", {})
-
-            if not scraping_config.get("enabled", False):
-                continue
-
-            results.append(
-                self.run_source(
-                    source_name=source_name,
-                    source_kwargs=source_kwargs,
-                )
-            )
-
-        logger.info("Scraping complete")
-
-        return results
-
-    def run_source(
-        self,
-        source_name: str,
-        source_kwargs: dict[str, Any],
-    ) -> ScrapingResult:
-        scraping_config = source_kwargs.get("scraping", {})
-
-        input_artifact = scraping_config.get(
-            "input",
-            self.DEFAULT_INPUT_ARTIFACT,
+        input_artifact = source_config.get("scrape_input_artifact", "records")
+        output_artifact = source_config.get(
+            "scrape_output_artifact",
+            "extracted_articles",
         )
 
-        output_artifact = scraping_config.get(
-            "output",
-            self.DEFAULT_OUTPUT_ARTIFACT,
+        input_key = self.paths.silver_records(
+            source=source_name,
+            name=input_artifact,
         )
 
-        input_key: str | None = None
-        output_key: str | None = None
+        output_key = self.paths.silver_records(
+            source=source_name,
+            name=output_artifact,
+        )
 
         try:
-            source = create_source(
-                source_name,
-                **source_kwargs.get("ingestion", {}),
-            )
-
-            input_key = self.paths.silver_records(
-                source=source.name,
-                name=input_artifact,
-            )
-
-            output_key = self.paths.silver_records(
-                source=source.name,
-                name=output_artifact,
-            )
-
-            logger.info(
-                "Starting scraping | source=%s | input=%s | output=%s",
-                source.name,
-                input_key,
-                output_key,
-            )
-
-            if not self.storage.exists(input_key):
-                return ScrapingResult(
-                    status="skipped",
-                    source=source.name,
-                    input_artifact=input_artifact,
-                    output_artifact=output_artifact,
-                    records_read=0,
-                    records_out=0,
-                    input_key=input_key,
-                    output_key=output_key,
-                    error=f"No scraping input found: {input_key}",
-                )
+            existing_df = self._load_existing_output(output_key)
 
             input_df = self.storage.read_parquet(input_key)
 
             if input_df.empty:
                 return ScrapingResult(
-                    status="skipped",
-                    source=source.name,
+                    status="success",
+                    source=source_name,
                     input_artifact=input_artifact,
                     output_artifact=output_artifact,
                     records_read=0,
                     records_out=0,
+                    records_failed=0,
                     input_key=input_key,
                     output_key=output_key,
                     records=input_df,
-                    error="Scraping input is empty",
                 )
 
-            existing_df = self._load_existing_output(output_key)
-
-            to_scrape_df = self._select_records_to_scrape(
+            scrape_df = self._select_records_to_scrape(
                 input_df=input_df,
                 existing_df=existing_df,
             )
 
-            if to_scrape_df.empty:
+            if scrape_df.empty:
                 return ScrapingResult(
-                    status="up_to_date",
-                    source=source.name,
+                    status="skipped",
+                    source=source_name,
                     input_artifact=input_artifact,
                     output_artifact=output_artifact,
                     records_read=len(input_df),
                     records_out=len(existing_df),
+                    records_failed=self._count_failed(existing_df),
                     input_key=input_key,
                     output_key=output_key,
                     records=existing_df,
                 )
 
-            batch_size = scraping_config.get("batch_size", 100)
+            scraped_df = asyncio.run(self._scrape_dataframe(scrape_df))
 
-            total_failed = 0
-            total_scraped = 0
-
-            # suppress errors
-            logging.getLogger("trafilatura").setLevel(logging.ERROR)
-            logging.getLogger("trafilatura.metadata").setLevel(logging.ERROR)
-
-            with tqdm(
-                total=len(to_scrape_df),
-                desc=f"Scraping {source.name}",
-                unit="url",
-                dynamic_ncols=True,
-            ) as pbar:
-
-                for batch_start in range(0, len(to_scrape_df), batch_size):
-                    batch_df = to_scrape_df.iloc[
-                        batch_start : batch_start + batch_size
-                    ]
-
-                    
-                    scraped_batch_df = asyncio.run(
-                        self._scrape_dataframe_async(
-                            df=batch_df,
-                            scraping_config=scraping_config,
-                        )
-                    )
-
-
-                    final_df = pd.concat(
-                        [existing_df, scraped_batch_df],
-                        ignore_index=True,
-                    )
-
-                    final_df = (
-                        final_df
-                        .drop_duplicates(subset=["record_id"], keep="last")
-                        .reset_index(drop=True)
-                    )
-
-                    self.storage.write_parquet(final_df, output_key)
-
-                    batch_failed = (
-                        int(scraped_batch_df["scrape_status"].ne("success").sum())
-                        if "scrape_status" in scraped_batch_df.columns
-                        else 0
-                    )
-
-                    total_failed += batch_failed
-                    total_scraped += len(scraped_batch_df)
-
-                    postfix = {
-                        "Scraped": total_scraped,
-                        "Failed": total_failed,
-                        "Total Scraped Records": len(final_df)
-                    }
-
-                    pbar.set_postfix(**postfix)
-                    pbar.update(len(batch_df))
-
-                    existing_df = final_df
-
-
-            logger.info(
-                "Scraping complete | source=%s | read=%s | scraped=%s | failed=%s | total=%s | output=%s",
-                source.name,
-                len(input_df),
-                total_scraped,
-                total_failed,
-                len(final_df),
-                output_key,
+            output_df = self._merge_scraped_results(
+                existing_df=existing_df,
+                scraped_df=scraped_df,
             )
+
+            self.storage.write_parquet(output_df, output_key)
 
             return ScrapingResult(
                 status="success",
-                source=source.name,
+                source=source_name,
                 input_artifact=input_artifact,
                 output_artifact=output_artifact,
                 records_read=len(input_df),
-                records_out=len(final_df),
-                records_failed=total_failed,
+                records_out=len(output_df),
+                records_failed=self._count_failed(output_df),
                 input_key=input_key,
                 output_key=output_key,
-                records=final_df,
+                records=output_df,
             )
 
         except Exception as exc:
-            logger.exception("Scraping failed | source=%s", source_name)
+            logger.exception(
+                "Scraping failed | source=%s",
+                source_name,
+            )
 
             return ScrapingResult(
                 status="failed",
@@ -299,26 +169,14 @@ class ScrapingPipeline:
                 error=str(exc),
             )
 
-    async def _scrape_dataframe_async(
-        self,
-        df: pd.DataFrame,
-        scraping_config: dict[str, Any],
-    ) -> pd.DataFrame:
-        request_timeout = scraping_config.get("request_timeout", 15)
-        playwright_timeout = scraping_config.get("playwright_timeout", 30_000)
-        max_concurrency = scraping_config.get("max_concurrency", 10)
+    async def _scrape_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+        scraper = HybridArticleScraper(self.scraper_config)
 
-        scraper = HybridArticleScraper(
-            ArticleScraperConfig(
-                request_timeout=request_timeout,
-                playwright_timeout=playwright_timeout,
-                fallback_on_forbidden=True,
-            )
-        )
-
-        semaphore = asyncio.Semaphore(max_concurrency)
-
-        async def scrape_one(session: aiohttp.ClientSession, record: pd.Series) -> dict[str, Any]:
+        async def scrape_one(
+            session: aiohttp.ClientSession,
+            record: pd.Series,
+        ) -> dict[str, Any]:
             record_dict = record.to_dict()
 
             async with semaphore:
@@ -328,10 +186,10 @@ class ScrapingPipeline:
                         url=record_dict["url"],
                     )
 
-                    row = {
-                        **record_dict,
-                        **result,
-                    }
+                    row = self._merge_record_and_scrape_result(
+                        record_dict=record_dict,
+                        scrape_result=result,
+                    )
 
                     return self._clean_scraped_record(row)
 
@@ -342,11 +200,17 @@ class ScrapingPipeline:
                         record_dict.get("url"),
                     )
 
-                    return {
-                        **record_dict,
-                        "scrape_status": "failed",
-                        "error": str(exc),
-                    }
+                    return self._clean_scraped_record(
+                        {
+                            **record_dict,
+                            "success": False,
+                            "scrape_status": "failed",
+                            "error_type": "pipeline_exception",
+                            "error_message": str(exc),
+                            "text": "",
+                            "text_length": 0,
+                        }
+                    )
 
         async with aiohttp.ClientSession() as session:
             tasks = [
@@ -357,28 +221,88 @@ class ScrapingPipeline:
             rows = await asyncio.gather(*tasks)
 
         return pd.DataFrame(rows)
-    
 
-    def _clean_scraped_record(
+    def _merge_record_and_scrape_result(
         self,
-        record: dict[str, Any],
+        record_dict: dict[str, Any],
+        scrape_result: dict[str, Any],
     ) -> dict[str, Any]:
-        if record.get("scrape_status") != "success":
-            return record
+        original_metadata = record_dict.get("metadata") or {}
+        scraped_metadata = scrape_result.get("metadata") or {}
 
-        record["title"] = clean_text(
-            record.get("title") or ""
+        original_published_at = record_dict.get("published_at")
+        scraped_published_at = scrape_result.get("published_at")
+
+        published_at = scraped_published_at or original_published_at
+
+        published_at_source = scraped_metadata.get("published_at_source")
+        if not published_at_source and original_published_at:
+            published_at_source = "source_record"
+
+        metadata = {
+            **original_metadata,
+            **scraped_metadata,
+            "original_published_at": original_published_at,
+            "scraped_published_at": scraped_published_at,
+            "final_published_at": published_at,
+            "published_at_source": published_at_source,
+            "has_precise_published_at": bool(published_at),
+        }
+
+        return {
+            **record_dict,
+            **scrape_result,
+            "published_at": published_at,
+            "metadata": metadata,
+        }
+
+    def _select_records_to_scrape(
+        self,
+        input_df: pd.DataFrame,
+        existing_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        if existing_df.empty:
+            return input_df
+
+        if "record_id" not in input_df.columns:
+            raise ValueError("input_df must contain record_id")
+
+        if "record_id" not in existing_df.columns:
+            return input_df
+
+        existing = existing_df.copy()
+
+        if not self.retry_failed:
+            completed_ids = set(existing["record_id"].dropna())
+        else:
+            non_retryable = existing[
+                existing["scrape_status"].isin(NON_RETRYABLE_STATUSES)
+            ]
+            completed_ids = set(non_retryable["record_id"].dropna())
+
+        return input_df[
+            ~input_df["record_id"].isin(completed_ids)
+        ].copy()
+
+    def _merge_scraped_results(
+        self,
+        existing_df: pd.DataFrame,
+        scraped_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        if existing_df.empty:
+            return scraped_df
+
+        if scraped_df.empty:
+            return existing_df
+
+        existing_keep = existing_df[
+            ~existing_df["record_id"].isin(scraped_df["record_id"])
+        ]
+
+        return pd.concat(
+            [existing_keep, scraped_df],
+            ignore_index=True,
         )
-
-        record["text"] = clean_text(
-            record.get("text") or ""
-        )
-
-        record["text_length"] = len(
-            record["text"]
-        )
-
-        return record
 
     def _load_existing_output(self, output_key: str) -> pd.DataFrame:
         if not self.storage.exists(output_key):
@@ -386,27 +310,32 @@ class ScrapingPipeline:
 
         return self.storage.read_parquet(output_key)
 
-    def _select_records_to_scrape(
+    def _clean_scraped_record(
         self,
-        input_df: pd.DataFrame,
-        existing_df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        if "record_id" not in input_df.columns:
-            raise ValueError("Scraping input must contain a 'record_id' column.")
+        row: dict[str, Any],
+    ) -> dict[str, Any]:
+        metadata = row.get("metadata")
 
-        if "url" not in input_df.columns:
-            raise ValueError("Scraping input must contain a 'url' column.")
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:
+                metadata = {"raw_metadata": metadata}
 
-        input_df = input_df.drop_duplicates(
-            subset=["record_id"],
-            keep="last",
-        ).copy()
+        if metadata is None:
+            metadata = {}
 
-        if existing_df.empty or "record_id" not in existing_df.columns:
-            return input_df
+        row["metadata"] = metadata
 
-        processed_record_ids = set(existing_df["record_id"].dropna())
+        if row.get("text") is None:
+            row["text"] = ""
 
-        return input_df.loc[
-            ~input_df["record_id"].isin(processed_record_ids)
-        ].copy()
+        row["text_length"] = len(row.get("text") or "")
+
+        return row
+
+    def _count_failed(self, df: pd.DataFrame) -> int:
+        if df.empty or "success" not in df.columns:
+            return 0
+
+        return int((~df["success"].fillna(False)).sum())

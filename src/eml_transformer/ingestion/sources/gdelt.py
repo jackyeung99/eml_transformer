@@ -100,8 +100,13 @@ class GDELTSource(TextSource):
     def standardize_record(self, record: dict[str, Any]) -> TextRecord:
         record_id = str(record["GKGRECORDID"])
 
+        precise_timestamp = self._extract_precise_time(record)
+        has_precise_published_at = bool(precise_timestamp)
+
         published_at = self._parse_gdelt_timestamp(
-            record.get("DATE")
+            precise_timestamp
+            or record.get("GDELT_TIMESTAMP")
+            or record.get("DATE")
         )
 
         themes = [
@@ -138,17 +143,32 @@ class GDELTSource(TextSource):
             region=locations[0] if locations else None,
             categories=themes,
             metadata={
-                "source_common_name": record.get("SourceCommonName"),
-                "gdelt_timestamp": record.get("GDELT_TIMESTAMP"),
-                "organizations": organizations,
-                "persons": persons,
-                "locations": locations,
-                "tone": record.get("Tone"),
-                "theme_match": record.get("theme_match"),
-                "organization_match": record.get("organization_match"),
-                "location_match": record.get("location_match"),
-                "filter_match_count": record.get("filter_match_count"),
-            },
+                    "source_common_name": record.get("SourceCommonName"),
+                    "gdelt_timestamp": record.get("GDELT_TIMESTAMP"),
+                    "gdelt_date": record.get("DATE"),
+
+                    "page_precise_pub_timestamp": precise_timestamp,
+                    "has_precise_published_at": has_precise_published_at,
+                    "published_at_source": (
+                        "page_precise_pub_timestamp"
+                        if has_precise_published_at
+                        else "gdelt_timestamp"
+                    ),
+                    "published_at_precision": (
+                        "second"
+                        if has_precise_published_at
+                        else "15min"
+                    ),
+
+                    "organizations": organizations,
+                    "persons": persons,
+                    "locations": locations,
+                    "tone": record.get("Tone"),
+                    "theme_match": record.get("theme_match"),
+                    "organization_match": record.get("organization_match"),
+                    "location_match": record.get("location_match"),
+                    "filter_match_count": record.get("filter_match_count"),
+                },
             raw=record,
         )
     
@@ -302,6 +322,21 @@ class GDELTSource(TextSource):
 
         match = re.search(
             r"<PAGE_TITLE>(.*?)</PAGE_TITLE>",
+            extras,
+            flags=re.DOTALL,
+        )
+
+        if match:
+            return match.group(1).strip()
+
+        return ''
+    
+
+    def _extract_precise_time(self, record):
+        extras = record.get("Extras", "")
+
+        match = re.search(
+            r"<PAGE_PRECISEPUBTIMESTAMP>(.*?)</PAGE_PRECISEPUBTIMESTAMP>",
             extras,
             flags=re.DOTALL,
         )
