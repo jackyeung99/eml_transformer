@@ -13,6 +13,9 @@ from playwright.async_api import (
     async_playwright,
 )
 
+from dateutil.parser import isoparse
+
+
 
 @dataclass(frozen=True)
 class ArticleScraperConfig:
@@ -223,16 +226,17 @@ class HybridArticleScraper:
             tag = soup.find(tag_name, attrs=attrs)
             if tag:
                 value = tag.get("content") or tag.get("datetime")
-                if value:
+                if self._is_precise_timestamp(value):
                     return value.strip()
 
         time_tag = soup.find("time")
         if time_tag:
             value = time_tag.get("datetime") or time_tag.get_text(strip=True)
-            if value:
+            if self._is_precise_timestamp(value):
                 return value.strip()
 
         return None
+    
 
     def _build_result(
         self,
@@ -245,60 +249,63 @@ class HybridArticleScraper:
         attempt_count = 2 if fallback_used else 1
 
         if extracted is None:
+            status = fetch_result["error_type"]
+
             return {
                 "url": url,
-                "success": False,
-                "scrape_status": fetch_result["error_type"],
-                "status_code": fetch_result["status_code"],
-                "error_type": fetch_result["error_type"],
-                "error_message": fetch_result["error_message"],
-                "fetch_method": fetch_result["method"],
-                "fallback_used": fallback_used,
-                "extractor": None,
                 "title": None,
-                "author": None,
-                "date": None,
-                "published_at": None,
-                "published_at_source": None,
                 "text": "",
                 "text_length": 0,
-                "retrieved_at": retrieved_at,
-                "attempt_count": attempt_count,
+                "published_at": None,
+                "metadata": {
+                    "scraping": {
+                        "status": status,
+                        "success": False,
+                        "status_code": fetch_result["status_code"],
+                        "error_type": fetch_result["error_type"],
+                        "error_message": fetch_result["error_message"],
+                        "fetch_method": fetch_result["method"],
+                        "fallback_used": fallback_used,
+                        "extractor": None,
+                        "author": None,
+                        "trafilatura_date": None,
+                        "retrieved_at": retrieved_at,
+                        "attempt_count": attempt_count,
+                    }
+                },
             }
 
-        scrape_status = "success" if extracted["success"] else extracted["error_type"]
+        status = "success" if extracted["success"] else extracted["error_type"]
 
-        published_at = extracted.get("date")
-        published_at_source = "trafilatura" if published_at else None
+        precise_published_at = None
 
         if extracted["success"] and fetch_result.get("html"):
-            bs4_published_at = self._extract_published_at_with_bs4(
+            precise_published_at = self._extract_published_at_with_bs4(
                 fetch_result["html"]
             )
 
-            if bs4_published_at:
-                published_at = bs4_published_at
-                published_at_source = "beautifulsoup"
-
         return {
             "url": url,
-            "success": extracted["success"],
-            "scrape_status": scrape_status,
-            "status_code": fetch_result["status_code"],
-            "error_type": extracted["error_type"],
-            "error_message": extracted["error_message"],
-            "fetch_method": fetch_result["method"],
-            "fallback_used": fallback_used,
-            "extractor": extracted["extractor"],
             "title": extracted["title"],
-            "author": extracted["author"],
-            "date": extracted["date"],
-            "published_at": published_at,
-            "published_at_source": published_at_source,
             "text": extracted["text"],
             "text_length": len(extracted["text"]),
-            "retrieved_at": retrieved_at,
-            "attempt_count": attempt_count,
+            "published_at": precise_published_at,
+            "metadata": {
+                "scraping": {
+                    "status": status,
+                    "success": extracted["success"],
+                    "status_code": fetch_result["status_code"],
+                    "error_type": extracted["error_type"],
+                    "error_message": extracted["error_message"],
+                    "fetch_method": fetch_result["method"],
+                    "fallback_used": fallback_used,
+                    "extractor": extracted["extractor"],
+                    "author": extracted["author"],
+                    "trafilatura_date": extracted["date"],
+                    "retrieved_at": retrieved_at,
+                    "attempt_count": attempt_count,
+                }
+            },
         }
 
     def _should_fallback(self, fetch_result: dict[str, Any]) -> bool:
@@ -370,6 +377,23 @@ class HybridArticleScraper:
         if status is not None:
             return "http_error"
         return "unknown"
+
+    def _is_precise_timestamp(self, value: str | None) -> bool:
+        if not value:
+            return False
+
+        value = value.strip()
+
+        # Avoid date-only values like "2026-06-24"
+        if "T" not in value and ":" not in value:
+            return False
+
+        try:
+            parsed = isoparse(value)
+        except ValueError:
+            return False
+
+        return parsed.hour != 0 or parsed.minute != 0 or parsed.second != 0
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat()

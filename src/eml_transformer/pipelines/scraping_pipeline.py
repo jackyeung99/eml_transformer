@@ -363,15 +363,20 @@ class ScrapingPipeline:
             scrape_result.get("metadata")
         )
 
+        scraping_metadata = self._coerce_metadata(
+            scraped_metadata.get("scraping")
+        )
+
         original_published_at = record_dict.get("published_at")
         scraped_published_at = scrape_result.get("published_at")
 
-        original_metadata = self._coerce_metadata(record_dict.get("metadata"))
-        scraped_metadata = self._coerce_metadata(scrape_result.get("metadata"))
-
         source_has_precise = bool(
-            record_dict.get("has_precise_published_at")
-            or original_metadata.get("has_precise_published_at")
+            original_metadata.get("has_precise_published_at", False)
+        )
+
+        scrape_has_precise = bool(
+            scraping_metadata.get("has_precise_published_at", False)
+            and scraped_published_at
         )
 
         if source_has_precise:
@@ -380,12 +385,14 @@ class ScrapingPipeline:
                 "published_at_source",
                 "source_record_precise",
             )
-        elif scraped_published_at:
+
+        elif scrape_has_precise:
             final_published_at = scraped_published_at
-            published_at_source = scraped_metadata.get(
+            published_at_source = scraping_metadata.get(
                 "published_at_source",
-                "scraped",
+                "beautifulsoup_precise",
             )
+
         else:
             final_published_at = original_published_at
             published_at_source = original_metadata.get(
@@ -393,18 +400,20 @@ class ScrapingPipeline:
                 "source_record",
             )
 
-        if not published_at_source and original_published_at:
-            published_at_source = "source_record"
-
         metadata = {
             **original_metadata,
             **scraped_metadata,
-            "original_published_at": original_published_at,
-            "scraped_published_at": scraped_published_at,
-            "final_published_at": final_published_at,
-            "published_at_source": published_at_source,
-            "has_scraped_published_at": bool(scraped_published_at),
-            "has_precise_published_at": bool(final_published_at),
+            "published_at_resolution": {
+                "original_published_at": original_published_at,
+                "scraped_published_at": scraped_published_at,
+                "final_published_at": final_published_at,
+                "published_at_source": published_at_source,
+                "source_has_precise_published_at": source_has_precise,
+                "scrape_has_precise_published_at": scrape_has_precise,
+                "has_precise_published_at": (
+                    source_has_precise or scrape_has_precise
+                ),
+            },
         }
 
         return {

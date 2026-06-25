@@ -161,9 +161,10 @@ def test_merge_replaces_published_at_with_scraped_value(storage, paths):
             "title": "Storm causes outage",
             "text": "Thousands lost power.",
             "published_at": "2026-06-24T12:30:00Z",
+            "published_at_source": "beautifulsoup",
+            "has_precise_published_at": True,
             "metadata": {
                 "method": "trafilatura",
-                "published_at_source": "json_ld",
             },
         },
     )
@@ -173,7 +174,7 @@ def test_merge_replaces_published_at_with_scraped_value(storage, paths):
     assert row["metadata"]["original_published_at"] == "2026-06-24T12:00:00Z"
     assert row["metadata"]["scraped_published_at"] == "2026-06-24T12:30:00Z"
     assert row["metadata"]["final_published_at"] == "2026-06-24T12:30:00Z"
-    assert row["metadata"]["published_at_source"] == "json_ld"
+    assert row["metadata"]["published_at_source"] == "beautifulsoup"
     assert row["metadata"]["has_scraped_published_at"] is True
     assert row["metadata"]["has_precise_published_at"] is True
 
@@ -189,7 +190,9 @@ def test_merge_keeps_original_published_at_when_scraped_missing(storage, paths):
             "record_id": "gdelt-1",
             "url": "https://example.com/article",
             "published_at": "2026-06-24T12:00:00Z",
-            "metadata": {},
+            "metadata": {
+                'has_precise_published_at': True
+            },
         },
         scrape_result={
             "success": True,
@@ -208,7 +211,7 @@ def test_merge_keeps_original_published_at_when_scraped_missing(storage, paths):
     assert row["metadata"]["original_published_at"] == "2026-06-24T12:00:00Z"
     assert row["metadata"]["scraped_published_at"] is None
     assert row["metadata"]["final_published_at"] == "2026-06-24T12:00:00Z"
-    assert row["metadata"]["published_at_source"] == "source_record"
+    assert row["metadata"]["published_at_source"] == "source_record_precise"
     assert row["metadata"]["has_scraped_published_at"] is False
     assert row["metadata"]["has_precise_published_at"] is True
 
@@ -235,9 +238,9 @@ def test_merge_skips_published_at_with_scraped_value(storage, paths):
             "title": "Storm causes outage",
             "text": "Thousands lost power.",
             "published_at": "2026-06-24T12:30:00Z",
+            "published_at_source": "json_ld",
             "metadata": {
                 "method": "trafilatura",
-                "published_at_source": "json_ld",
             },
         },
     )
