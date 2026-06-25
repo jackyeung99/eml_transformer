@@ -258,6 +258,8 @@ class HybridArticleScraper:
                 "title": None,
                 "author": None,
                 "date": None,
+                "published_at": None,
+                "published_at_source": None,
                 "text": "",
                 "text_length": 0,
                 "retrieved_at": retrieved_at,
@@ -265,6 +267,18 @@ class HybridArticleScraper:
             }
 
         scrape_status = "success" if extracted["success"] else extracted["error_type"]
+
+        published_at = extracted.get("date")
+        published_at_source = "trafilatura" if published_at else None
+
+        if extracted["success"] and fetch_result.get("html"):
+            bs4_published_at = self._extract_published_at_with_bs4(
+                fetch_result["html"]
+            )
+
+            if bs4_published_at:
+                published_at = bs4_published_at
+                published_at_source = "beautifulsoup"
 
         return {
             "url": url,
@@ -279,6 +293,8 @@ class HybridArticleScraper:
             "title": extracted["title"],
             "author": extracted["author"],
             "date": extracted["date"],
+            "published_at": published_at,
+            "published_at_source": published_at_source,
             "text": extracted["text"],
             "text_length": len(extracted["text"]),
             "retrieved_at": retrieved_at,

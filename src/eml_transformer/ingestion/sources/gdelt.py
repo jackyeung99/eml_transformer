@@ -150,9 +150,9 @@ class GDELTSource(TextSource):
                     "page_precise_pub_timestamp": precise_timestamp,
                     "has_precise_published_at": has_precise_published_at,
                     "published_at_source": (
-                        "page_precise_pub_timestamp"
+                        "source_record_precise"
                         if has_precise_published_at
-                        else "gdelt_timestamp"
+                        else "source_record"
                     ),
                     "published_at_precision": (
                         "second"

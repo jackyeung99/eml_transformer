@@ -62,8 +62,8 @@ class StandardizationPipeline:
         )
 
         results = [
-            self.run_source(source_name, source_kwargs)
-            for source_name, source_kwargs in source_configs.items()
+            self.run_source(source_name, source_config)
+            for source_name, source_config in source_configs.items()
         ]
 
         logger.info("Standardization complete")
@@ -73,7 +73,7 @@ class StandardizationPipeline:
     def run_source(
         self,
         source_name: str,
-        source_kwargs: dict[str, Any],
+        source_config: dict[str, Any],
     ) -> StandardizationResult:
         bronze_key: str | None = None
         silver_key: str | None = None
@@ -84,7 +84,7 @@ class StandardizationPipeline:
         )
 
         try:
-            source = create_source(source_name, **source_kwargs.get("standardization", {}),)
+            source = create_source(source_name, **source_config.get("standardization", {}),)
 
             bronze_key = self.paths.bronze_records(
                 source=source.name,
