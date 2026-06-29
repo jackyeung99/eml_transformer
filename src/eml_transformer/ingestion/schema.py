@@ -40,6 +40,7 @@ TEXT_RECORD_COLUMNS = [
     "url",
     "region",
     "categories",
+    "metadata",
     "raw",
 ]
 
