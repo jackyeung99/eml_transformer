@@ -7,84 +7,8 @@ import pandas as pd
 import pytest
 
 from eml_transformer.storage.paths import StoragePaths
+from tests.helpers import FakeEmbeddingModel, FakeScraper, FakeSource, FakeStorage
 
-
-class FakeStorage:
-    def __init__(self):
-        self.data: dict[str, pd.DataFrame] = {}
-
-    def write_parquet(self, df: pd.DataFrame, key: str) -> None:
-        self.data[key] = df.copy()
-
-    def read_parquet(self, key: str) -> pd.DataFrame:
-        if key not in self.data:
-            raise FileNotFoundError(key)
-        return self.data[key].copy()
-
-    def exists(self, key: str) -> bool:
-        return key in self.data
-
-
-class FakeSource:
-    name = "gdelt"
-    source_type = "news"
-
-    def fetch_raw(self) -> pd.DataFrame:
-        return pd.DataFrame(
-            [
-                {
-                    "record_id": "gdelt-1",
-                    "url": "https://example.com/article",
-                    "title": "Raw title",
-                    "text": "Raw text",
-                    "published_at": "2026-06-24T12:00:00Z",
-                    "metadata": {"raw": True},
-                }
-            ]
-        )
-
-    def parse_records(self, raw: pd.DataFrame) -> list[dict[str, Any]]:
-        return raw.to_dict("records")
-
-    def standardize_record(self, record: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "record_id": record["record_id"],
-            "source": self.name,
-            "source_type": self.source_type,
-            "title": record.get("title"),
-            "text": record.get("text"),
-            "published_at": record.get("published_at"),
-            "retrieved_at": "2026-06-24T13:00:00Z",
-            "url": record.get("url"),
-            "region": None,
-            "categories": ["news", "gdelt"],
-            "metadata": record.get("metadata", {}),
-            "raw": record,
-        }
-
-
-class FakeScraper:
-    def __init__(self, result: dict[str, Any] | None = None, exc: Exception | None = None):
-        self.result = result or {}
-        self.exc = exc
-        self.urls_seen: list[str] = []
-
-    async def scrape(self, session, url: str) -> dict[str, Any]:
-        self.urls_seen.append(url)
-
-        if self.exc:
-            raise self.exc
-
-        return self.result
-
-
-class FakeEmbeddingModel:
-    def __init__(self):
-        self.texts_seen: list[str] = []
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        self.texts_seen.extend(texts)
-        return [[0.1, 0.2, 0.3] for _ in texts]
 
 
 @pytest.fixture

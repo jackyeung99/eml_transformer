@@ -142,32 +142,30 @@ class GDELTSource(TextSource):
             url=record.get("DocumentIdentifier"),
             region=locations[0] if locations else None,
             categories=themes,
-            metadata={
-                    "source_common_name": record.get("SourceCommonName"),
-                    "gdelt_timestamp": record.get("GDELT_TIMESTAMP"),
-                    "gdelt_date": record.get("DATE"),
-
-                    "page_precise_pub_timestamp": precise_timestamp,
-                    "has_precise_published_at": has_precise_published_at,
-                    "published_at_source": (
-                        "source_record_precise"
+            metadata = {
+                "source_common_name": record.get("SourceCommonName"),
+                "published_at": {
+                    "source": (
+                        "page_metadata"
                         if has_precise_published_at
-                        else "source_record"
+                        else "gdelt"
                     ),
-                    "published_at_precision": (
+                    "precision": (
                         "second"
                         if has_precise_published_at
                         else "15min"
                     ),
-
-                    "organizations": organizations,
-                    "persons": persons,
-                    "locations": locations,
-                    "tone": record.get("Tone"),
+                },
+                "organizations": organizations,
+                "persons": persons,
+                "locations": locations,
+                "tone": record.get("Tone"),
+                "filter": {
                     "theme_match": record.get("theme_match"),
                     "organization_match": record.get("organization_match"),
                     "location_match": record.get("location_match"),
-                    "filter_match_count": record.get("filter_match_count"),
+                    "match_count": record.get("filter_match_count"),
+                },
                 },
             raw=record,
         )

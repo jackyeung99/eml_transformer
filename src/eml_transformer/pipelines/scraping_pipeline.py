@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
+from matplotlib.pylab import record
 import pandas as pd
 from tqdm.auto import tqdm
 
@@ -332,12 +333,26 @@ class ScrapingPipeline:
                     return self._clean_scraped_record(
                         {
                             **record_dict,
-                            "success": False,
-                            "scrape_status": "failed",
-                            "error_type": "pipeline_exception",
-                            "error_message": str(exc),
+                            "title": None,
                             "text": "",
                             "text_length": 0,
+                            "metadata": {
+                                **self._coerce_metadata(record_dict.get("metadata")),
+                                "scraping": {
+                                    "status": "failed",
+                                    "success": False,
+                                    "status_code": None,
+                                    "error_type": "pipeline_exception",
+                                    "error_message": str(exc),
+                                    "fetch_method": None,
+                                    "fallback_used": False,
+                                    "extractor": None,
+                                    "author": None,
+                                    "trafilatura_date": None,
+                                    "retrieved_at": None,
+                                    "attempt_count": 0,
+                                },
+                            },
                         }
                     )
 
@@ -363,57 +378,26 @@ class ScrapingPipeline:
             scrape_result.get("metadata")
         )
 
-        scraping_metadata = self._coerce_metadata(
-            scraped_metadata.get("scraping")
-        )
-
         original_published_at = record_dict.get("published_at")
         scraped_published_at = scrape_result.get("published_at")
 
-        source_has_precise = bool(
-            original_metadata.get("has_precise_published_at", False)
-        )
-
-        scrape_has_precise = bool(
-            scraping_metadata.get("has_precise_published_at", False)
-            and scraped_published_at
-        )
-
-        if source_has_precise:
-            final_published_at = original_published_at
-            published_at_source = original_metadata.get(
-                "published_at_source",
-                "source_record_precise",
-            )
-
-        elif scrape_has_precise:
+        if scraped_published_at:
             final_published_at = scraped_published_at
-            published_at_source = scraping_metadata.get(
-                "published_at_source",
-                "beautifulsoup_precise",
-            )
-
+            published_at_metadata = {
+                "source": "page_metadata",
+                "precision": "second",
+            }
         else:
             final_published_at = original_published_at
-            published_at_source = original_metadata.get(
-                "published_at_source",
-                "source_record",
-            )
+            published_at_metadata = {
+                "source": "gdelt",
+                "precision": "15min",
+            }
 
         metadata = {
             **original_metadata,
             **scraped_metadata,
-            "published_at_resolution": {
-                "original_published_at": original_published_at,
-                "scraped_published_at": scraped_published_at,
-                "final_published_at": final_published_at,
-                "published_at_source": published_at_source,
-                "source_has_precise_published_at": source_has_precise,
-                "scrape_has_precise_published_at": scrape_has_precise,
-                "has_precise_published_at": (
-                    source_has_precise or scrape_has_precise
-                ),
-            },
+            "published_at": published_at_metadata,
         }
 
         return {
@@ -429,13 +413,15 @@ class ScrapingPipeline:
     ) -> dict[str, Any]:
         record["title"] = record.get("title") or ""
         record["text"] = record.get("text") or ""
+        record["metadata"] = self._coerce_metadata(record.get("metadata"))
 
-        if record.get("scrape_status") == "success":
+        scrape_status = self._get_scraping_status(record["metadata"])
+
+        if scrape_status == "success":
             record["title"] = clean_text(record["title"])
             record["text"] = clean_text(record["text"])
 
         record["text_length"] = len(record["text"])
-        record["metadata"] = self._coerce_metadata(record.get("metadata"))
 
         return record
 
@@ -465,9 +451,15 @@ class ScrapingPipeline:
         if existing_df.empty or "record_id" not in existing_df.columns:
             return input_df
 
-        if retry_failed and "scrape_status" in existing_df.columns:
+        existing_df = existing_df.copy()
+
+        existing_df["scraping_status"] = existing_df["metadata"].map(
+            self._get_scraping_status
+        )
+
+        if retry_failed:
             processed_df = existing_df[
-                existing_df["scrape_status"].isin(NON_RETRYABLE_STATUSES)
+                existing_df["scraping_status"].isin(NON_RETRYABLE_STATUSES)
             ]
         else:
             processed_df = existing_df
@@ -479,6 +471,12 @@ class ScrapingPipeline:
         return input_df.loc[
             ~input_df["record_id"].isin(processed_record_ids)
         ].copy()
+    
+    def _get_scraping_status(self, metadata: Any) -> str | None:
+        metadata = self._coerce_metadata(metadata)
+        scraping = self._coerce_metadata(metadata.get("scraping"))
+
+        return scraping.get("status")
 
     def _merge_scraped_results(
         self,
@@ -506,13 +504,12 @@ class ScrapingPipeline:
         if df.empty:
             return 0
 
-        if "scrape_status" in df.columns:
-            return int(df["scrape_status"].ne("success").sum())
+        if "metadata" not in df.columns:
+            return len(df)
 
-        if "success" in df.columns:
-            return int((~df["success"].fillna(False)).sum())
+        statuses = df["metadata"].map(self._get_scraping_status)
 
-        return 0
+        return int(statuses.ne("success").sum())
 
     def _coerce_metadata(self, metadata: Any) -> dict[str, Any]:
         if metadata is None:

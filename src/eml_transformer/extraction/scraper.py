@@ -271,25 +271,35 @@ class HybridArticleScraper:
                         "trafilatura_date": None,
                         "retrieved_at": retrieved_at,
                         "attempt_count": attempt_count,
-                    }
+                    },
+                    "published_at": {
+                        "source": None,
+                        "precision": None,
+                    },
                 },
             }
 
         status = "success" if extracted["success"] else extracted["error_type"]
 
-        precise_published_at = None
+        page_published_at = None
+        published_at_source = None
+        published_at_precision = None
 
         if extracted["success"] and fetch_result.get("html"):
-            precise_published_at = self._extract_published_at_with_bs4(
+            page_published_at = self._extract_published_at_with_bs4(
                 fetch_result["html"]
             )
+
+            if page_published_at:
+                published_at_source = "page_metadata"
+                published_at_precision = "second"
 
         return {
             "url": url,
             "title": extracted["title"],
             "text": extracted["text"],
             "text_length": len(extracted["text"]),
-            "published_at": precise_published_at,
+            "published_at": page_published_at,
             "metadata": {
                 "scraping": {
                     "status": status,
@@ -304,7 +314,11 @@ class HybridArticleScraper:
                     "trafilatura_date": extracted["date"],
                     "retrieved_at": retrieved_at,
                     "attempt_count": attempt_count,
-                }
+                },
+                "published_at": {
+                    "source": published_at_source,
+                    "precision": published_at_precision,
+                },
             },
         }
 
