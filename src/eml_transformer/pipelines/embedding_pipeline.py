@@ -47,9 +47,11 @@ class EmbeddingPipeline:
         self,
         storage: Storage,
         paths: StoragePaths,
-    ):
+        embedder: SentenceTransformerEmbedder | None = None,
+    ) -> None:
         self.storage = storage
         self.paths = paths
+        self.embedder = embedder
 
     def run_all(
         self,
@@ -162,7 +164,7 @@ class EmbeddingPipeline:
                     records=existing_df,
                 )
 
-            client = SentenceTransformerEmbedder(
+            client = self.embedder or SentenceTransformerEmbedder(
                 model_name=model_name,
                 device=embedding_config.get("device"),
             )
@@ -258,8 +260,8 @@ class EmbeddingPipeline:
 
         df = (
             df
-            .drop_duplicates(subset=["record_id"])
             .sort_values(by=["published_at"])
+            .drop_duplicates(subset=["record_id"], keep="last")
             .reset_index(drop=True)
         )
 

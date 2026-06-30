@@ -51,9 +51,15 @@ class FakeScraper:
 
 
 class FakeEmbeddingModel:
-    def __init__(self):
-        self.texts_seen: list[str] = []
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        self.texts_seen.extend(texts)
+    def embed(
+            self, 
+            texts: list[str],
+            batch_size: int = 32,
+              ) -> list[list[float]]:
         return [[0.1, 0.2, 0.3] for _ in texts]
+    
