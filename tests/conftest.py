@@ -7,10 +7,11 @@ import pandas as pd
 import pytest
 
 from eml_transformer.storage.paths import StoragePaths
-from tests.helpers import FakeEmbeddingModel, FakeScraper, FakeSource, FakeStorage
+from tests.helpers import FakeEmbeddingModel, FakeScraper, FakeSource, FakeStorage, FakeIngestionPipeline
 
 
 
+# run time 
 @pytest.fixture
 def storage():
     return FakeStorage()
@@ -21,11 +22,31 @@ def paths():
     return StoragePaths()
 
 
+# dependency injection helper 
+@pytest.fixture
+def fake_ingestion_pipeline():
+    return FakeIngestionPipeline
+
+
 @pytest.fixture
 def fake_source():
-    return FakeSource()
+    return FakeSource
+
+@pytest.fixture
+def fake_scraper(sample_scraped_article):
+    return FakeScraper(result=sample_scraped_article)
 
 
+@pytest.fixture
+def failing_scraper():
+    return FakeScraper(exc=RuntimeError("boom"))
+
+
+@pytest.fixture
+def embedding_model():
+    return FakeEmbeddingModel()
+
+# configs 
 @pytest.fixture
 def ingestion_config():
     return {
@@ -163,16 +184,3 @@ def sample_scraped_articles():
     )
 
 
-@pytest.fixture
-def fake_scraper(sample_scraped_article):
-    return FakeScraper(result=sample_scraped_article)
-
-
-@pytest.fixture
-def failing_scraper():
-    return FakeScraper(exc=RuntimeError("boom"))
-
-
-@pytest.fixture
-def embedding_model():
-    return FakeEmbeddingModel()

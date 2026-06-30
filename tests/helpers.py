@@ -22,17 +22,71 @@ class FakeStorage:
 
 
 class FakeSource:
-    name = "gdelt"
-    source_type = "news"
+    def __init__(
+        self,
+        update_mode: str = "incremental",
+        supports_backfill: bool = True,
+    ):
+        self.name = "gdelt"
+        self.source_type = "news"
+        self.update_mode = update_mode
+        self.supports_backfill = supports_backfill
 
     def fetch_raw(self) -> pd.DataFrame:
         ...
 
-    def parse_records(self, raw: pd.DataFrame) -> list[dict[str, Any]]:
+    def parse_records(
+        self,
+        raw: pd.DataFrame,
+    ) -> list[dict[str, Any]]:
         return raw.to_dict("records")
 
-    def standardize_record(self, record: dict[str, Any]) -> dict[str, Any]:
+    def standardize_record(
+        self,
+        record: dict[str, Any],
+    ) -> dict[str, Any]:
         ...
+
+
+class FakeIngestionPipeline:
+    def __init__(self, results=None):
+        self.results = results or []
+        self.calls = []
+        self.checkpoints = []
+
+    def run_source(
+        self,
+        source_name,
+        source_config,
+        from_date,
+        to_date,
+        update_checkpoint,
+    ):
+        self.calls.append(
+            {
+                "source_name": source_name,
+                "source_config": source_config,
+                "from_date": from_date,
+                "to_date": to_date,
+                "update_checkpoint": update_checkpoint,
+            }
+        )
+
+        return self.results[len(self.calls) - 1]
+
+    def initialize_checkpoint(
+        self,
+        source_name,
+        checkpoint_value,
+        run_id,
+    ):
+        self.checkpoints.append(
+            {
+                "source_name": source_name,
+                "checkpoint_value": checkpoint_value,
+                "run_id": run_id,
+            }
+        )
 
 
 class FakeScraper:

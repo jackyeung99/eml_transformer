@@ -165,7 +165,16 @@ class BackfillPipeline:
                 pbar.update(1)
         
 
-        if result.status != "success":
+        failed_result = next(
+            (
+                result
+                for result in ingestion_results
+                if result.status != "success"
+            ),
+            None,
+        )
+
+        if failed_result:
             return self._summarize_backfill(
                 source_name=source_name,
                 start_date=start_date,
@@ -174,7 +183,7 @@ class BackfillPipeline:
                 windows_total=len(windows),
                 ingestion_results=ingestion_results,
                 status="failed",
-                error=result.error,
+                error=failed_result.error,
             )
 
         if seed_checkpoint and ingestion_results:
