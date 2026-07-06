@@ -362,12 +362,17 @@ class GDELTSource(TextSource):
             .strftime("%Y%m%d%H%M%S")
             .tolist()
         )
+        
         return timestamps
   
     def _get_records(
         self,
         timestamps: list[str],
     ) -> tuple[pd.DataFrame, int]:
+        
+        if not timestamps:
+            return pd.DataFrame(columns=GKG_COLUMNS), 0
+        
         dfs = []
         failed = 0
 
