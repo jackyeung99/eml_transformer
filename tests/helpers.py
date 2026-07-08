@@ -8,6 +8,7 @@ import pandas as pd
 class FakeStorage:
     def __init__(self):
         self.data: dict[str, pd.DataFrame] = {}
+        self.jsonl_data: dict[str, list[dict]] ={}
 
     def write_parquet(self, df: pd.DataFrame, key: str) -> None:
         self.data[key] = df.copy()
@@ -16,9 +17,17 @@ class FakeStorage:
         if key not in self.data:
             raise FileNotFoundError(key)
         return self.data[key].copy()
+    
+    def write_jsonl(self, rows: list[dict], key: str) -> None:
+        self.jsonl_data[key] = list(rows)
+
+    def read_jsonl(self, key: str) -> list[dict]:
+        if key not in self.jsonl_data:
+            raise FileNotFoundError(key)
+        return list(self.jsonl_data[key])
 
     def exists(self, key: str) -> bool:
-        return key in self.data
+        return key in self.data or key in self.jsonl_data
 
 
 class FakeSource:

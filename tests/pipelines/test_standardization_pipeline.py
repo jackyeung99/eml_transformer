@@ -272,5 +272,171 @@ class TestDeduplicate:
         result = pipeline._deduplicate(df)
         assert list(result.index) == [0,1]
         
+class TestRunSource:
+    """Test the run_source method"""
 
+    def test_skips_when_no_bronze_data(self, storage, paths):
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+        result = pipeline.run_source("gdelt", {})
 
+        assert result.status == "skipped"
+        assert result.records_read == 0 
+        assert result.records_out == 0
+        assert "No bronze data" in result.error
+
+    @patch("eml_transformer.pipelines.standardization_pipeline.create_source")
+    def test_successful_run(self, mock_create_source, storage, paths):
+        mock_source = MagicMock()
+        mock_source.name = "gdelt"
+        now = datetime.now()
+        mock_source.standardize_record.return_value = TextRecord(
+            record_id="r1", source="gdelt", source_type="news", 
+            title="Test Title", text="Test Text", 
+            published_at=now, retrieved_at=now
+        )
+        mock_create_source.return_value = mock_source
+
+        bronze_key = paths.bronze_records(source="gdelt")
+        storage.write_jsonl(
+            [{"raw": {"title": "Test Title", "text": "Test text"}}],
+            bronze_key
+        )
+
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+        result = pipeline.run_source("gdelt", {})
+
+        assert result.status == "success"
+        assert result.records_read == 1
+        assert result.records_out == 1
+        assert result.records_failed == 0
+        silver_key = paths.silver_records(source="gdelt")
+        assert silver_key in storage.data
+
+    @patch("eml_transformer.pipelines.standardization_pipeline.create_source")
+    def test_counts_failed_records(self, mock_create_source, storage, paths):
+        mock_source = MagicMock()
+        mock_source.name = "gdelt"
+        now = datetime.now()
+        mock_source.standardize_record.side_effect = [
+            TextRecord(
+                record_id="r1", source="gdelt", source_type="news",
+                title="Good", text="Good text",
+                published_at=now, retrieved_at=now
+            ),
+            Exception("Bad record")
+        ]
+        mock_create_source.return_value = mock_source
+
+        bronze_key = paths.bronze_records(source="gdelt")
+        storage.write_jsonl(
+            [
+                {"raw": {"title": "Good", "text": "Good text"}},
+                {"raw": {"title": "Bad", "text": "Bad text"}}
+            ],
+            bronze_key
+        )
+
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+        result = pipeline.run_source("gdelt", {})
+
+        assert result.status == "success"
+        assert result.records_read == 2
+        assert result.records_failed == 1
+
+    @patch("eml_transformer.pipelines.standardization_pipeline.create_source")
+    def test_no_parquet_written_when_all_fail(self, mock_create_source, storage, paths):
+        mock_source = MagicMock()
+        mock_source.name = "gdelt"
+        mock_source.standardize_record.side_effect = Exception("All bad")
+        mock_create_source.return_value = mock_source
+
+        bronze_key = paths.bronze_records(source="gdelt")
+        storage.write_jsonl(
+            [{"raw": {"title": "Bad", "text": "Bad text"}}],
+            bronze_key
+        )
+
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+        result = pipeline.run_source("gdelt", {})
+
+        assert result.status == "success"
+        assert result.records_failed == 1
+        assert result.records_out == 0
+        silver_key = paths.silver_records(source="gdelt")
+        assert silver_key not in storage.data
+    
+    @patch("eml_transformer.pipelines.standardization_pipeline.create_source")
+    def test_returns_failed_on_exception(self, mock_create_source, storage, paths):
+        mock_create_source.side_effect = Exception("Source not found")
+
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+        result = pipeline.run_source("bad source", {})
+
+        assert result.status == "failed"
+        assert result.records_read == 0
+        assert result.records_out == 0
+        assert "Source not found" in result.error
+    
+class TestRunAll:
+    """Test the run_all method"""
+
+    def test_returns_empty_list_for_empty_configs(self, storage, paths):
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+        result = pipeline.run_all({})
+        assert result == []
+    
+    def test_calls_run_source_for_each_config(self, storage, paths):
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+        pipeline.run_source = MagicMock(return_value=StandardizationResult(
+            status="success",
+            source="fake",
+            records_read=1,
+            records_out=1
+        ))
+
+        configs = {
+            "gdelt": {"param1": "value1"},
+            "iemafos": {"param2": "value2"}
+        }
+        results = pipeline.run_all(configs)
+
+        assert len(results) == 2
+        assert pipeline.run_source.call_count == 2
+        pipeline.run_source.assert_any_call("gdelt", {"param1": "value1"})
+        pipeline.run_source.assert_any_call("iemafos", {"param2": "value2"})
+    
+    def test_returns_all_results_even_when_some_fail(self, storage, paths):
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+
+        pipeline.run_source = MagicMock(side_effect=[
+            StandardizationResult(
+                status="success", source="gdelt",
+                records_read=10, records_out=10,
+            ),
+            StandardizationResult(
+                status="failed", source="iemafos",
+                records_read=0, records_out=0,
+                error="Something broke",
+            ),
+        ])
+
+        configs = {"gdelt": {}, "iemafos": {}}
+        results = pipeline.run_all(configs)
+
+        assert len(results) == 2
+        assert results[0].status == "success"
+        assert results[1].status == "failed"
+
+    def test_preserves_config_order(self, storage, paths):
+        pipeline = StandardizationPipeline(storage=storage, paths=paths)
+
+        pipeline.run_source = MagicMock(side_effect=[
+            StandardizationResult(status="success", source="a", records_read=1, records_out=1),
+            StandardizationResult(status="success", source="b", records_read=1, records_out=1),
+            StandardizationResult(status="success", source="c", records_read=1, records_out=1),
+        ])
+
+        configs = {"a": {}, "b": {}, "c": {}}
+        results = pipeline.run_all(configs)
+
+        assert [r.source for r in results] == ["a", "b", "c"]
