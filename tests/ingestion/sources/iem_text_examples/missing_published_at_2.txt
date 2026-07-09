@@ -1,0 +1,76 @@
+975 
+WWUS73 KIND 151425
+NPWIND
+
+URGENT - WEATHER MESSAGE
+National Weather Service Indianapolis IN
+Issued by National Weather Service Northern Indiana
+1025 AM EDT Tue Oct 15 2024
+
+INZ040>042-049-057-160300-
+/O.CON.KIND.FZ.W.0002.241016T0600Z-241016T1300Z/
+Madison-Delaware-Randolph-Henry-Rush-
+Including the cities of Anderson, Rushville, Muncie, New Castle,
+and Winchester
+1025 AM EDT Tue Oct 15 2024
+
+...FREEZE WARNING REMAINS IN EFFECT FROM 2 AM TO 9 AM EDT 
+WEDNESDAY...
+
+* WHAT...Sub-freezing temperatures as low as 30 expected.
+
+* WHERE...Madison, Rush, Delaware, Henry, and Randolph Counties.
+
+* WHEN...From 2 AM to 9 AM EDT Wednesday.
+
+* IMPACTS...Frost and freeze conditions could kill crops, other 
+  sensitive vegetation and possibly damage unprotected outdoor 
+  plumbing.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Take steps now to protect tender plants from the cold.
+
+&&
+
+$$
+
+INZ028-035-036-043>045-048-051>053-056-060>065-067>072-160300-
+/O.CON.KIND.FR.Y.0004.241016T0600Z-241016T1300Z/
+Warren-Fountain-Montgomery-Vermillion-Parke-Putnam-Hancock-Vigo-
+Clay-Owen-Shelby-Sullivan-Greene-Monroe-Brown-Bartholomew-Decatur-
+Knox-Daviess-Martin-Lawrence-Jackson-Jennings-
+Including the cities of Sullivan, Seymour, Brazil, Rockville,
+Veedersburg, Nashville, Bloomington, Vincennes, Brownstown,
+Spencer, Attica, Newport, Williamsport, Greenfield, Greencastle,
+Clinton, Covington, North Vernon, Bloomfield, Shelbyville,
+Bedford, Loogootee, Shoals, Columbus, Terre Haute,
+Crawfordsville, Linton, Mitchell, West Lebanon, Greensburg, Clay
+City, and Washington
+1025 AM EDT Tue Oct 15 2024
+
+...FROST ADVISORY REMAINS IN EFFECT FROM 2 AM TO 9 AM EDT 
+WEDNESDAY...
+
+* WHAT...Temperatures as low as 34 will result in frost formation.
+
+* WHERE...Portions of central, south central, southeast, southwest, 
+  and west central Indiana.
+
+* WHEN...From 2 AM to 9 AM EDT Wednesday.
+
+* IMPACTS...Frost could harm sensitive outdoor vegetation. Sensitive 
+  outdoor plants may be killed if left uncovered.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Take steps now to protect tender plants from the cold.
+
+&&
+
+$$
+
+Steinwedel
+
+
+

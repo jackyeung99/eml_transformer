@@ -1,0 +1,40 @@
+345 
+FLUS43 KIND 090730
+HWOIND
+
+Hazardous Weather Outlook
+National Weather Service Indianapolis IN
+330 AM EDT Thu Jul 9 2026
+
+INZ021-028>031-035>049-051>057-060>065-067>072-100730-
+Carroll-Warren-Tippecanoe-Clinton-Howard-Fountain-Montgomery-Boone-
+Tipton-Hamilton-Madison-Delaware-Randolph-Vermillion-Parke-Putnam-
+Hendricks-Marion-Hancock-Henry-Vigo-Clay-Owen-Morgan-Johnson-Shelby-
+Rush-Sullivan-Greene-Monroe-Brown-Bartholomew-Decatur-Knox-Daviess-
+Martin-Lawrence-Jackson-Jennings-
+330 AM EDT Thu Jul 9 2026
+
+This hazardous weather outlook is for central Indiana.
+
+.DAY ONE...Today and Tonight.
+
+Strong to severe storms will be possible this evening into tonight,
+with damaging winds, locally heavy rainfall, and isolated flash
+flooding the primary threats.
+
+.DAYS TWO THROUGH SEVEN...Friday through Wednesday.
+
+Additional storms are expected at times through the weekend. 
+Lightning and localized flooding will be the main threats through the
+weekend.
+
+.SPOTTER INFORMATION STATEMENT...
+
+Spotter activation may be needed this evening into tonight.
+
+&&
+ 
+More information, along with other weather, hydrological and climate
+information can be found at http://weather.gov/ind
+
+$$

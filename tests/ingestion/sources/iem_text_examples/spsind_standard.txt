@@ -1,0 +1,56 @@
+010 
+WWUS83 KIND 091835
+SPSIND
+
+Special Weather Statement
+National Weather Service Indianapolis IN
+235 PM EDT Thu Jul 9 2026
+ 
+INZ044-045-051-052-091900-
+Clay IN-Putnam IN-Parke IN-Vigo IN-
+235 PM EDT Thu Jul 9 2026
+
+...A strong thunderstorm will impact portions of northeastern Vigo,
+northwestern Clay, southeastern Parke and southwestern Putnam
+Counties through 300 PM EDT...
+
+At 235 PM EDT, Doppler radar was tracking a strong thunderstorm near
+Brazil, or 12 miles northeast of Terre Haute, moving east at 30 mph.
+
+HAZARD...Wind gusts up to 50 mph.
+
+SOURCE...Radar indicated.
+
+IMPACT...Gusty winds could knock down tree limbs and blow around 
+         unsecured objects.
+
+Locations impacted include...
+Brazil, Seelyville, Knightsville, Rosedale, Harmony, Staunton,
+Carbon, Fontanet, Bridgeton, Reelsville, and Lena.
+
+This includes Interstate 70 between mile markers 15 and 21, and
+between mile markers 33 and 34.
+ 
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+If outdoors, consider seeking shelter inside a building. 
+
+Torrential rainfall is also occurring with this storm and may lead to
+localized flooding. Do not drive your vehicle through flooded
+roadways.
+
+Frequent cloud to ground lightning is occurring with this storm.
+Lightning can strike 10 miles away from a thunderstorm. Seek a safe
+shelter inside a building or vehicle.
+
+&&
+
+LAT...LON 3942 8727 3965 8731 3974 8697 3951 8693
+TIME...MOT...LOC 1835Z 259DEG 24KT 3958 8720 
+
+MAX HAIL SIZE...0.00 IN
+MAX WIND GUST...50 MPH
+
+$$
+
+Ryan

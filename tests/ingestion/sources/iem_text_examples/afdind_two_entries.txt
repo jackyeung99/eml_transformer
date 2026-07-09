@@ -1,0 +1,292 @@
+085 
+FXUS63 KIND 091838
+AFDIND
+
+Area Forecast Discussion
+National Weather Service Indianapolis IN
+238 PM EDT Thu Jul 9 2026
+
+.KEY MESSAGES...
+
+- Strong to severe storms possible, mainly this evening into 
+  tonight, with damaging winds and heavy rain/localized flooding
+  the primary threats
+
+- Additional rain possible at times Friday through the weekend with
+  localized flooding possible
+
+- Warmer and drier again next week, though with more modest humidity
+  than experienced the first week of the month
+
+&&
+
+.DISCUSSION (This evening through Thursday)...
+Issued at 238 PM EDT Thu Jul 9 2026
+
+Satellite imagery depicts a well defined MCV near St. Louis 
+progressing eastward. This will likely be the main source of lift 
+this afternoon and evening, with an MCS likely developing over south 
+central IL after 4PM. Model guidance is still widely varied on 
+specific placement of this MCS, but given MCV and LLJ placement, the 
+current expectation is for this MCS to move through far SW portions 
+of central Indiana between 7-11PM this evening. Sounding analysis 
+shows a quasi-inverted "V" sounding in the lowers 1km of which is 
+allowing for 1000+ J/kg of DCAPE. This should allow for micro-scale 
+bowing segments along the cold pool, with a damaging wind gust 
+threat during this same time period. Within any organized segments, 
+a weak tornadic spin up is possible but given LCL height and weak 
+boundary layer shear, this threat should remain very isolated. 
+
+The next threat tonight will reside with the potential for a remnant 
+boundary to develop following the passage of the MCV. This boundary 
+coupled with a consistent 30-40kt LLJ could lead to training 
+convection south of a Bloomington to Columbus line between 02-08Z 
+overnight. If this does occur pockets of 2-4" over a 6 hour period 
+will be possible, with localized flooding threat. As the LLJ weakens 
+tomorrow morning, convection will eventually dissipate, with most 
+areas becoming dry by 10Z. 
+
+
+Friday through Saturday: 
+
+Another upper level wave will move slowly through the region Friday 
+into Saturday with a weak surface boundary expected to pass from 
+north to south through central Indiana during the afternoon and 
+evening. Models are starting to come to a better agreement on 
+timing, with convection likely to occur between 4PM and 10PM from 
+north to south across the region. Shear will be rather weak this 
+time around, and therefor the severe risk is low for Friday. That 
+said, there is enough destabilization through a deep saturated 
+column for an isolated wet microburst to be possible. A quick inch 
+is possible over a 30min period with these storms as well, but the 
+movement on these cells should be fast enough to limit the flood 
+threat for the afternoon and evening hours. 
+
+Late tomorrow evening, this boundary is expected to stall near or 
+south of central Indiana, with another nocturnal LLJ expected to 
+form. If this boundary stays within central Indiana, there is some 
+potential for an additional flooding concern Friday night, but 
+confidence is low on this occurring at this time. 
+
+
+Sunday through Next Week:
+
+The strong upper ridging centered over the Rockies during the second 
+half of the weekend will shift east into the Mississippi and Ohio 
+Valleys for much of next week bringing a return to a warmer and 
+drier pattern for central Indiana. Highs will return to the upper 
+80s and lower 90s through the middle of next week. Unlike the recent 
+high heat in late June and the first few days of July...temperatures 
+and dewpoints should be lower through the period which will keep 
+heat indices largely manageable from a heat stress standpoint... 
+peaking in the mid and upper 90s. 
+
+A few lingering storms are possible Sunday over southern counties as 
+an upper trough axis shifts away to the south The presence of a 
+strong mid level cap will largely mitigate convective risks from 
+late Sunday through Tuesday. By Wednesday and Thursday...mid level 
+temperatures will fall weakening the cap with a greater opportunity 
+for isolated convection focused largely during the afternoon and 
+evening. A more pronounced threat for thunderstorms will come late 
+week into next weekend as the ridge suppresses and a cold front sags 
+south from the Great Lakes. In the wake of this frontal passage...a 
+cooler airmass will expand into the region.
+
+&&
+
+.AVIATION (18Z TAF Issuance)...
+Issued at 135 PM EDT Thu Jul 9 2026
+
+Impacts:
+
+- Showers and storms possible at all sites this evening into the 
+  overnight
+
+Discussion:
+
+VFR conditions will remain throughout the afternoon into the 
+evening. After 22Z, a MCV will push into Indiana with a broken line 
+of thunderstorms expected at KHUF and KBMG through 02Z. A remnant 
+boundary behind this MCV coupled with a LLJ will likely lead to 
+additional thunderstorms between 02-08Z overnight. Greatest threat 
+will be at KBMG, but all sites could see a thunderstorm.
+
+MVFR ceilings could be possible tomorrow morning, but confidence
+is low. 
+
+Winds will be light out of the southwest(200-230 degrees) during the 
+day, becoming variable after 00Z as the MCV pushes through.
+
+
+&&
+
+.IND WATCHES/WARNINGS/ADVISORIES...
+None.
+&&
+
+$$
+
+AVIATION...Updike
+DISCUSSION...Ryan/Updike
+Permalink for following product:
+246 
+FXUS63 KIND 091735
+AFDIND
+
+Area Forecast Discussion
+National Weather Service Indianapolis IN
+135 PM EDT Thu Jul 9 2026
+
+.KEY MESSAGES...
+
+- Strong to severe storms possible, mainly this evening into 
+  tonight, with damaging winds and heavy rain/localized flooding
+  the primary threats
+
+- Additional rain possible at times Friday through the weekend with
+  localized flooding possible
+
+- Warmer and drier again next week, though with more modest humidity
+  than experienced the first week of the month
+
+&&
+
+.FORECAST UPDATE...
+Issued at 938 AM EDT Thu Jul 9 2026
+
+A few updates to the forecast this morning. The primary change was 
+to the ongoing cloud cover and patchy fog this morning. An area of 
+dense fog progressed NE into the Indianapolis Metro area this 
+morning, with a few pockets of less than 1/2mi visibility. This has 
+slowly improved over the last few hours, with some lingering low 
+level cloud decks still remaining. Increased heat fluxes throughout 
+the morning should lead to mixing in the PBL and breaks in the sky 
+cover by 11AM.
+
+The other changes are related to the evening and overnight 
+thunderstorm chances. CAMs are widely varied on placement and timing 
+on convection later today leading to a lower confidence level in the 
+forecast. That said, the forecast currently is focused on the 
+presence of the nocturnal LLJ as this will be the primary convective 
+forcing. Conceptual models point towards some substance on the N/NE 
+side of this LLJ of which should lead to lower shower and storm 
+coverage north of I-70 this evening, with a quasi-organized line 
+across southern Indiana. Damaging wind gusts and the potential for 
+an isolated tornado are still the expected hazards from 8PM through 
+1AM.
+
+&&
+
+.DISCUSSION (Today through Wednesday)...
+Issued at 257 AM EDT Thu Jul 9 2026
+
+TODAY AND TONIGHT -
+
+Aside from some patchy fog in the outlying and favored areas in the 
+light winds and high humidity airmass, expect generally quiet 
+weather this morning, with thunderstorm chances ramping up through 
+the day as the airmass destabilizes and a convectively enhanced 
+upper level disturbance approaches the area.
+
+CAMs in general are depicting the evolution of one or more clusters 
+of storms into a linear structure late in the day into the overnight 
+hours tonight, with primarily a concern for a few damaging wind 
+gusts. Deep layer shear is modest but sufficient, and may be 
+enhanced slightly beyond what guidance depicts by the aforementioned 
+MCV. Diurnal timing is not ideal though moderately strong 
+instability should remain in place into the overnight hours - 
+approaching and possibly exceeding MUCAPE values of 2000 J/kg. 
+Seasonably high wet-bulb zero values will limit hail threat to 
+primarily small hail in the stronger cores absent any more discrete 
+convection, which appears unlikely, and while a brief QLCS spin-up 
+cannot be ruled out, damaging winds in a seasonable setting of a 
+cold-pool driven MCS will be the primary concern.
+
+Despite precipitable water values approaching 2 inches, well in 
+excess of the climatological 90th percentile, the (mostly) 
+progressive CAM solutions do give some optimism that despite 
+undeniable heavy rain potential, hydrologic threat should be 
+relatively limited with today and tonight's convection, though 
+mesoscale reorientation of the low level environment in the form of 
+boundaries and the larger scale low to mid level flow will always be 
+a concern in such setups, and the slight risk for excessive rainfall 
+day one is certainly reasonable.
+
+Overall, current expectation is for a broken line of storms to 
+possibly move into central Indiana during the evening hours, perhaps 
+just prior to nightfall, and push through the area to the 
+east/southeast - with southwestern portions of the area the most 
+likely area for both severe and hydrologic concerns.
+
+FRIDAY INTO SUNDAY -
+
+Another upper level wave will move slowly through the region Friday 
+into Saturday, though models differ in their handling and intensity 
+of the disturbance. A continued moist airmass will promote at least 
+moderate destabilization, and one or more clusters of storms will be 
+possible Friday into Friday night and perhaps on Saturday as well, 
+though the threat will lessen and shift southward with time, and be 
+focused primarily along remnant boundaries from previous convection, 
+lessening the predictability as time goes on.
+
+An isolated strong to severe threat cannot be entirely ruled out, 
+though hydro concerns will likely be slightly more pressing as the 
+area has been decently wet in recent weeks, and the aforementioned 
+plentiful moisture combined with what may be fairly slow storm 
+motions outside of more organized clusters could present a localized 
+flash flood threat - WPC excessive rainfall outlooks outline this 
+well.
+
+NEXT WEEK -
+
+The predominant story next week will be a reassertion of summertime 
+heat as a brief pseudo-Rex block pattern forms with the western 
+CONUS ridge sliding back eastward atop weak upper level low pressure 
+to our south, gradually reconnecting with the Bermuda high over the 
+southeast. Temperatures will climb back towards the 90 degree mark 
+in spots, though with slightly more reasonable dewpoints than the 
+first week of the month, keeping max apparent temperatures still 
+toasty but far more manageable in the low to mid 90s.
+
+The high pressure aloft and at the surface will keep the area dry 
+for the most part, though airmass thunderstorms cannot be entirely 
+ruled out near peak heating many days. That said, these are quite 
+low predictability days ahead of time and will not merit mentionable 
+PoPs on most days.
+
+&&
+
+.AVIATION (18Z TAF Issuance)...
+Issued at 135 PM EDT Thu Jul 9 2026
+
+Impacts:
+
+- Showers and storms possible at all sites this evening into the 
+  overnight
+
+Discussion:
+
+VFR conditions will remain throughout the afternoon into the 
+evening. After 22Z, a MCV will push into Indiana with a broken line 
+of thunderstorms expected at KHUF and KBMG through 02Z. A remnant 
+boundary behind this MCV coupled with a LLJ will likely lead to 
+additional thunderstorms between 02-08Z overnight. Greatest threat 
+will be at KBMG, but all sites could see a thunderstorm.
+
+MVFR ceilings could be possible tomorrow morning, but confidence
+is low. 
+
+Winds will be light out of the southwest(200-230 degrees) during the 
+day, becoming variable after 00Z as the MCV pushes through.
+
+&&
+
+.IND WATCHES/WARNINGS/ADVISORIES...
+None.
+&&
+
+$$
+
+UPDATE...Updike
+AVIATION...Updike
+DISCUSSION...Nield

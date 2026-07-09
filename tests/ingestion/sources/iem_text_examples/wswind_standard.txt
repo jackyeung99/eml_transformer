@@ -1,0 +1,35 @@
+107 
+WWUS43 KIND 021405
+WSWIND
+
+URGENT - WINTER WEATHER MESSAGE
+National Weather Service Indianapolis IN
+905 AM EST Mon Mar 2 2026
+
+INZ036-037-039-044>049-051>057-060>065-067>072-021515-
+/O.EXP.KIND.WW.Y.0002.000000T0000Z-260302T1400Z/
+Montgomery-Boone-Hamilton-Parke-Putnam-Hendricks-Marion-Hancock-
+Henry-Vigo-Clay-Owen-Morgan-Johnson-Shelby-Rush-Sullivan-Greene-
+Monroe-Brown-Bartholomew-Decatur-Knox-Daviess-Martin-Lawrence-
+Jackson-Jennings-
+Including the cities of North Vernon, Worthington, Shelbyville,
+Linton, Jasonville, Nashville, Indianapolis, Carmel, Shoals,
+Crawfordsville, Brazil, Mitchell, Franklin, Bloomfield,
+Mooresville, Brownsburg, Greencastle, Martinsville, Lebanon,
+Fishers, Rushville, Shelburn, Bloomington, Gosport, Columbus,
+Farmersburg, Zionsville, New Castle, Sullivan, Washington,
+Bedford, Montezuma, Seymour, Vincennes, Carlisle, Noblesville,
+Terre Haute, Loogootee, Plainfield, Danville, Rosedale, Spencer,
+Greensburg, Rockville, Greenfield, and Greenwood
+905 AM EST Mon Mar 2 2026
+
+...WINTER WEATHER ADVISORY HAS EXPIRED...
+
+The Winter Weather Advisory has expired as temperatures are 
+beginning to warm up and road conditions improve. A light wintry mix 
+across southern portions of central Indiana may continue to result 
+in slick road conditions over the next few hours.
+
+$$
+
+Melo

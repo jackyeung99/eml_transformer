@@ -1,0 +1,102 @@
+800 
+FXUS63 KIWX 091716
+AFDIWX
+
+Area Forecast Discussion
+National Weather Service Northern Indiana
+116 PM EDT Thu Jul 9 2026
+
+.KEY MESSAGES...
+
+- Thunderstorms are possible this and tonight. A few of these 
+  storms may be strong, capable of isolated gusty winds and 
+  heavy rain.
+
+- Thunderstorms are also possible Friday and Saturday but severe
+  weather is not expected.
+
+- Turning hot and dry next week.
+
+&&
+
+.DISCUSSION...
+Issued at 112 PM EDT Thu Jul 9 2026
+
+Agreement between the GFS and ECMWF on slowly bringing a cold 
+front/thermal gradient southward between today and Friday 
+night/Saturday morning would indicate an, at best, marginal severe 
+weather risk with weak wind shear (<30 kts), but ample instability 
+(>2500 J/kg MUCAPE on the NAM) as well as 1000+ J/kg of DCAPE. 
+Trying to track forcing is an issue with weak impulses passing 
+through including a weak positively tilted trough. A weak low level 
+jet (~25 kts) shows itself in MI from this morning into the 
+afternoon and then there's also an attempt to organize a low 
+level jet out of MO overnight. It could be that the MO jet gets 
+cut off and moisture transport fails though. The midday jet 
+around MI appears to be colocated with large scale ascent at 
+times. However, the MO jet is slightly removed from the large 
+scale ascent on the ECMWF potentially contributing to its 
+failure. Two distinct peaks in PWATs around 2 inches or so 
+passing through include during peak heating this afternoon as 
+well as overnight. Sfc dew points exceed 70F while 850 mb dew 
+points exceed 10C. Meanwhile, as the previous shift noted, the 
+better moisture content identified by theta-e is farther west 
+and this appears to slide by to the southwest of the area or 
+just casually graze our southwest this afternoon into overnight.
+Models are all over the place for Friday with some of the 
+guidance still retaining PoPs across the whole area whereas 
+there is a smattering of guidance keeping things south of 
+US-24/US-30 area. The more southward progression could be 
+possible if a cold pool/outflow boundary sets up from overnight 
+convection. All of this considered, am fine with the marginal 
+risk of severe weather advertised by SPC, which could be aided 
+by cell collisions, differential heating, and the high theta-e 
+airmass. Wind and heavy rain appear to be the main threats along
+with lightning. With the cold front slowly pushing through, the
+dew points exceeding 70F and highs exceed 90F in our southeast,
+this would indicate apparent temperatures in the 90s, at least,
+for this afternoon. These do appear to slowly trend lower as 
+highs dip back into the 80s with the FROPA. Dew points abate 
+later Friday/Friday night with the FROPA. 
+
+It is interesting to see that there are still models trying to 
+produce showers in the relative dryness on Saturday. I'm not 
+sold on this, but will include some slight chances for that. The
+GFS appears out to lunch, but the NAM/ECMWF appear to have a 
+better handle on things, which show the greatest chance during 
+the afternoon Saturday.
+
+After Saturday, a high pressure system and mid level ridging stall 
+across the area providing dry weather from Sunday until at least the 
+middle to end of next week (7/15-7/17 time frame) as a backdoor 
+front attempts to come in. It appears to be a sort of MCS pattern 
+with plenty of heat around. 850 mb temps creep above 18C and 
+sfc dew points surpass 70F Tuesday and Wednesday of next week 
+indicating potential heat headlines if enough insolation can be 
+had.
+
+&&
+
+.AVIATION /18Z TAFS THROUGH 18Z FRIDAY/...
+Issued at 1255 PM EDT Thu Jul 9 2026
+
+Scattered showers and storms are developing across the area as 
+a weak front approaches the region. Additional chances for 
+storms extend into the overnight but confidence in timing and 
+coverage remains low. Light southwest winds are expected
+through the period.
+
+&&
+
+.IWX WATCHES/WARNINGS/ADVISORIES...
+IN...None.
+OH...None.
+MI...None.
+MARINE...None.
+
+&&
+
+$$
+
+DISCUSSION...Roller
+AVIATION...Cobb

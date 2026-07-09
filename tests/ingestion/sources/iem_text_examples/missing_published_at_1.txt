@@ -1,0 +1,37 @@
+071 
+FLUS43 KILX 080900
+HWOILX
+
+Hazardous Weather Outlook
+National Weather Service Lincoln IL
+Issued by National Weather Service Chicago IL
+300 AM CST Sun Dec 8 2024
+
+ILZ027>031-036>038-040>057-061>063-066>068-071>073-090900-
+Knox-Stark-Peoria-Marshall-Woodford-Fulton-Tazewell-McLean-Schuyler-
+Mason-Logan-De Witt-Piatt-Champaign-Vermilion-Cass-Menard-Scott-
+Morgan-Sangamon-Christian-Macon-Moultrie-Douglas-Coles-Edgar-Shelby-
+Cumberland-Clark-Effingham-Jasper-Crawford-Clay-Richland-Lawrence-
+300 AM CST Sun Dec 8 2024
+
+This Hazardous Weather Outlook is for central Illinois, east 
+central Illinois, southeast Illinois and west central Illinois.
+
+.DAY ONE...Today and tonight.
+
+No hazardous weather is expected at this time.
+
+.DAYS TWO THROUGH SEVEN...Sunday through Friday.
+
+No hazardous weather is expected at this time.
+
+.SPOTTER INFORMATION STATEMENT...
+
+Spotter activation is not anticipated today. 
+
+$$
+
+WFO ILX
+
+
+

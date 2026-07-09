@@ -9,6 +9,7 @@ import pytest
 from eml_transformer.storage.paths import StoragePaths
 from tests.helpers import FakeEmbeddingModel, FakeScraper, FakeSource, FakeStorage, FakeIngestionPipeline
 from eml_transformer.ingestion.sources.gdelt import GDELTSource
+from eml_transformer.ingestion.sources.iem_afos import IEMAFOSSource
 
 
 # run time 
@@ -50,6 +51,11 @@ def embedding_model():
 @pytest.fixture
 def gdelt_source():
     return GDELTSource()
+
+@pytest.fixture
+def iem_source():
+    return IEMAFOSSource()
+
 
 # configs 
 @pytest.fixture
@@ -187,5 +193,3 @@ def sample_scraped_articles():
             }
         ]
     )
-
-
