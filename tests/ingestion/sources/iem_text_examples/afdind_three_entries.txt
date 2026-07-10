@@ -1,0 +1,630 @@
+
+089 
+FXUS63 KIND 042325
+AFDIND
+
+Area Forecast Discussion
+National Weather Service Indianapolis IN
+625 PM EST Sat Jan 4 2025
+
+.KEY MESSAGES...
+
+- Below normal temperatures expected for the foreseeable future. 
+Bitterly cold conditions likely by mid week next week.
+
+- WINTER STORM Warning in effect across much of central IN for a 
+significant winter storm expected to impact the region Sunday - 
+Monday.
+
+- Winter Weather Advisory in effect for northern portions of central 
+Indiana where lower snowfall totals and overall impacts are expected.
+
+&&
+
+.SHORT TERM (This evening through Monday)... 
+Issued at 322 PM EST Sat Jan 4 2025
+
+OVERVIEW -
+
+1) WINTER STORM WARNING across much of central Indiana for a winter 
+storm expected Sunday into Monday, with potential for significant to 
+major impacts, in the form of heavy snow, sleet/ice accumulations, 
+and gusty winds/blowing and drifting. A WINTER WEATHER ADVISORY is 
+in effect for northwestern portions of central Indiana where 
+uncertainty remains regarding overall impacts.
+
+2) Bitterly cold conditions arriving in the wake of the winter 
+storm, likely persisting well into the week 2 period before 
+improvement.
+
+WINTER STORM SUNDAY INTO MONDAY -
+
+The Ohio Valley has an impending winter storm of which will approach 
+central Indiana Sunday morning, with impacts through most of Monday. 
+This particular set-up is not typical for a large impactful winter 
+system, and thus is creating some challenges in regards to the 
+forecast. 
+
+Most of the abnormalities lie in the presence of a broad deep trough 
+over the eastern portions of Canada and New England. This trough is 
+working two fold, both limiting northeastward progression of the 
+impending low, and keeping antecedent conditions well below 
+freezing. Regardless, a trough will push eastward today and tonight, 
+with a resulting low developing generally over the Ozarks/Mid-
+Mississippi Valley. 
+
+Due to this Canadian trough, typical phasing of the low will be 
+shunted, keeping progression mostly eastward. Latest 12Z guidance 
+has much more precision with the low passing through southern KY 
+Sunday through Monday, allowing for much more model consistency. The 
+central TN solutions have become nearly non-existent, leading to a 
+return northward in the snowfall axis to along and just south of the 
+I-70 border. Timing continues to be consistent in the latest suite 
+of model guidance with precipitation onset occurring from 9AM in far 
+SW central Indiana, to early afternoon across the I-70 corridor. 
+
+Precipitation type issues is likely to occur Sunday afternoon 
+through the evening and overnight as a 50-70kt 700-850mb jet will 
+push much warmer air into central Indiana above a well below 
+freezing near surface layer. The current thought is for much greater 
+coverage of sleet vs freezing rain for central Indiana due to the 
+entire 0-3km layer remaining below freezing. With that said, there 
+is some uncertainty due to potential for the warm nose to be warmer 
+than 3C for portions of southern central Indiana. If this does 
+occur, rain will likely have a hard time re-freezing before reaching 
+the surface resulting in more widespread FZRA. Along and north of I-
+70, the warm nose should remain below freezing with any 
+precipitation falling rimed, dense snow through Sunday afternoon. 
+
+Dynamic cooling as the CCB strengthens will likely push mixed 
+precipitation further into southern IN and KY Sunday evening through 
+Sunday night. It is at this time that greatest snowfall rates are 
+most likely for central Indiana with 700-500mb vertical lift 
+increasing and co-located inside the DGZ. One big change is the 
+arrival of a mid level dry slot Sunday night. This would lead to 
+drying of the DGZ, and a lack of ice crystal growth in the cloud 
+cover. This would lead to widespread FZDZ, currently expected south 
+of I-70. 
+
+Another round of high SLR snow is expected within deformation early 
+Monday morning. This has been better analyzed in the coarser 
+grid- space models as the WCB is expected to overcome the Canadian
+trough and develop a TROWAL. Given the high SLRs and narrow 
+banding potential with this portion of the storm, a wide range in 
+6hour snowfall amounts is possible between 09Z and 15Z. 
+
+Snow will begin to taper off as the system departs to the east, dry 
+advection aloft begins, and forcing quickly weakens during the day 
+on Monday, but light accumulations may continue through Monday 
+afternoon. 
+
+*******************************************************************
+
+Summary of Winter Storm: 
+
+Given the strong forcing, plentiful moisture, and long duration of 
+the event due to the orientation and motion of the primary 
+precipitation band with the system, probabilities are still high for 
+warning criteria of 5 inches, especially for areas along and south 
+of I70. For this reason a Winter Storm Warming is in effect for a 
+majority of central Indiana. NW portions of central Indiana, there 
+exhibits greater uncertainty with a sharp northward gradient in 
+snowfall totals expected in these areas. Greatest snowfall amounts 
+are likely to remain south of the I-70 corridor; current forecast is 
+for snowfall totals as high as 12 inches. Areas that see any mixing 
+of sleet or freezing rain will likely see some decrease in snowfall 
+totals on Sunday, however impacts could still be just as bad due to 
+ice accretion. Winds will also be a concern, particularly Sunday 
+night into Monday, with blowing and drifting likely becoming at 
+least a moderate concern in areas that did not receive freezing 
+drizzle Sunday night. Frequent gusts in the 30-35 MPH range and 
+locally higher gusts are expected. 
+
+********************************************************************
+
+&&
+
+.LONG TERM (Monday night through Saturday)... 
+Issued at 322 PM EST Sat Jan 4 2025
+
+Behind the coming winter storm, the cold airmass will further settle 
+in and is expected to persist well into the week 2 period. Another 
+round of snow will be possible at the end of next week, but any 
+details are uncertain at this time. 
+
+Confidence is high on cold air taking hold throughout the long term, 
+especially as surface high pressure moves through. Highs will range 
+from the teens to 20s with lows largely in the single digits to 
+below zero. The coldest night is expected to be Wednesday night 
+which will also see wind chills near -5 to -10.
+
+While it's not really reflected in PoPs at this time due to 
+uncertainty, can't rule out some flurries and light snow on Tuesday 
+and Wednesday along the western counties and then northern counties 
+from a combination of moisture on the backside of the exiting low 
+and a swath of Lake Effect enhancement reaching central Indiana. At 
+such cold temperatures, it also doesn't take much energy to produce 
+flurries. So, could see an increase of PoPs at times for midweek in 
+subsequent forecast packages. 
+
+Towards the end of the week and into next weekend, models are in 
+agreement of another system or two moving through the eastern U.S. 
+potentially bringing more snow to the area and another bout of cold 
+air. There is not enough agreement or consistency to have any 
+confidence on details at this time.
+
+&&
+
+.AVIATION (00Z TAF Issuance)...
+Issued at 624 PM EST Sat Jan 4 2025
+
+Impacts: 
+
+- MVFR ceilings developing around or shortly after daybreak Sunday 
+  at KBMG and KHUF then expanding northeast 
+- Arrival of snow after 12Z Sunday with rapidly deteriorating 
+  conditions into Sunday afternoon
+
+Discussion: 
+
+Quiet conditions will continue through the night with gradually 
+lowering high then mid level clouds. Winds will be light.
+
+Clouds will continue to thicken and lower tonight with MVFR stratus 
+developing at both KBMG and KHUF around or shortly after daybreak 
+Sunday along with light snow. Snow will expand northeast across 
+central Indiana into Sunday afternoon with rapidly deteriorating 
+conditions as heavier snow lifts into the region at both KBMG and 
+KHUF, likely reaching KIND by mid afternoon. Snow will continue into 
+the evening hours.
+
+Winds will become northeast on Sunday with an increase in speed 
+later in the day.
+
+&&
+
+.IND WATCHES/WARNINGS/ADVISORIES...
+Winter Weather Advisory from 1 PM Sunday to 7 PM EST Monday for 
+INZ021-028>031-035-038.
+
+Winter Storm Warning from 10 AM Sunday to 7 PM EST Monday for 
+INZ036-037-039>049-051>057.
+
+Winter Storm Warning from 7 AM Sunday to 7 PM EST Monday for 
+INZ060>065-067>072.
+
+&&
+
+$$
+
+SHORT TERM...Updike
+LONG TERM...KF
+AVIATION...50/Ryan
+
+
+
+735 
+FXUS63 KIND 042024
+AFDIND
+
+Area Forecast Discussion
+National Weather Service Indianapolis IN
+324 PM EST Sat Jan 4 2025
+
+.KEY MESSAGES...
+
+- Below normal temperatures expected for the foreseeable future. 
+Bitterly cold conditions likely by mid week next week.
+
+- WINTER STORM Warning in effect across much of central IN for a 
+significant winter storm expected to impact the region Sunday - 
+Monday.
+
+- Winter Weather Advisory in effect for northern portions of central 
+Indiana where lower snowfall totals and overall impacts are expected.
+
+&&
+
+.SHORT TERM (This evening through Monday)... 
+Issued at 322 PM EST Sat Jan 4 2025
+
+OVERVIEW -
+
+1) WINTER STORM WARNING across much of central Indiana for a winter 
+storm expected Sunday into Monday, with potential for significant to 
+major impacts, in the form of heavy snow, sleet/ice accumulations, 
+and gusty winds/blowing and drifting. A WINTER WEATHER ADVISORY is 
+in effect for northwestern portions of central Indiana where 
+uncertainty remains regarding overall impacts.
+
+2) Bitterly cold conditions arriving in the wake of the winter 
+storm, likely persisting well into the week 2 period before 
+improvement.
+
+WINTER STORM SUNDAY INTO MONDAY -
+
+The Ohio Valley has an impending winter storm of which will approach 
+central Indiana Sunday morning, with impacts through most of Monday. 
+This particular set-up is not typical for a large impactful winter 
+system, and thus is creating some challenges in regards to the 
+forecast. 
+
+Most of the abnormalities lie in the presence of a broad deep trough 
+over the eastern portions of Canada and New England. This trough is 
+working two fold, both limiting northeastward progression of the 
+impending low, and keeping antecedent conditions well below 
+freezing. Regardless, a trough will push eastward today and tonight, 
+with a resulting low developing generally over the Ozarks/Mid-
+Mississippi Valley. 
+
+Due to this Canadian trough, typical phasing of the low will be 
+shunted, keeping progression mostly eastward. Latest 12Z guidance 
+has much more precision with the low passing through southern KY 
+Sunday through Monday, allowing for much more model consistency. The 
+central TN solutions have become nearly non-existent, leading to a 
+return northward in the snowfall axis to along and just south of the 
+I-70 border. Timing continues to be consistent in the latest suite 
+of model guidance with precipitation onset occurring from 9AM in far 
+SW central Indiana, to early afternoon across the I-70 corridor. 
+
+Precipitation type issues is likely to occur Sunday afternoon 
+through the evening and overnight as a 50-70kt 700-850mb jet will 
+push much warmer air into central Indiana above a well below 
+freezing near surface layer. The current thought is for much greater 
+coverage of sleet vs freezing rain for central Indiana due to the 
+entire 0-3km layer remaining below freezing. With that said, there 
+is some uncertainty due to potential for the warm nose to be warmer 
+than 3C for portions of southern central Indiana. If this does 
+occur, rain will likely have a hard time re-freezing before reaching 
+the surface resulting in more widespread FZRA. Along and north of I-
+70, the warm nose should remain below freezing with any 
+precipitation falling rimed, dense snow through Sunday afternoon. 
+
+
+Dynamic cooling as the CCB strengthens will likely push mixed 
+precipitation further into southern IN and KY Sunday evening through 
+Sunday night. It is at this time that greatest snowfall rates are 
+most likely for central Indiana with 700-500mb vertical lift 
+increasing and co-located inside the DGZ. One big change is the 
+arrival of a mid level dry slot Sunday night. This would lead to 
+drying of the DGZ, and a lack of ice crystal growth in the cloud 
+cover. This would lead to widespread FZDZ, currently expected south 
+of I-70. 
+
+Another round of high SLR snow is expected within deformation early 
+Monday morning. This has been better analyzed in the coarser 
+grid- space models as the WCB is expected to overcome the Canadian
+trough and develop a TROWAL. Given the high SLRs and narrow 
+banding potential with this portion of the storm, a wide range in 
+6hour snowfall amounts is possible between 09Z and 15Z. 
+
+Snow will begin to taper off as the system departs to the east, dry 
+advection aloft begins, and forcing quickly weakens during the day 
+on Monday, but light accumulations may continue through Monday 
+afternoon. 
+
+
+*******************************************************************
+
+Summary of Winter Storm: 
+
+Given the strong forcing, plentiful moisture, and long duration of 
+the event due to the orientation and motion of the primary 
+precipitation band with the system, probabilities are still high for 
+warning criteria of 5 inches, especially for areas along and south 
+of I70. For this reason a Winter Storm Warming is in effect for a 
+majority of central Indiana. NW portions of central Indiana, there 
+exhibits greater uncertainty with a sharp northward gradient in 
+snowfall totals expected in these areas. Greatest snowfall amounts 
+are likely to remain south of the I-70 corridor; current forecast is 
+for snowfall totals as high as 12 inches. Areas that see any mixing 
+of sleet or freezing rain will likely see some decrease in snowfall 
+totals on Sunday, however impacts could still be just as bad due to 
+ice accretion. Winds will also be a concern, particularly Sunday 
+night into Monday, with blowing and drifting likely becoming at 
+least a moderate concern in areas that did not receive freezing 
+drizzle Sunday night. Frequent gusts in the 30-35 MPH range and 
+locally higher gusts are expected. 
+
+********************************************************************
+
+&&
+
+.LONG TERM (Monday night through Saturday)... 
+Issued at 322 PM EST Sat Jan 4 2025
+
+Behind the coming winter storm, the cold airmass will further settle 
+in and is expected to persist well into the week 2 period. Another 
+round of snow will be possible at the end of next week, but any 
+details are uncertain at this time. 
+
+Confidence is high on cold air taking hold throughout the long term, 
+especially as surface high pressure moves through. Highs will range 
+from the teens to 20s with lows largely in the single digits to 
+below zero. The coldest night is expected to be Wednesday night 
+which will also see wind chills near ........
+
+While it's not really reflected in PoPs at this time due to 
+uncertainty, can't rule out some flurries and light snow on Tuesday 
+and Wednesday along the western counties and then northern counties 
+from a combination of moisture on the backside of the exiting low 
+and a swath of Lake Effect enhancement reaching central Indiana. At 
+such cold temperatures, it also doesn't take much energy to produce 
+flurries. So, could see an increase of PoPs at times for midweek in 
+subsequent forecast packages. 
+
+Towards the end of the week and into next weekend, models are in 
+agreement of another system or two moving through the eastern U.S. 
+potentially bringing more snow to the area and another bout of cold 
+air. There is not enough agreement or consistency to have any 
+confidence on details at this time.
+
+&&
+
+.AVIATION (18Z TAF Issuance)...
+Issued at 1208 PM EST Sat Jan 4 2025
+
+Impacts: 
+
+- MVFR ceilings developing around or shortly after daybreak 
+  Sunday at KBMG and KHUF then expanding northeast 
+- Arrival of snow after 12Z Sunday with rapidly deteriorating
+  conditions into Sunday afternoon
+
+Discussion: 
+
+Dry weather is expected through tonight as the region resides under 
+a strong surface ridge. Mid and high clouds will gradually increase 
+from the southwest this afternoon and evening with W/NW winds 
+peaking at around 10kts.
+
+Focus shifts tonight to the developing low pressure over the Texas 
+panhandle that will bring significant winter weather impacts 
+as soon as Sunday morning continuing into Monday. Clouds will 
+continue to thicken and lower tonight as the system ejects out into 
+the southern Plains with MVFR stratus developing at both KBMG and 
+KHUF around or shortly after daybreak Sunday along with light snow. 
+Snow will expand northeast across central Indiana into Sunday 
+afternoon with rapidly deteriorating conditions as heavier snow 
+lifts into the region at both KBMG and KHUF...and likely reaching 
+KIND by mid afternoon. The 00Z TAF forecast will address this 
+further.
+
+Winds will veer to northerly overnight then to E/NE on Sunday at 
+less than 10kts.
+
+
+&&
+
+.IND WATCHES/WARNINGS/ADVISORIES...
+Winter Weather Advisory from 1 PM Sunday to 1 PM EST Monday for 
+INZ021-028>031-035-038-040>042.
+
+Winter Storm Warning from 10 AM Sunday to 1 PM EST Monday for 
+INZ036-037-039-043>049-051>057.
+
+Winter Storm Warning from 7 AM Sunday to 1 PM EST Monday for 
+INZ060>065-067>072.
+
+&&
+
+$$
+
+SHORT TERM...Updike
+LONG TERM...KF
+AVIATION...Ryan
+
+
+
+263 
+FXUS63 KIND 042048
+AFDIND
+
+Area Forecast Discussion
+National Weather Service Indianapolis IN
+324 PM EST Sat Jan 4 2025
+
+.KEY MESSAGES...
+
+- Below normal temperatures expected for the foreseeable future. 
+Bitterly cold conditions likely by mid week next week.
+
+- WINTER STORM Warning in effect across much of central IN for a 
+significant winter storm expected to impact the region Sunday - 
+Monday.
+
+- Winter Weather Advisory in effect for northern portions of central 
+Indiana where lower snowfall totals and overall impacts are expected.
+
+&&
+
+.SHORT TERM (This evening through Monday)... 
+Issued at 322 PM EST Sat Jan 4 2025
+
+OVERVIEW -
+
+1) WINTER STORM WARNING across much of central Indiana for a winter 
+storm expected Sunday into Monday, with potential for significant to 
+major impacts, in the form of heavy snow, sleet/ice accumulations, 
+and gusty winds/blowing and drifting. A WINTER WEATHER ADVISORY is 
+in effect for northwestern portions of central Indiana where 
+uncertainty remains regarding overall impacts.
+
+2) Bitterly cold conditions arriving in the wake of the winter 
+storm, likely persisting well into the week 2 period before 
+improvement.
+
+WINTER STORM SUNDAY INTO MONDAY -
+
+The Ohio Valley has an impending winter storm of which will approach 
+central Indiana Sunday morning, with impacts through most of Monday. 
+This particular set-up is not typical for a large impactful winter 
+system, and thus is creating some challenges in regards to the 
+forecast. 
+
+Most of the abnormalities lie in the presence of a broad deep trough 
+over the eastern portions of Canada and New England. This trough is 
+working two fold, both limiting northeastward progression of the 
+impending low, and keeping antecedent conditions well below 
+freezing. Regardless, a trough will push eastward today and tonight, 
+with a resulting low developing generally over the Ozarks/Mid-
+Mississippi Valley. 
+
+Due to this Canadian trough, typical phasing of the low will be 
+shunted, keeping progression mostly eastward. Latest 12Z guidance 
+has much more precision with the low passing through southern KY 
+Sunday through Monday, allowing for much more model consistency. The 
+central TN solutions have become nearly non-existent, leading to a 
+return northward in the snowfall axis to along and just south of the 
+I-70 border. Timing continues to be consistent in the latest suite 
+of model guidance with precipitation onset occurring from 9AM in far 
+SW central Indiana, to early afternoon across the I-70 corridor. 
+
+Precipitation type issues is likely to occur Sunday afternoon 
+through the evening and overnight as a 50-70kt 700-850mb jet will 
+push much warmer air into central Indiana above a well below 
+freezing near surface layer. The current thought is for much greater 
+coverage of sleet vs freezing rain for central Indiana due to the 
+entire 0-3km layer remaining below freezing. With that said, there 
+is some uncertainty due to potential for the warm nose to be warmer 
+than 3C for portions of southern central Indiana. If this does 
+occur, rain will likely have a hard time re-freezing before reaching 
+the surface resulting in more widespread FZRA. Along and north of I-
+70, the warm nose should remain below freezing with any 
+precipitation falling rimed, dense snow through Sunday afternoon. 
+
+
+Dynamic cooling as the CCB strengthens will likely push mixed 
+precipitation further into southern IN and KY Sunday evening through 
+Sunday night. It is at this time that greatest snowfall rates are 
+most likely for central Indiana with 700-500mb vertical lift 
+increasing and co-located inside the DGZ. One big change is the 
+arrival of a mid level dry slot Sunday night. This would lead to 
+drying of the DGZ, and a lack of ice crystal growth in the cloud 
+cover. This would lead to widespread FZDZ, currently expected south 
+of I-70. 
+
+Another round of high SLR snow is expected within deformation early 
+Monday morning. This has been better analyzed in the coarser 
+grid- space models as the WCB is expected to overcome the Canadian
+trough and develop a TROWAL. Given the high SLRs and narrow 
+banding potential with this portion of the storm, a wide range in 
+6hour snowfall amounts is possible between 09Z and 15Z. 
+
+Snow will begin to taper off as the system departs to the east, dry 
+advection aloft begins, and forcing quickly weakens during the day 
+on Monday, but light accumulations may continue through Monday 
+afternoon. 
+
+
+*******************************************************************
+
+Summary of Winter Storm: 
+
+Given the strong forcing, plentiful moisture, and long duration of 
+the event due to the orientation and motion of the primary 
+precipitation band with the system, probabilities are still high for 
+warning criteria of 5 inches, especially for areas along and south 
+of I70. For this reason a Winter Storm Warming is in effect for a 
+majority of central Indiana. NW portions of central Indiana, there 
+exhibits greater uncertainty with a sharp northward gradient in 
+snowfall totals expected in these areas. Greatest snowfall amounts 
+are likely to remain south of the I-70 corridor; current forecast is 
+for snowfall totals as high as 12 inches. Areas that see any mixing 
+of sleet or freezing rain will likely see some decrease in snowfall 
+totals on Sunday, however impacts could still be just as bad due to 
+ice accretion. Winds will also be a concern, particularly Sunday 
+night into Monday, with blowing and drifting likely becoming at 
+least a moderate concern in areas that did not receive freezing 
+drizzle Sunday night. Frequent gusts in the 30-35 MPH range and 
+locally higher gusts are expected. 
+
+********************************************************************
+
+&&
+
+.LONG TERM (Monday night through Saturday)... 
+Issued at 322 PM EST Sat Jan 4 2025
+
+Behind the coming winter storm, the cold airmass will further settle 
+in and is expected to persist well into the week 2 period. Another 
+round of snow will be possible at the end of next week, but any 
+details are uncertain at this time. 
+
+Confidence is high on cold air taking hold throughout the long term, 
+especially as surface high pressure moves through. Highs will range 
+from the teens to 20s with lows largely in the single digits to 
+below zero. The coldest night is expected to be Wednesday night 
+which will also see wind chills near -5 to -10.
+
+While it's not really reflected in PoPs at this time due to 
+uncertainty, can't rule out some flurries and light snow on Tuesday 
+and Wednesday along the western counties and then northern counties 
+from a combination of moisture on the backside of the exiting low 
+and a swath of Lake Effect enhancement reaching central Indiana. At 
+such cold temperatures, it also doesn't take much energy to produce 
+flurries. So, could see an increase of PoPs at times for midweek in 
+subsequent forecast packages. 
+
+Towards the end of the week and into next weekend, models are in 
+agreement of another system or two moving through the eastern U.S. 
+potentially bringing more snow to the area and another bout of cold 
+air. There is not enough agreement or consistency to have any 
+confidence on details at this time.
+
+&&
+
+.AVIATION (18Z TAF Issuance)...
+Issued at 1208 PM EST Sat Jan 4 2025
+
+Impacts: 
+
+- MVFR ceilings developing around or shortly after daybreak 
+  Sunday at KBMG and KHUF then expanding northeast 
+- Arrival of snow after 12Z Sunday with rapidly deteriorating
+  conditions into Sunday afternoon
+
+Discussion: 
+
+Dry weather is expected through tonight as the region resides under 
+a strong surface ridge. Mid and high clouds will gradually increase 
+from the southwest this afternoon and evening with W/NW winds 
+peaking at around 10kts.
+
+Focus shifts tonight to the developing low pressure over the Texas 
+panhandle that will bring significant winter weather impacts 
+as soon as Sunday morning continuing into Monday. Clouds will 
+continue to thicken and lower tonight as the system ejects out into 
+the southern Plains with MVFR stratus developing at both KBMG and 
+KHUF around or shortly after daybreak Sunday along with light snow. 
+Snow will expand northeast across central Indiana into Sunday 
+afternoon with rapidly deteriorating conditions as heavier snow 
+lifts into the region at both KBMG and KHUF...and likely reaching 
+KIND by mid afternoon. The 00Z TAF forecast will address this 
+further.
+
+Winds will veer to northerly overnight then to E/NE on Sunday at 
+less than 10kts.
+
+
+&&
+
+.IND WATCHES/WARNINGS/ADVISORIES...
+Winter Weather Advisory from 1 PM Sunday to 1 PM EST Monday for 
+INZ021-028>031-035-038-040>042.
+
+Winter Storm Warning from 10 AM Sunday to 1 PM EST Monday for 
+INZ036-037-039-043>049-051>057.
+
+Winter Storm Warning from 7 AM Sunday to 1 PM EST Monday for 
+INZ060>065-067>072.
+
+&&
+
+$$
+
+SHORT TERM...Updike
+LONG TERM...KF
+AVIATION...Ryan
+
+

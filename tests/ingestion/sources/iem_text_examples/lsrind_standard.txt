@@ -1,0 +1,23 @@
+434 
+NWUS53 KIND 082256
+LSRIND
+
+Preliminary Local Storm Report
+National Weather Service Indianapolis IN
+656 PM EDT Wed Jul 8 2026
+
+..TIME...   ...EVENT...      ...CITY LOCATION...     ...LAT.LON...
+..DATE...   ....MAG....      ..COUNTY LOCATION..ST.. ...SOURCE....
+            ..REMARKS..
+
+0615 PM     Rain             5 E Vincennes           38.68N 87.42W
+07/08/2026  M2.25 Inch       Knox               IN   Public           
+
+            Between 530 and 615 PM EDT. 
+
+
+&&
+
+$$
+
+Crosbie

@@ -1,0 +1,75 @@
+125 
+WWUS73 KIND 042356
+NPWIND
+
+URGENT - WEATHER MESSAGE
+National Weather Service Indianapolis IN
+756 PM EDT Sat Jul 4 2026
+
+INZ021-028>031-035>049-051>057-060>065-067>072-050100-
+/O.CAN.KIND.HT.Y.0002.000000T0000Z-260705T0100Z/
+Carroll-Warren-Tippecanoe-Clinton-Howard-Fountain-Montgomery-
+Boone-Tipton-Hamilton-Madison-Delaware-Randolph-Vermillion-Parke-
+Putnam-Hendricks-Marion-Hancock-Henry-Vigo-Clay-Owen-Morgan-
+Johnson-Shelby-Rush-Sullivan-Greene-Monroe-Brown-Bartholomew-
+Decatur-Knox-Daviess-Martin-Lawrence-Jackson-Jennings-
+Including the cities of Zionsville, Greensburg, Muncie,
+Martinsville, Linton, North Vernon, Frankfort, Anderson, Parker
+City, Rockville, Terre Haute, Shoals, Veedersburg, New Castle,
+West Lafayette, Worthington, Rosedale, Spencer, Bloomington,
+Danville, Rushville, Greencastle, Farmland, Flora, Greenwood,
+Mitchell, Fishers, Columbus, Mooresville, Seymour, Covington,
+Shelbyville, Clinton, Sullivan, Brownsburg, Bloomfield, Shelburn,
+Brazil, Carmel, Vincennes, Fairview Park, Plainfield,
+Indianapolis, Lebanon, Tipton, Franklin, Winchester, West
+Lebanon, Lafayette, Bedford, Jasonville, Williamsport, Union
+City, Nashville, Washington, Crawfordsville, Gosport, Greenfield,
+Noblesville, Carlisle, Farmersburg, Montezuma, Kokomo, Loogootee,
+Attica, and Delphi
+756 PM EDT Sat Jul 4 2026
+
+...HEAT ADVISORY IS CANCELLED...
+
+Widespread showers and thunderstorms have cooled off temperatures to 
+less than 90 degrees. Therefore, the excessive heat threat has ended.
+
+$$
+
+Crosbie125 
+WWUS73 KIND 042356
+NPWIND
+
+URGENT - WEATHER MESSAGE
+National Weather Service Indianapolis IN
+756 PM EDT Sat Jul 4 2026
+
+INZ021-028>031-035>049-051>057-060>065-067>072-050100-
+/O.CAN.KIND.HT.Y.0002.000000T0000Z-260705T0100Z/
+Carroll-Warren-Tippecanoe-Clinton-Howard-Fountain-Montgomery-
+Boone-Tipton-Hamilton-Madison-Delaware-Randolph-Vermillion-Parke-
+Putnam-Hendricks-Marion-Hancock-Henry-Vigo-Clay-Owen-Morgan-
+Johnson-Shelby-Rush-Sullivan-Greene-Monroe-Brown-Bartholomew-
+Decatur-Knox-Daviess-Martin-Lawrence-Jackson-Jennings-
+Including the cities of Zionsville, Greensburg, Muncie,
+Martinsville, Linton, North Vernon, Frankfort, Anderson, Parker
+City, Rockville, Terre Haute, Shoals, Veedersburg, New Castle,
+West Lafayette, Worthington, Rosedale, Spencer, Bloomington,
+Danville, Rushville, Greencastle, Farmland, Flora, Greenwood,
+Mitchell, Fishers, Columbus, Mooresville, Seymour, Covington,
+Shelbyville, Clinton, Sullivan, Brownsburg, Bloomfield, Shelburn,
+Brazil, Carmel, Vincennes, Fairview Park, Plainfield,
+Indianapolis, Lebanon, Tipton, Franklin, Winchester, West
+Lebanon, Lafayette, Bedford, Jasonville, Williamsport, Union
+City, Nashville, Washington, Crawfordsville, Gosport, Greenfield,
+Noblesville, Carlisle, Farmersburg, Montezuma, Kokomo, Loogootee,
+Attica, and Delphi
+756 PM EDT Sat Jul 4 2026
+
+...HEAT ADVISORY IS CANCELLED...
+
+Widespread showers and thunderstorms have cooled off temperatures to 
+less than 90 degrees. Therefore, the excessive heat threat has ended.
+
+$$
+
+Crosbie

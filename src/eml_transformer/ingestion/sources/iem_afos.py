@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
-
-
+import random
+import time
 
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
@@ -286,8 +286,13 @@ class IEMAFOSSource(TextSource):
         """
         responses: list[dict[str, Any]] = []
 
+        session = requests.Session()
+
         for pil in self._pils_to_fetch():
-            response = requests.get(
+
+            time.sleep(random.uniform(0.5, 1.5)) #polite interaction with api 
+
+            response = session.get(
                 self.base_url,
                 params={
                     "pil": pil,
@@ -312,63 +317,82 @@ class IEMAFOSSource(TextSource):
                 )
 
         return responses
-
-    def _parse_records(
-        self,
-        raw_responses: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        """
-        AFOS-specific parse helper.
-
-        Converts raw AFOS response text into source-native records for bronze.
-        """
-        records: list[dict[str, Any]] = []
-        seen_ids: set[str] = set()
+    
+    def _parse_records(self, raw_responses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        records = []
+        seen_ids = set()
 
         for item in raw_responses:
-            pil = item["pil"]
-            text = item["response"]
-
-            for chunk in self._split_products(text):
-                header = self._parse_header(chunk)
-                parsed_pil = header.get("pil") or pil
-
-                try:
-                    issued_at_text, published_at = self._parse_published_at(
-                        raw_text=chunk,
-                        pil=parsed_pil,
-                    )
-                except Exception:
-                    logger.warning(
-                        "Skipping malformed AFOS record during parse | pil=%s",
-                        parsed_pil,
-                        exc_info=True,
-                    )
-                    continue
-
-                source_id = self._make_source_record_id(
-                    pil=parsed_pil,
-                    header=header,
-                    published_at=published_at,
-                )
-
-                if source_id in seen_ids:
-                    continue
-
-                seen_ids.add(source_id)
-
-                records.append(
-                    {
-                        "source_id": source_id,
-                        "pil": parsed_pil,
-                        "raw_text": chunk,
-                        "header": header,
-                        "issued_at_text": issued_at_text,
-                        "published_at": published_at,
-                    }
-                )
+            records.extend(
+                self._parse_response_item(item, seen_ids=seen_ids)
+            )
 
         return records
+    
+    def _parse_response_item(
+        self,
+        item: dict[str, Any],
+        seen_ids: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        pil = item["pil"]
+        text = item["response"]
+
+        records = []
+
+        for chunk in self._split_products(text):
+            record = self._parse_product_chunk(
+                chunk=chunk,
+                fallback_pil=pil,
+            )
+
+            if record is None:
+                continue
+
+            if seen_ids is not None and record["source_id"] in seen_ids:
+                continue
+
+            if seen_ids is not None:
+                seen_ids.add(record["source_id"])
+
+            records.append(record)
+
+        return records
+    
+    def _parse_product_chunk(
+        self,
+        chunk: str,
+        fallback_pil: str,
+    ) -> dict[str, Any] | None:
+        header = self._parse_header(chunk)
+        parsed_pil = header.get("pil") or fallback_pil
+
+        try:
+            issued_at_text, published_at = self._parse_published_at(
+                raw_text=chunk,
+                pil=parsed_pil,
+            )
+        except Exception:
+            logger.warning(
+                "Skipping malformed AFOS record during parse | pil=%s",
+                parsed_pil,
+                exc_info=True,
+            )
+            return None
+
+        source_id = self._make_source_record_id(
+            pil=parsed_pil,
+            header=header,
+            published_at=published_at,
+        )
+
+        return {
+            "source_id": source_id,
+            "pil": parsed_pil,
+            "raw_text": chunk,
+            "header": header,
+            "issued_at_text": issued_at_text,
+            "published_at": published_at,
+        }
 
     def _make_source_record_id(
         self,
@@ -497,7 +521,11 @@ class IEMAFOSSource(TextSource):
             section = match.group("section").strip()
             section = re.sub(r"\s+", " ", section)
 
-            sections[section] = match.group("content").strip()
+
+            sections[section] = {
+                "detail": match.group("section_detail"),
+                "text": match.group("content").strip(),
+            }
 
         return sections
 
