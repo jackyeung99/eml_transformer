@@ -9,7 +9,7 @@ import pytest
 from eml_transformer.storage.paths import StoragePaths
 from tests.helpers import FakeEmbeddingModel, FakeScraper, FakeSource, FakeStorage, FakeIngestionPipeline
 from eml_transformer.ingestion.sources.gdelt import GDELTSource
-
+from eml_transformer.ingestion.sources.miso import MISONotificationSource
 
 # run time 
 @pytest.fixture
@@ -188,4 +188,24 @@ def sample_scraped_articles():
         ]
     )
 
+@pytest.fixture
+def miso_source():
+    return MISONotificationSource()
+
+@pytest.fixture
+def miso_make_raw_record():
+    def _make(**notification_overrides):
+        notification = {
+            "id": "notif-123",
+            "subject": "Market Notice",
+            "publishDate": "2026-01-15T12:00:00Z",
+            "body": "<p>Notification Body</p>",
+            "permanentLinkUrl": "/markets/notice/123"
+        }
+        notification.update(notification_overrides)
+        return {
+            "topic": "Market Notice",
+            "notification": notification
+        }
+    return _make
 
