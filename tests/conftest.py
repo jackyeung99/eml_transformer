@@ -11,7 +11,8 @@ from tests.helpers import FakeEmbeddingModel, FakeScraper, FakeSource, FakeStora
 from eml_transformer.ingestion.sources.gdelt import GDELTSource
 from eml_transformer.ingestion.sources.iem_afos import IEMAFOSSource
 from eml_transformer.ingestion.sources.miso import MISONotificationSource
-
+from eml_transformer.ingestion.sources.newsapi import NewsAPISource
+from eml_transformer.ingestion.sources.weather_alerts import WeatherAlertSource
 # run time 
 @pytest.fixture
 def storage():
@@ -214,5 +215,63 @@ def miso_make_raw_record():
         return {
             "topic": "Market Notice",
             "notification": notification,
+        }
+    return _make
+
+@pytest.fixture
+def newsapi_source():
+    return NewsAPISource(api_key="test-key", query="storm")
+
+@pytest.fixture
+def newsapi_make_article():
+    def _make(**overrides):
+        article = {
+            "source": {"id": "cnn", "name": "CNN"},
+            "author": "John Reporter",
+            "title": "Storm hits coast",
+            "description": "A severe storm caused damage.",
+            "content": "Full article content here.",
+            "url": "https://example.com/article-1",
+            "publishedAt": "2026-01-15T12:00:00Z"
+        }
+        article.update(overrides)
+        return article
+    return _make
+
+@pytest.fixture
+def weather_source():
+    return WeatherAlertSource(areas=["IN"])
+
+@pytest.fixture
+def weather_make_feature():
+    def _make(**prop_overrides):
+        properties = {
+            "id": "alert-123",
+            "@id": "https://api.weather.gov/alerts/alert-123",
+            "headline": "Severe Thunderstorm Warning",
+            "description": "Damaging winds expected.",
+            "instruction": "Take shelter immediately",
+            "event": "Severe Thunderstorm Warning",
+            "severity": "Severe",
+            "urgency": "Immediate",
+            "certainty": "Observed",
+            "status": "Actual",
+            "messageType": "Alert",
+            "category": "Met",
+            "response": "Shelter",
+            "sender": "w-nws.webmaster@noaa.gov",
+            "senderName": "NWS Indianapolis IN",
+            "areaDesc": "Marion, IN",
+            "geocode": {"UGC": ["INC097"]},
+            "affectedZones": ["https://api.weather.gov/zones/country/INC097"],
+            "sent": "2026-01-15T12:00:00Z",
+            "effective": "2026-01-15T12:00:00Z",
+            "expires": "2026-01-15T13:00:00Z",
+            "ends": "2026-01-15T13:00:00Z"
+        }
+        properties.update(prop_overrides)
+        return {
+            "id": properties["id"],
+            "properties": properties
         }
     return _make
