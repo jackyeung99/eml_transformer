@@ -1,67 +1,47 @@
 from __future__ import annotations
 
+import logging
+import random
 import re
+import time
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 import requests
-import random
-import time
 
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
 from eml_transformer.ingestion.schema import TextRecord
-from eml_transformer.utils.stamping import stable_hash
 from eml_transformer.utils.dates import parse_issued_at
+from eml_transformer.utils.stamping import stable_hash
 
-import logging
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ParsedSection:
+    """One logical section extracted from an AFOS product."""
+
+    name: str
+    detail: str | None
+    text: str
+    issued_at_text: str | None = None
+    published_at: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        return asdict(self)
+
 
 @register_source("iem_afos")
 class IEMAFOSSource(TextSource):
-    """
-    Ingest archived NWS text products from the Iowa Environmental Mesonet
-    AFOS archive.
+    """Ingest archived NWS products from the IEM AFOS archive.
 
-    This source can ingest one specific PIL, such as AFDIND, or many PILs
-    formed from product_types x WFOs.
-
-    Examples:
-        AFDIND, HWOIND, NPWIND, LSRIND, WSWIND
-        AFDLOT, HWOLOT, NPWLOT, LSRLOT, WSWLOT
-
-
-    Reference: https://mesonet.agron.iastate.edu/cgi-bin/afos/retrieve.py?help 
-
-    Most text follows this format
-
-        .KEY MESSAGES...
-        summary bullets
-
-        &&
-
-        .SHORT TERM (...)
-        short range forecast
-
-        &&
-
-        .LONG TERM (...)
-        extended forecast
-
-        &&
-
-        .AVIATION (...)
-        aviation impacts
-
-        &&
-
-        .WATCHES/WARNINGS/ADVISORIES...
-        active alerts
-
-        &&
-
-        $$
-        FORECASTER NAMES
+    Ingestion performs only the parsing needed to split, identify, and
+    checkpoint products before they are written to bronze. Standardization
+    performs section parsing and constructs the common ``TextRecord`` used in
+    silver.
     """
 
     name = "iem_afos"
@@ -70,7 +50,11 @@ class IEMAFOSSource(TextSource):
     supports_backfill = True
     default_lookback_days = 3
 
-    # Weather Forecast OFfices
+    BASE_URL = (
+        "https://mesonet.agron.iastate.edu/"
+        "cgi-bin/afos/retrieve.py"
+    )
+
     DEFAULT_MISO_WFOS = [
         "IND",  # Indianapolis
         "IWX",  # Northern Indiana
@@ -90,21 +74,22 @@ class IEMAFOSSource(TextSource):
         "LMK",  # Louisville
         "MEG",  # Memphis
         "LZK",  # Little Rock
-        "JAN",  # Jackson MS
+        "JAN",  # Jackson, Mississippi
         "LIX",  # New Orleans / Baton Rouge
         "MOB",  # Mobile
         "BMX",  # Birmingham
     ]
 
-    #types of alerts
     DEFAULT_PRODUCT_TYPES = [
         "AFD",  # Area Forecast Discussion
         "HWO",  # Hazardous Weather Outlook
-        "NPW",  # Non-precipitation warnings: heat, cold, wind, fog
-        "WSW",  # Winter storm watches/warnings/advisories
-        "LSR",  # Local storm reports
-        "SPS",  # Special weather statements
+        "NPW",  # Non-precipitation warnings
+        "WSW",  # Winter storm watches and warnings
+        "LSR",  # Local Storm Reports
+        "SPS",  # Special Weather Statements
     ]
+
+    PREFERRED_TEXT_SECTIONS = ("KEY MESSAGES", "SHORT TERM")
 
     HEADER_RE = re.compile(
         r"""
@@ -122,8 +107,12 @@ class IEMAFOSSource(TextSource):
         r"\.(?P<section>[A-Z0-9 /-]+?)"
         r"(?:\s*\((?P<section_detail>.*?)\))?"
         r"\.\.\."
-        r"(?P<content>.*?)(?=\n&&|\n\.[A-Z0-9 /-]+(?:\s*\(.*?\))?\.\.\.|\n\$\$|\Z)"
+        r"(?P<content>.*?)"
+        r"(?=\n&&|\n\.[A-Z0-9 /-]+(?:\s*\(.*?\))?\.\.\.|\n\$\$|\Z)"
     )
+
+    ISSUED_AT_RE = re.compile(r"(?m)^Issued at .+$")
+    NWS_TIMESTAMP_RE = re.compile(r"(?m)^National Weather Service .*\n(.+)$")
 
     def __init__(
         self,
@@ -133,56 +122,50 @@ class IEMAFOSSource(TextSource):
         limit: int = 9999,
         fmt: str = "text",
         timeout: int = 30,
-    ):
+        session: requests.Session | None = None,
+        sleep_fn: Callable[[float], None] = time.sleep,
+        request_delay: tuple[float, float] = (0.5, 1.5),
+    ) -> None:
         self.pil = pil.upper() if pil else None
-        self.wfos = [wfo.upper() for wfo in (wfos or self.DEFAULT_MISO_WFOS)]
-        self.product_types = [
-            product_type.upper()
-            for product_type in (product_types or self.DEFAULT_PRODUCT_TYPES)
-        ]
-
+        self.wfos = self._normalize_codes(wfos or self.DEFAULT_MISO_WFOS)
+        self.product_types = self._normalize_codes(
+            product_types or self.DEFAULT_PRODUCT_TYPES
+        )
         self.limit = limit
         self.fmt = fmt
         self.timeout = timeout
-        self.base_url = (
-            "https://mesonet.agron.iastate.edu/"
-            "cgi-bin/afos/retrieve.py"
-        )
+        self.base_url = self.BASE_URL
+
+        # These dependencies are injectable so API tests require no real
+        # requests or waiting.
+        self._session = session or requests.Session()
+        self._sleep = sleep_fn
+        self._request_delay = request_delay
+
+    # ------------------------------------------------------------------
+    # Public pipeline interface
+    # ------------------------------------------------------------------
 
     def fetch_records(
         self,
         from_date: str,
         to_date: str,
     ) -> list[dict[str, Any]]:
-        """
-        Public ingestion method.
+        """Fetch and minimally parse source-native records for bronze."""
+        responses = self._fetch_raw(from_date=from_date, to_date=to_date)
+        return self._parse_records(responses)
 
-        Returns source-native AFOS records ready to write to bronze.
-        The ingestion pipeline should call this method only.
-        """
-        raw_responses = self._fetch_raw(
-            from_date=from_date,
-            to_date=to_date,
-        )
+    def standardize_record(self, record: dict[str, Any]) -> TextRecord:
+        """Convert one bronze AFOS record into the silver schema."""
+        self._validate_bronze_record(record)
 
-        return self._parse_records(raw_responses)
-
-    def standardize_record(
-        self,
-        record: dict[str, Any],
-    ) -> TextRecord:
-        """
-        Convert one bronze/source-native AFOS record into the common TextRecord schema.
-        """
-        pil = record["pil"]
-        raw_text = record["raw_text"]
-
+        pil = str(record["pil"])
+        raw_text = str(record["raw_text"])
         header = record.get("header") or self._parse_header(raw_text)
         sections = self._parse_sections(raw_text)
 
         issued_at_text = record.get("issued_at_text")
         published_at = record.get("published_at")
-
         if not published_at:
             issued_at_text, published_at = self._parse_published_at(
                 raw_text=raw_text,
@@ -190,33 +173,10 @@ class IEMAFOSSource(TextSource):
             )
 
         product_type = pil[:3]
-        office = self._resolve_office(
-            pil=pil,
-            header=header,
-        )
-
-        key_messages = sections.get("KEY MESSAGES")
-        short_term = sections.get("SHORT TERM")
-
-        text = self._build_text(
-            key_messages=key_messages,
-            short_term=short_term,
-            raw_text=raw_text,
-        )
-
-        record_id = stable_hash(
-            {
-                "source": self.name,
-                "pil": pil,
-                "office": office,
-                "issued_code": header.get("issued_code"),
-                "raw_id": header.get("raw_id"),
-                "published_at": published_at,
-            }
-        )
+        office = self._resolve_office(pil=pil, header=header)
 
         return TextRecord(
-            record_id=record_id,
+            record_id=str(record["source_id"]),
             source=self.name,
             source_type=self.source_type,
             title=self._make_title(
@@ -224,8 +184,8 @@ class IEMAFOSSource(TextSource):
                 office=office,
                 issued_at_text=issued_at_text,
             ),
-            text=text,
-            published_at=published_at,
+            text=self._build_text(sections=sections, raw_text=raw_text),
+            published_at=str(published_at),
             retrieved_at=datetime.now(timezone.utc).isoformat(),
             url=self.base_url,
             region=office[-3:],
@@ -240,11 +200,13 @@ class IEMAFOSSource(TextSource):
                 "pil": pil,
                 "product_type": product_type,
                 "office": office,
-                "sections": sections,
-                "key_messages": key_messages,
+                "header": header,
+                "sections": {
+                    name: section.to_dict()
+                    for name, section in sections.items()
+                },
                 "issued_at_text": issued_at_text,
                 "published_at_standardized": published_at,
-                **header,
             },
             raw=raw_text,
         )
@@ -253,132 +215,139 @@ class IEMAFOSSource(TextSource):
         self,
         record: dict[str, Any],
     ) -> datetime | None:
+        """Return the record timestamp used by incremental ingestion."""
         published_at = record.get("published_at")
-
         if not published_at:
             return None
 
-        try:
-            dt = datetime.fromisoformat(
-                published_at.replace("Z", "+00:00")
-            )
-        except Exception as e:
-            raise ValueError(
-                f"Malformed checkpoint datetime: {published_at!r}"
-            ) from e
+        return self._parse_iso_datetime(
+            str(published_at),
+            field_name="checkpoint",
+        )
 
-        if dt.tzinfo is None:
-            raise ValueError(
-                f"Naive checkpoint datetime: {published_at!r}"
-            )
-
-        return dt.astimezone(timezone.utc)
+    # ------------------------------------------------------------------
+    # API access
+    # ------------------------------------------------------------------
 
     def _fetch_raw(
         self,
         from_date: str,
         to_date: str,
-    ) -> list[dict[str, Any]]:
-        """
-        AFOS-specific download helper.
-
-        Not called by the pipeline directly.
-        """
-        responses: list[dict[str, Any]] = []
-
-        session = requests.Session()
+    ) -> list[dict[str, str]]:
+        responses: list[dict[str, str]] = []
 
         for pil in self._pils_to_fetch():
-
-            time.sleep(random.uniform(0.5, 1.5)) #polite interaction with api 
-
-            response = session.get(
-                self.base_url,
-                params={
-                    "pil": pil,
-                    "sdate": from_date,
-                    "edate": to_date,
-                    "limit": self.limit,
-                    "fmt": self.fmt,
-                },
-                timeout=self.timeout,
+            text = self._fetch_pil(
+                pil=pil,
+                from_date=from_date,
+                to_date=to_date,
             )
-
-            response.raise_for_status()
-
-            text = response.text.strip()
-
-            if text and not text.startswith("ERROR:"):
-                responses.append(
-                    {
-                        "pil": pil,
-                        "response": text,
-                    }
-                )
+            if text is not None:
+                responses.append({"pil": pil, "response": text})
 
         return responses
-    
-    def _parse_records(self, raw_responses: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        records = []
-        seen_ids = set()
 
-        for item in raw_responses:
-            records.extend(
-                self._parse_response_item(item, seen_ids=seen_ids)
-            )
+    def _fetch_pil(
+        self,
+        pil: str,
+        from_date: str,
+        to_date: str,
+    ) -> str | None:
+        minimum_delay, maximum_delay = self._request_delay
+        self._sleep(random.uniform(minimum_delay, maximum_delay))
+
+        response = self._session.get(
+            self.base_url,
+            params={
+                "pil": pil,
+                "sdate": from_date,
+                "edate": to_date,
+                "limit": self.limit,
+                "fmt": self.fmt,
+            },
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+
+        text = response.text.strip()
+        if not text or text.startswith("ERROR:"):
+            return None
+
+        return text
+
+    def _pils_to_fetch(self) -> list[str]:
+        if self.pil:
+            return [self.pil]
+
+        return [
+            f"{product_type}{wfo}"
+            for product_type in self.product_types
+            for wfo in self.wfos
+        ]
+
+    # ------------------------------------------------------------------
+    # Bronze parsing
+    # ------------------------------------------------------------------
+
+    def _parse_records(
+        self,
+        raw_responses: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+
+        for response_item in raw_responses:
+            for record in self._parse_response_item(response_item):
+                source_id = record["source_id"]
+                if source_id in seen_ids:
+                    continue
+
+                seen_ids.add(source_id)
+                records.append(record)
 
         return records
-    
+
     def _parse_response_item(
         self,
         item: dict[str, Any],
-        seen_ids: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        pil = item["pil"]
-        text = item["response"]
+        fallback_pil = str(item["pil"])
+        response_text = str(item["response"])
+        records: list[dict[str, Any]] = []
 
-        records = []
-
-        for chunk in self._split_products(text):
-            record = self._parse_product_chunk(
-                chunk=chunk,
-                fallback_pil=pil,
-            )
-
-            if record is None:
-                continue
-
-            if seen_ids is not None and record["source_id"] in seen_ids:
-                continue
-
-            if seen_ids is not None:
-                seen_ids.add(record["source_id"])
-
-            records.append(record)
+        for chunk_number, chunk in enumerate(
+            self._split_products(response_text),
+            start=1,
+        ):
+            try:
+                records.append(
+                    self._parse_product_chunk(
+                        chunk=chunk,
+                        fallback_pil=fallback_pil,
+                    )
+                )
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Skipping malformed AFOS product | pil=%s | chunk=%d",
+                    fallback_pil,
+                    chunk_number,
+                    exc_info=True,
+                )
 
         return records
-    
+
     def _parse_product_chunk(
         self,
         chunk: str,
         fallback_pil: str,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         header = self._parse_header(chunk)
         parsed_pil = header.get("pil") or fallback_pil
 
-        try:
-            issued_at_text, published_at = self._parse_published_at(
-                raw_text=chunk,
-                pil=parsed_pil,
-            )
-        except Exception:
-            logger.warning(
-                "Skipping malformed AFOS record during parse | pil=%s",
-                parsed_pil,
-                exc_info=True,
-            )
-            return None
-
+        issued_at_text, published_at = self._parse_published_at(
+            raw_text=chunk,
+            pil=parsed_pil,
+        )
         source_id = self._make_source_record_id(
             pil=parsed_pil,
             header=header,
@@ -394,6 +363,68 @@ class IEMAFOSSource(TextSource):
             "published_at": published_at,
         }
 
+    def _split_products(self, raw: str) -> list[str]:
+        text = self._normalize_newlines(raw)
+        header_matches = list(self.HEADER_RE.finditer(text))
+
+        products: list[str] = []
+        for index, match in enumerate(header_matches):
+            next_index = index + 1
+            end = (
+                header_matches[next_index].start()
+                if next_index < len(header_matches)
+                else len(text)
+            )
+            products.append(text[match.start():end].strip())
+
+        return products
+
+    def _parse_header(self, text: str) -> dict[str, str | None]:
+        match = self.HEADER_RE.search(text)
+        if match is None:
+            return self._empty_header()
+
+        wmo = match.group("wmo")
+        office = match.group("office")
+        issued_code = match.group("ddhhmm")
+
+        return {
+            "raw_id": match.group("seq"),
+            "wmo": wmo,
+            "wmo_header": f"{wmo} {office} {issued_code}",
+            "office": office,
+            "issued_code": issued_code,
+            "pil": match.group("pil"),
+        }
+
+    def _parse_published_at(
+        self,
+        raw_text: str,
+        pil: str,
+    ) -> tuple[str, str]:
+        issued_at_text = self._extract_issued_text(raw_text)
+        if not issued_at_text:
+            raise ValueError(f"Missing issuance timestamp for PIL={pil}")
+
+        try:
+            published_at = parse_issued_at(issued_at_text)
+        except Exception as exc:
+            raise ValueError(
+                f"Failed to parse published_at for PIL={pil}: "
+                f"{issued_at_text!r}"
+            ) from exc
+
+        if not isinstance(published_at, str) or not published_at:
+            raise ValueError(
+                f"Missing published_at for PIL={pil}: {issued_at_text!r}"
+            )
+
+        published_at_utc = self._parse_iso_datetime(
+            published_at,
+            field_name=f"published_at for PIL={pil}",
+        )
+        return issued_at_text, published_at_utc.isoformat()
+
     def _make_source_record_id(
         self,
         pil: str,
@@ -402,6 +433,7 @@ class IEMAFOSSource(TextSource):
     ) -> str:
         return stable_hash(
             {
+                "source": self.name,
                 "pil": pil,
                 "office": header.get("office"),
                 "issued_code": header.get("issued_code"),
@@ -410,142 +442,61 @@ class IEMAFOSSource(TextSource):
             }
         )
 
-    def _parse_published_at(
-        self,
-        raw_text: str,
-        pil: str,
-    ) -> tuple[str, str]:
-        issued_at_text = self._extract_issued_text(raw_text)
+    # ------------------------------------------------------------------
+    # Silver parsing
+    # ------------------------------------------------------------------
 
-        try:
-            published_at = parse_issued_at(issued_at_text)
-        except Exception as e:
-            raise ValueError(
-                f"Failed to parse published_at for PIL={pil}: "
-                f"{issued_at_text!r}"
-            ) from e
+    def _parse_sections(self, text: str) -> dict[str, ParsedSection]:
+        sections: dict[str, ParsedSection] = {}
 
-        if not published_at:
-            raise ValueError(
-                f"Missing published_at for PIL={pil}: {issued_at_text!r}"
+        for match in self.SECTION_RE.finditer(self._normalize_newlines(text)):
+            name = self._normalize_section_name(match.group("section"))
+            detail = self._clean_optional_text(match.group("section_detail"))
+            content, issued_at_text = self._clean_section_text(
+                match.group("content")
             )
 
-        if not isinstance(published_at, str):
-            raise TypeError(
-                f"published_at must be ISO datetime string, "
-                f"got {type(published_at)}"
+            sections[name] = ParsedSection(
+                name=name,
+                detail=detail,
+                text=content,
+                issued_at_text=issued_at_text,
+                published_at=self._try_parse_issued_at(issued_at_text),
             )
-
-        try:
-            parsed_dt = datetime.fromisoformat(
-                published_at.replace("Z", "+00:00")
-            )
-        except Exception as e:
-            raise ValueError(
-                f"Malformed ISO datetime published_at for PIL={pil}: "
-                f"{published_at!r}"
-            ) from e
-
-        if parsed_dt.tzinfo is None:
-            raise ValueError(
-                f"Naive datetime published_at for PIL={pil}: "
-                f"{published_at!r}"
-            )
-
-        return issued_at_text or "", parsed_dt.astimezone(timezone.utc).isoformat()
-
-    def _pils_to_fetch(self) -> list[str]:
-        if self.pil:
-            return [self.pil]
-
-        return [
-            f"{product_type}{wfo}"
-            for product_type in self.product_types
-            for wfo in self.wfos
-        ]
-
-    def _split_products(
-        self,
-        raw: str,
-    ) -> list[str]:
-        text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
-        matches = list(self.HEADER_RE.finditer(text))
-
-        records = []
-
-        for i, match in enumerate(matches):
-            start = match.start()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-            records.append(text[start:end].strip())
-
-        return records
-
-    def _parse_header(
-        self,
-        text: str,
-    ) -> dict[str, str | None]:
-        match = self.HEADER_RE.search(text)
-
-        if not match:
-            return {
-                "raw_id": None,
-                "wmo": None,
-                "wmo_header": None,
-                "office": None,
-                "issued_code": None,
-                "pil": None,
-            }
-
-        wmo_header = (
-            f"{match.group('wmo')} "
-            f"{match.group('office')} "
-            f"{match.group('ddhhmm')}"
-        )
-
-        return {
-            "raw_id": match.group("seq"),
-            "wmo": match.group("wmo"),
-            "wmo_header": wmo_header,
-            "office": match.group("office"),
-            "issued_code": match.group("ddhhmm"),
-            "pil": match.group("pil"),
-        }
-
-    def _parse_sections(
-        self,
-        text: str,
-    ) -> dict[str, str]:
-        sections: dict[str, str] = {}
-
-        for match in self.SECTION_RE.finditer(text):
-            section = match.group("section").strip()
-            section = re.sub(r"\s+", " ", section)
-
-
-            sections[section] = {
-                "detail": match.group("section_detail"),
-                "text": match.group("content").strip(),
-            }
 
         return sections
 
-    def _extract_issued_text(
+    def _clean_section_text(
         self,
-        text: str,
-    ) -> str | None:
-        match = re.search(
-            r"(?m)^Issued at .+$",
-            text,
-        )
+        content: str,
+    ) -> tuple[str, str | None]:
+        issued_at_text = self._extract_issued_text(content)
+        cleaned = self.ISSUED_AT_RE.sub("", content)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+        return cleaned, issued_at_text
 
+    def _build_text(
+        self,
+        sections: dict[str, ParsedSection],
+        raw_text: str,
+    ) -> str:
+        preferred_text = [
+            sections[name].text
+            for name in self.PREFERRED_TEXT_SECTIONS
+            if name in sections and sections[name].text
+        ]
+
+        if preferred_text:
+            return "\n\n".join(preferred_text)
+
+        return raw_text.strip()
+
+    def _extract_issued_text(self, text: str) -> str | None:
+        match = self.ISSUED_AT_RE.search(text)
         if match:
             return match.group(0).strip()
 
-        match = re.search(
-            r"(?m)^National Weather Service .*\n(.+)$",
-            text,
-        )
-
+        match = self.NWS_TIMESTAMP_RE.search(text)
         if match:
             return match.group(1).strip()
 
@@ -557,28 +508,13 @@ class IEMAFOSSource(TextSource):
         header: dict[str, str | None],
     ) -> str:
         office = header.get("office")
+        if office:
+            return office
 
-        if not office:
-            office = pil[3:] if len(pil) >= 6 else None
+        if len(pil) >= 6:
+            return pil[3:]
 
-        if not office:
-            raise ValueError(f"Could not determine office for PIL={pil}")
-
-        return office
-
-    def _build_text(
-        self,
-        key_messages: str | None,
-        short_term: str | None,
-        raw_text: str,
-    ) -> str:
-        text = "\n\n".join(
-            part.strip()
-            for part in [key_messages, short_term]
-            if isinstance(part, str) and part.strip()
-        )
-
-        return text if text else raw_text.strip()
+        raise ValueError(f"Could not determine office for PIL={pil}")
 
     def _make_title(
         self,
@@ -586,10 +522,94 @@ class IEMAFOSSource(TextSource):
         office: str | None,
         issued_at_text: str | None,
     ) -> str:
-        parts = [
-            product_type,
-            office or "",
-            issued_at_text or "",
+        return " | ".join(
+            part
+            for part in (product_type, office, issued_at_text)
+            if part
+        )
+
+    # ------------------------------------------------------------------
+    # Shared validation and normalization helpers
+    # ------------------------------------------------------------------
+
+    def _validate_bronze_record(self, record: dict[str, Any]) -> None:
+        required_fields = {"source_id", "pil", "raw_text"}
+        missing_fields = [
+            field
+            for field in sorted(required_fields)
+            if not record.get(field)
         ]
 
-        return " | ".join(part for part in parts if part)
+        if missing_fields:
+            raise ValueError(
+                "AFOS bronze record is missing required fields: "
+                f"{missing_fields}"
+            )
+
+    def _try_parse_issued_at(self, value: str | None) -> str | None:
+        if not value:
+            return None
+
+        try:
+            parsed = parse_issued_at(value)
+            if not isinstance(parsed, str) or not parsed:
+                return None
+
+            return self._parse_iso_datetime(
+                parsed,
+                field_name="section published_at",
+            ).isoformat()
+        except (TypeError, ValueError):
+            logger.debug(
+                "Could not parse AFOS section timestamp | value=%r",
+                value,
+                exc_info=True,
+            )
+            return None
+
+    @staticmethod
+    def _parse_iso_datetime(value: str, field_name: str) -> datetime:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(
+                f"Malformed ISO datetime for {field_name}: {value!r}"
+            ) from exc
+
+        if parsed.tzinfo is None:
+            raise ValueError(
+                f"Timezone-naive datetime for {field_name}: {value!r}"
+            )
+
+        return parsed.astimezone(timezone.utc)
+
+    @staticmethod
+    def _normalize_codes(values: list[str]) -> list[str]:
+        return [value.strip().upper() for value in values]
+
+    @staticmethod
+    def _normalize_newlines(value: str) -> str:
+        return value.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    @staticmethod
+    def _normalize_section_name(value: str) -> str:
+        return re.sub(r"\s+", " ", value).strip().upper()
+
+    @staticmethod
+    def _clean_optional_text(value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        cleaned = re.sub(r"\s+", " ", value).strip()
+        return cleaned or None
+
+    @staticmethod
+    def _empty_header() -> dict[str, str | None]:
+        return {
+            "raw_id": None,
+            "wmo": None,
+            "wmo_header": None,
+            "office": None,
+            "issued_code": None,
+            "pil": None,
+        }
