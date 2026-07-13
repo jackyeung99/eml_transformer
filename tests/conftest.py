@@ -13,6 +13,7 @@ from eml_transformer.ingestion.sources.iem_afos import IEMAFOSSource
 from eml_transformer.ingestion.sources.miso import MISONotificationSource
 from eml_transformer.ingestion.sources.newsapi import NewsAPISource
 from eml_transformer.ingestion.sources.weather_alerts import WeatherAlertSource
+
 # run time 
 @pytest.fixture
 def storage():
@@ -52,10 +53,6 @@ def embedding_model():
 @pytest.fixture
 def gdelt_source():
     return GDELTSource()
-
-@pytest.fixture
-def iem_source():
-    return IEMAFOSSource()
 
 
 # configs 
