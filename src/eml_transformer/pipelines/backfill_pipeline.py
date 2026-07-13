@@ -60,7 +60,7 @@ class BackfillPipeline:
         end_date: str,
         window_days: int = 30,
     ):
-        results = []
+        results = {}
 
         for source_name, source_config in source_configs.items():
             source = create_source(
