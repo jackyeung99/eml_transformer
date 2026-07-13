@@ -111,9 +111,41 @@ class IEMAFOSSource(TextSource):
         r"(?=\n&&|\n\.[A-Z0-9 /-]+(?:\s*\(.*?\))?\.\.\.|\n\$\$|\Z)"
     )
 
-    ISSUED_AT_RE = re.compile(r"(?m)^Issued at .+$")
-    NWS_TIMESTAMP_RE = re.compile(r"(?m)^National Weather Service .*\n(.+)$")
+    NWS_TIMESTAMP_LINE = (
+        r"(?:Issued at\s+)?"
+        r"\d{1,4}\s+"
+        r"(?:AM|PM)\s+"
+        r"[A-Z]{2,5}\s+"
+        r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+"
+        r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+"
+        r"\d{1,2}\s+"
+        r"\d{4}"
+    )
 
+    PRODUCT_TIMESTAMP_RE = re.compile(
+        rf"""
+        ^National[ ]Weather[ ]Service[^\n]*\n
+        (?:Issued[ ]by[ ]National[ ]Weather[ ]Service[^\n]*\n)?
+        (?P<issued_at>{NWS_TIMESTAMP_LINE})[ \t]*$
+        """,
+        re.MULTILINE | re.IGNORECASE | re.VERBOSE,
+    )
+
+    SECTION_TIMESTAMP_RE = re.compile(
+        r"""
+        ^(?P<issued_at>
+            Issued[ ]at[ ]+
+            \d{1,4}[ ]+
+            (?:AM|PM)[ ]+
+            [A-Z]{2,5}[ ]+
+            (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[ ]+
+            (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ ]+
+            \d{1,2}[ ]+
+            \d{4}
+        )[ \t]*$
+        """,
+        re.MULTILINE | re.IGNORECASE | re.VERBOSE,
+    )
     def __init__(
         self,
         pil: str | None = None,
@@ -397,14 +429,30 @@ class IEMAFOSSource(TextSource):
             "pil": match.group("pil"),
         }
 
+    def _extract_product_issued_text(
+        self,
+        text: str,
+    ) -> str | None:
+        match = self.PRODUCT_TIMESTAMP_RE.search(
+            self._normalize_newlines(text)
+        )
+        if match is None:
+            return None
+
+        return match.group("issued_at").strip()
+    
+    
     def _parse_published_at(
         self,
         raw_text: str,
         pil: str,
     ) -> tuple[str, str]:
-        issued_at_text = self._extract_issued_text(raw_text)
+        issued_at_text = self._extract_product_issued_text(raw_text)
+
         if not issued_at_text:
-            raise ValueError(f"Missing issuance timestamp for PIL={pil}")
+            raise ValueError(
+                f"Missing product issuance timestamp for PIL={pil}"
+            )
 
         try:
             published_at = parse_issued_at(issued_at_text)
@@ -416,13 +464,15 @@ class IEMAFOSSource(TextSource):
 
         if not isinstance(published_at, str) or not published_at:
             raise ValueError(
-                f"Missing published_at for PIL={pil}: {issued_at_text!r}"
+                f"Missing published_at for PIL={pil}: "
+                f"{issued_at_text!r}"
             )
 
         published_at_utc = self._parse_iso_datetime(
             published_at,
             field_name=f"published_at for PIL={pil}",
         )
+
         return issued_at_text, published_at_utc.isoformat()
 
     def _make_source_record_id(
@@ -470,9 +520,11 @@ class IEMAFOSSource(TextSource):
         self,
         content: str,
     ) -> tuple[str, str | None]:
-        issued_at_text = self._extract_issued_text(content)
-        cleaned = self.ISSUED_AT_RE.sub("", content)
+        issued_at_text = self._extract_section_issued_text(content)
+
+        cleaned = self.SECTION_TIMESTAMP_RE.sub("", content)
         cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
         return cleaned, issued_at_text
 
     def _build_text(
@@ -491,16 +543,19 @@ class IEMAFOSSource(TextSource):
 
         return raw_text.strip()
 
-    def _extract_issued_text(self, text: str) -> str | None:
-        match = self.ISSUED_AT_RE.search(text)
-        if match:
-            return match.group(0).strip()
 
-        match = self.NWS_TIMESTAMP_RE.search(text)
-        if match:
-            return match.group(1).strip()
 
-        return None
+    def _extract_section_issued_text(
+        self,
+        text: str,
+    ) -> str | None:
+        match = self.SECTION_TIMESTAMP_RE.search(
+            self._normalize_newlines(text)
+        )
+        if match is None:
+            return None
+
+        return match.group("issued_at").strip()
 
     def _resolve_office(
         self,
