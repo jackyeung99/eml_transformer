@@ -33,7 +33,7 @@ def fake_ingestion_pipeline():
 
 @pytest.fixture
 def fake_source():
-    return FakeSource
+    return FakeSource()
 
 @pytest.fixture
 def fake_scraper(sample_scraped_article):

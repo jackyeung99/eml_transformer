@@ -170,6 +170,10 @@ class GDELTSource(TextSource):
             raw=record,
         )
     
+    def get_checkpoint_value(self, record: dict[str, Any]) -> datetime | None:
+        return record.get("DATE")
+    
+    
     
     def _filter_records(
         self,

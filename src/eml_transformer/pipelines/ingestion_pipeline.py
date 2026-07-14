@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Protocol
 
 import eml_transformer.ingestion.sources  # noqa: F401
 from eml_transformer.ingestion.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
 from eml_transformer.utils.stamping import stable_hash
+from eml_transformer.ingestion.base import TextSource 
 
 logger = logging.getLogger(__name__)
+
+
+SourceFactory = Callable[..., TextSource]
+Clock = Callable[[], datetime]
+
 
 @dataclass
 class IngestionResult:
@@ -27,9 +34,10 @@ class IngestionResult:
     error: str | None = None
 
     def to_summary(self) -> dict[str, object]:
-        summary = {
+        summary: dict[str, object] = {
             "source": self.source,
             "status": self.status,
+            "run_id": self.run_id,
             "fetched": self.records_fetched,
             "written": self.records_written,
             "skipped": self.records_skipped,
@@ -43,80 +51,334 @@ class IngestionResult:
 
 
 class IngestionPipeline:
-    def __init__(self, storage: Storage, paths: StoragePaths):
+    SUPPORTED_UPDATE_MODES = {"incremental", "full"}
+
+    def __init__(
+        self,
+        storage: Storage,
+        paths: StoragePaths,
+        source_factory: SourceFactory = create_source,
+        clock: Clock | None = None,
+    ):
         self.storage = storage
         self.paths = paths
+        self.source_factory = source_factory
+        self.clock = clock or self._utc_now
+
+    @staticmethod
+    def _utc_now() -> datetime:
+        return datetime.now(timezone.utc)
 
     def run_all(
         self,
-        source_configs: dict[str, dict],
+        source_configs: Mapping[str, Mapping[str, Any]],
     ) -> list[IngestionResult]:
+        """
+        Run ingestion once for every configured source.
+
+        Failures are isolated because run_source returns a failed result rather
+        than raising an exception.
+        """
         return [
-            self.run_source(source_name, source_config)
+            self.run_source(
+                source_name=source_name,
+                source_config=source_config,
+            )
             for source_name, source_config in source_configs.items()
         ]
 
     def run_source(
         self,
         source_name: str,
-        source_config: dict[str, Any],
+        source_config: Mapping[str, Any],
         from_date: str | None = None,
         to_date: str | None = None,
         update_checkpoint: bool = True,
     ) -> IngestionResult:
-        run_time = datetime.now(timezone.utc)
-        run_id = run_time.strftime("%Y%m%dT%H%M%SZ")
+        """
+        Fetch and persist raw records for one source.
 
+        Passing either from_date or to_date makes the run a bounded/manual run.
+        Bounded runs never update the normal incremental checkpoint.
+        """
+        run_time = self._get_run_time()
+        run_id = self._make_run_id(run_time)
+
+        result_source_name = source_name
         bronze_key: str | None = None
         dedupe_key: str | None = None
 
+        records_fetched = 0
+        records_written = 0
+        records_skipped = 0
+        records_failed = 0
+
         try:
-            source = create_source(source_name, **source_config.get("ingestion", {}),)
+            self._validate_date_range(
+                from_date=from_date,
+                to_date=to_date,
+            )
+
+            source = self._create_source(
+                source_name=source_name,
+                source_config=source_config,
+            )
+
+            result_source_name = source.name
+
+            self._validate_source(source)
 
             bronze_key = self.paths.bronze_records(source.name)
             dedupe_key = self.paths.dedupe_state(source.name)
 
-            effective_from_date = from_date
-
-            if source.update_mode == "incremental":
-                checkpoint = self._load_checkpoint(source.name)
-
-                if effective_from_date is None and checkpoint is not None:
-                    effective_from_date = checkpoint.get("last_checkpoint_value")
-
-                if effective_from_date is None:
-                    lookback_days = getattr(source, "default_lookback_days", 7)
-
-                    effective_from_date = (
-                        run_time - timedelta(days=lookback_days)
-                    ).date().isoformat()
-
-                if effective_from_date is None:
-                    raise ValueError(
-                        f"No from_date, checkpoint, or default_start_date found for "
-                        f"incremental source {source.name}"
-                    )
+            effective_from_date = self._resolve_from_date(
+                source=source,
+                requested_from_date=from_date,
+                run_time=run_time,
+            )
 
             logger.info(
-                "Fetching raw records | source=%s | update_mode=%s | from=%s | to=%s",
+                (
+                    "Fetching raw records | source=%s | update_mode=%s "
+                    "| from=%s | to=%s"
+                ),
                 source.name,
                 source.update_mode,
                 effective_from_date,
                 to_date,
             )
 
-            raw_records = source.fetch_records(
-                from_date=effective_from_date,
-                to_date=to_date,
+            raw_records = list(
+                source.fetch_records(
+                    from_date=effective_from_date,
+                    to_date=to_date,
+                )
+            )
+            records_fetched = len(raw_records)
+
+            existing_hashes = self._load_seen(dedupe_key)
+
+            bronze_rows, new_hashes, records_failed = (
+                self._build_bronze_rows(
+                    source=source,
+                    raw_records=raw_records,
+                    existing_hashes=existing_hashes,
+                    run_id=run_id,
+                    run_time=run_time,
+                )
             )
 
-            seen_hashes = self._load_seen(dedupe_key)
-            bronze_rows = []
+            records_skipped = (
+                records_fetched
+                - len(bronze_rows)
+                - records_failed
+            )
 
-            for raw_record in raw_records:
+            if bronze_rows:
+                # Bronze data must be written before the records are marked seen.
+                self.storage.append_jsonl(
+                    bronze_key,
+                    bronze_rows,
+                )
+                records_written = len(bronze_rows)
+
+                self._save_seen(
+                    key=dedupe_key,
+                    seen=existing_hashes | new_hashes,
+                )
+
+            is_bounded_run = (
+                from_date is not None
+                or to_date is not None
+            )
+
+            should_update_checkpoint = (
+                source.update_mode == "incremental"
+                and update_checkpoint
+                and not is_bounded_run
+                and bool(raw_records)
+                and records_failed == 0
+            )
+
+            if should_update_checkpoint:
+                # Checkpoints are updated only after bronze and dedupe
+                # persistence complete successfully.
+                self._update_checkpoint(
+                    source=source,
+                    run_id=run_id,
+                    raw_records=raw_records,
+                )
+
+            status = (
+                "partial_success"
+                if records_failed > 0
+                else "success"
+            )
+
+            logger.info(
+                (
+                    "Ingestion completed | source=%s | run_id=%s "
+                    "| fetched=%s | written=%s | skipped=%s | failed=%s"
+                ),
+                source.name,
+                run_id,
+                records_fetched,
+                records_written,
+                records_skipped,
+                records_failed,
+            )
+
+            return IngestionResult(
+                status=status,
+                source=source.name,
+                run_id=run_id,
+                records_fetched=records_fetched,
+                records_written=records_written,
+                records_skipped=records_skipped,
+                records_failed=records_failed,
+                bronze_key=bronze_key,
+                dedupe_key=dedupe_key,
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "Ingestion failed | source=%s | run_id=%s",
+                result_source_name,
+                run_id,
+            )
+
+            return IngestionResult(
+                status="failed",
+                source=result_source_name,
+                run_id=run_id,
+                records_fetched=records_fetched,
+                records_written=records_written,
+                records_skipped=records_skipped,
+                records_failed=records_failed,
+                error=str(exc),
+                bronze_key=bronze_key,
+                dedupe_key=dedupe_key,
+            )
+
+    def _create_source(
+        self,
+        source_name: str,
+        source_config: Mapping[str, Any],
+    ) -> TextSource:
+        ingestion_config = source_config.get("ingestion", {})
+
+        if not isinstance(ingestion_config, Mapping):
+            raise TypeError(
+                f"Ingestion configuration for {source_name!r} "
+                "must be a mapping"
+            )
+
+        return self.source_factory(
+            source_name,
+            **dict(ingestion_config),
+        )
+
+    def _validate_source(
+        self,
+        source: TextSource,
+    ) -> None:
+        if not source.name:
+            raise ValueError("Source name must not be empty")
+
+        if source.update_mode not in self.SUPPORTED_UPDATE_MODES:
+            raise ValueError(
+                f"Unsupported update mode for {source.name}: "
+                f"{source.update_mode!r}"
+            )
+
+        if source.update_mode == "incremental":
+            lookback_days = getattr(
+                source,
+                "default_lookback_days",
+                7,
+            )
+
+            if not isinstance(lookback_days, int):
+                raise TypeError(
+                    f"default_lookback_days for {source.name} "
+                    "must be an integer"
+                )
+
+            if lookback_days < 0:
+                raise ValueError(
+                    f"default_lookback_days for {source.name} "
+                    "must not be negative"
+                )
+
+    def _resolve_from_date(
+        self,
+        source: TextSource,
+        requested_from_date: str | None,
+        run_time: datetime,
+    ) -> str | None:
+        """
+        Resolve the starting point for an ingestion request.
+
+        Precedence for incremental sources:
+
+        1. Explicit from_date
+        2. Saved checkpoint
+        3. Source default lookback
+        """
+        if source.update_mode != "incremental":
+            return requested_from_date
+
+        if requested_from_date is not None:
+            return requested_from_date
+
+        checkpoint = self._load_checkpoint(source.name)
+
+        if checkpoint is not None:
+            checkpoint_value = checkpoint.get(
+                "last_checkpoint_value"
+            )
+
+            if checkpoint_value is not None:
+                return self._normalize_checkpoint_string(
+                    checkpoint_value
+                )
+
+        lookback_days = getattr(
+            source,
+            "default_lookback_days",
+            7,
+        )
+
+        return (
+            run_time - timedelta(days=lookback_days)
+        ).date().isoformat()
+
+    def _build_bronze_rows(
+        self,
+        source: TextSource,
+        raw_records: list[dict[str, Any]],
+        existing_hashes: set[str],
+        run_id: str,
+        run_time: datetime,
+    ) -> tuple[list[dict[str, Any]], set[str], int]:
+        bronze_rows: list[dict[str, Any]] = []
+        new_hashes: set[str] = set()
+        records_failed = 0
+
+        for record_index, raw_record in enumerate(raw_records):
+            try:
+                if not isinstance(raw_record, dict):
+                    raise TypeError(
+                        "Raw record must be a dictionary, "
+                        f"got {type(raw_record).__name__}"
+                    )
+
                 raw_hash = stable_hash(raw_record)
 
-                if raw_hash in seen_hashes:
+                if (
+                    raw_hash in existing_hashes
+                    or raw_hash in new_hashes
+                ):
                     continue
 
                 bronze_rows.append(
@@ -129,103 +391,61 @@ class IngestionPipeline:
                     }
                 )
 
-                seen_hashes.add(raw_hash)
+                new_hashes.add(raw_hash)
 
-            records_written = len(bronze_rows)
-            records_skipped = len(raw_records) - records_written
+            except Exception:
+                records_failed += 1
 
-            if bronze_rows:
-                self.storage.append_jsonl(
-                    bronze_key,
-                    bronze_rows,
+                logger.warning(
+                    (
+                        "Skipping malformed raw record "
+                        "| source=%s | record_index=%s"
+                    ),
+                    source.name,
+                    record_index,
+                    exc_info=True,
                 )
 
-            self._save_seen(dedupe_key, seen_hashes)
-
-            should_update_checkpoint = (
-                source.update_mode == "incremental"
-                and update_checkpoint
-                and from_date is None
-                and to_date is None
-                and raw_records
-            )
-
-            if should_update_checkpoint:
-                self._update_checkpoint(
-                    source=source,
-                    run_id=run_id,
-                    raw_records=raw_records,
-                )
-
-            return IngestionResult(
-                status="success",
-                source=source.name,
-                run_id=run_id,
-                records_fetched=len(raw_records),
-                records_written=records_written,
-                records_skipped=records_skipped,
-                bronze_key=bronze_key,
-                dedupe_key=dedupe_key,
-            )
-
-        except Exception as e:
-            logger.exception(
-                "Ingestion failed | source=%s | run_id=%s",
-                source_name,
-                run_id,
-            )
-
-            return IngestionResult(
-                status="failed",
-                source=source_name,
-                run_id=run_id,
-                records_fetched=0,
-                records_written=0,
-                records_skipped=0,
-                error=str(e),
-                bronze_key=bronze_key,
-                dedupe_key=dedupe_key,
-            )
+        return bronze_rows, new_hashes, records_failed
 
     def _update_checkpoint(
         self,
-        source: Any,
+        source: TextSource,
         run_id: str,
         raw_records: list[dict[str, Any]],
     ) -> None:
         checkpoint_values: list[datetime] = []
 
-        for record in raw_records:
+        for record_index, record in enumerate(raw_records):
             try:
                 value = source.get_checkpoint_value(record)
 
                 if value is None:
                     continue
 
-                if isinstance(value, str):
-                    value = datetime.fromisoformat(
-                        value.replace("Z", "+00:00")
-                    )
-
                 if not isinstance(value, datetime):
                     raise TypeError(
-                        f"Checkpoint value must be datetime or ISO string, "
-                        f"got {type(value)}"
+                        "get_checkpoint_value() must return "
+                        f"datetime or None, got {type(value).__name__}"
                     )
 
                 if value.tzinfo is None:
                     raise ValueError(
-                        f"Checkpoint datetime is timezone-naive: {value}"
+                        "Checkpoint datetime must be timezone-aware"
                     )
 
-                value = value.astimezone(timezone.utc)
-
-                checkpoint_values.append(value)
+                checkpoint_values.append(
+                    value.astimezone(timezone.utc)
+                )
 
             except Exception:
                 logger.warning(
-                    "Skipping malformed checkpoint value | source=%s",
+                    (
+                        "Skipping malformed checkpoint value "
+                        "| source=%s | record_index=%s"
+                    ),
                     source.name,
+                    record_index,
                     exc_info=True,
                 )
 
@@ -239,11 +459,13 @@ class IngestionPipeline:
         last_checkpoint_value = max(checkpoint_values)
 
         self._save_checkpoint(
-            source.name,
-            {
+            source_name=source.name,
+            checkpoint={
                 "source": source.name,
                 "last_successful_run_id": run_id,
-                "last_checkpoint_value": last_checkpoint_value.isoformat(),
+                "last_checkpoint_value": (
+                    last_checkpoint_value.isoformat()
+                ),
             },
         )
 
@@ -252,56 +474,169 @@ class IngestionPipeline:
             source.name,
             last_checkpoint_value.isoformat(),
         )
-        
+
     def initialize_checkpoint(
         self,
         source_name: str,
         checkpoint_value: str,
         run_id: str = "manual_init",
     ) -> None:
+        """
+        Manually initialize an incremental checkpoint.
+
+        The provided timestamp must be an ISO-formatted, timezone-aware
+        datetime.
+        """
+        normalized_value = self._normalize_checkpoint_string(
+            checkpoint_value
+        )
+
         self._save_checkpoint(
-            source_name,
-            {
+            source_name=source_name,
+            checkpoint={
                 "source": source_name,
                 "last_successful_run_id": run_id,
-                "last_checkpoint_value": checkpoint_value,
+                "last_checkpoint_value": normalized_value,
             },
         )
-    def _load_checkpoint(self, key: str) -> dict[str, Any] | None:
-        checkpoint_key = self.paths.checkpoint_key(key)
+
+    def _load_checkpoint(
+        self,
+        source_name: str,
+    ) -> dict[str, Any] | None:
+        checkpoint_key = self.paths.checkpoint_key(source_name)
 
         if not self.storage.exists(checkpoint_key):
             return None
 
-        return self.storage.read_json(checkpoint_key)
+        checkpoint = self.storage.read_json(checkpoint_key)
+
+        if not isinstance(checkpoint, dict):
+            raise TypeError(
+                f"Checkpoint state for {source_name} must be a dictionary"
+            )
+
+        return checkpoint
 
     def _save_checkpoint(
         self,
-        key: str,
-        checkpoint: dict[str, Any],
+        source_name: str,
+        checkpoint: Mapping[str, Any],
     ) -> None:
-        checkpoint_key = self.paths.checkpoint_key(key)
+        checkpoint_key = self.paths.checkpoint_key(source_name)
 
-        checkpoint["updated_at"] = datetime.now(timezone.utc).isoformat()
+        payload = {
+            **checkpoint,
+            "updated_at": self._get_run_time().isoformat(),
+        }
 
         self.storage.write_json(
-            checkpoint,
+            payload,
             checkpoint_key,
         )
 
-    def _load_seen(self, key: str) -> set[str]:
+    def _load_seen(
+        self,
+        key: str,
+    ) -> set[str]:
         if not self.storage.exists(key):
             return set()
 
         state = self.storage.read_json(key)
-        return set(state.get("seen", []))
 
-    def _save_seen(self, key: str, seen: set[str]) -> None:
+        if not isinstance(state, dict):
+            raise TypeError(
+                f"Deduplication state at {key!r} must be a dictionary"
+            )
+
+        seen = state.get("seen", [])
+
+        if not isinstance(seen, list):
+            raise TypeError(
+                f"Deduplication field 'seen' at {key!r} "
+                "must be a list"
+            )
+
+        if not all(isinstance(value, str) for value in seen):
+            raise TypeError(
+                f"Deduplication state at {key!r} "
+                "must contain only string hashes"
+            )
+
+        return set(seen)
+
+    def _save_seen(
+        self,
+        key: str,
+        seen: set[str],
+    ) -> None:
         self.storage.write_json(
             {
                 "seen": sorted(seen),
                 "count": len(seen),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": self._get_run_time().isoformat(),
             },
             key,
         )
+
+    def _get_run_time(self) -> datetime:
+        value = self.clock()
+
+        if not isinstance(value, datetime):
+            raise TypeError("Clock must return a datetime")
+
+        if value.tzinfo is None:
+            raise ValueError(
+                "Clock must return a timezone-aware datetime"
+            )
+
+        return value.astimezone(timezone.utc)
+
+    @staticmethod
+    def _make_run_id(run_time: datetime) -> str:
+        return run_time.strftime("%Y%m%dT%H%M%S")
+
+    @staticmethod
+    def _normalize_checkpoint_string(value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError(
+                "Saved checkpoint value must be an ISO datetime string"
+            )
+
+        parsed = datetime.fromisoformat(
+            value.replace("Z", "+00:00")
+        )
+
+        if parsed.tzinfo is None:
+            raise ValueError(
+                "Checkpoint value must be timezone-aware"
+            )
+
+        return parsed.astimezone(timezone.utc).isoformat()
+
+    @staticmethod
+    def _validate_date_range(
+        from_date: str | None,
+        to_date: str | None,
+    ) -> None:
+        """
+        Validate ordering when both values are ISO date or datetime strings.
+
+        Individual sources may perform stricter validation based on the API
+        format they require.
+        """
+        if from_date is None or to_date is None:
+            return
+
+        parsed_from = datetime.fromisoformat(
+            from_date.replace("Z", "+00:00")
+        )
+        parsed_to = datetime.fromisoformat(
+            to_date.replace("Z", "+00:00")
+        )
+
+        if parsed_from > parsed_to:
+            raise ValueError(
+                f"from_date must not be after to_date: "
+                f"{from_date!r} > {to_date!r}"
+            )
