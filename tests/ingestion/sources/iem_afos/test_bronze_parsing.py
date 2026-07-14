@@ -1,5 +1,43 @@
 import pytest
 from datetime import datetime, timezone
+from typing import Any
+import logging
+
+from eml_transformer.ingestion.sources.iem_afos import (
+    AFOSProductParseError,
+)
+
+
+def make_header(
+    *,
+    pil: str | None = "AFDIND",
+    issued_code: str = "091838",
+) -> dict[str, str | None]:
+    return {
+        "raw_id": "000",
+        "wmo": "FXUS63",
+        "wmo_header": f"FXUS63 KIND {issued_code}",
+        "office": "KIND",
+        "issued_code": issued_code,
+        "pil": pil,
+    }
+
+
+def make_bronze_record(
+    *,
+    source_id: str = "record-1",
+    pil: str = "AFDIND",
+    raw_text: str = "AFOS product text",
+) -> dict[str, Any]:
+    return {
+        "source_id": source_id,
+        "pil": pil,
+        "raw_text": raw_text,
+        "header": make_header(pil=pil),
+        "issued_at_text": "238 PM EDT Thu Jul 9 2026",
+        "published_at": "2026-07-09T18:38:00+00:00",
+    }
+
 
 """
 Tests for minimal AFOS parsing performed before bronze storage.
@@ -286,8 +324,8 @@ National Weather Service Chicago IL
         expected_text,
         expected_utc,
     ):
-        issued_at_text, published_at = iem_source._parse_published_at(
-            raw_text=raw_text.strip(),
+        issued_at_text, published_at = iem_source._parse_product_timestamp(
+            product_text=raw_text.strip(),
             pil=pil,
         )
 
@@ -313,8 +351,8 @@ National Weather Service Chicago IL
         ]
         text = newline.join(lines)
 
-        issued_at_text, published_at = iem_source._parse_published_at(
-            raw_text=text,
+        issued_at_text, published_at = iem_source._parse_product_timestamp(
+            product_text=text,
             pil="AFDIND",
         )
 
@@ -339,7 +377,7 @@ National Weather Service Chicago IL
     Forecast discussion without an issuance timestamp.
     """.strip()
 
-        issued_at_text = iem_source._extract_product_issued_text(text)
+        issued_at_text = iem_source._extract_product_timestamp_text(text)
 
         assert issued_at_text is None
 
@@ -381,8 +419,8 @@ National Weather Service Chicago IL
             f"{issued_at_text}\n"
         )
         
-        extracted_text, published_at = iem_source._parse_published_at(
-            raw_text=text,
+        extracted_text, published_at = iem_source._parse_product_timestamp(
+            product_text=text,
             pil="AFDIND",
         )
 
@@ -406,8 +444,8 @@ National Weather Service Chicago IL
             ValueError,
             match="Missing product issuance timestamp",
         ):
-            iem_source._parse_published_at(
-                raw_text=text,
+            iem_source._parse_product_timestamp(
+                product_text=text,
                 pil="AFDIND",
             )
 
@@ -449,31 +487,495 @@ National Weather Service Chicago IL
         )
 
         with pytest.raises(ValueError):
-            iem_source._parse_published_at(
-                raw_text=text,
+            iem_source._parse_product_timestamp(
+                product_text=text,
                 pil="AFDIND",
             )
 
-# # Source identity
-# class TestSourceId():
-#     def test_make_source_record_id_is_deterministic(): ...
-#     def test_source_id_changes_when_published_at_changes(): ...
-#     def test_source_id_changes_when_pil_changes(): ...
-#     def test_source_id_does_not_depend_on_raw_body_text(): ...
+# Source identity
+class TestSourceId:
+    def test_make_source_record_id_is_deterministic(
+        self,
+        iem_source,
+    ):
+        header = make_header()
+
+        first = iem_source._make_source_record_id(
+            pil="AFDIND",
+            header=header,
+            published_at="2026-07-09T18:38:00+00:00",
+        )
+        second = iem_source._make_source_record_id(
+            pil="AFDIND",
+            header=header,
+            published_at="2026-07-09T18:38:00+00:00",
+        )
+
+        assert first == second
+
+    def test_source_id_changes_when_published_at_changes(
+        self,
+        iem_source,
+    ):
+        header = make_header()
+
+        first = iem_source._make_source_record_id(
+            pil="AFDIND",
+            header=header,
+            published_at="2026-07-09T18:38:00+00:00",
+        )
+        second = iem_source._make_source_record_id(
+            pil="AFDIND",
+            header=header,
+            published_at="2026-07-09T19:38:00+00:00",
+        )
+
+        assert first != second
+
+    def test_source_id_changes_when_pil_changes(
+        self,
+        iem_source,
+    ):
+        header = make_header()
+
+        first = iem_source._make_source_record_id(
+            pil="AFDIND",
+            header=header,
+            published_at="2026-07-09T18:38:00+00:00",
+        )
+        second = iem_source._make_source_record_id(
+            pil="HWOIND",
+            header=header,
+            published_at="2026-07-09T18:38:00+00:00",
+        )
+
+        assert first != second
+
+    def test_source_id_does_not_depend_on_raw_body_text(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        header = make_header()
+
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_header",
+            lambda product_text: header,
+        )
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_product_timestamp",
+            lambda product_text, pil: (
+                "238 PM EDT Thu Jul 9 2026",
+                "2026-07-09T18:38:00+00:00",
+            ),
+        )
+
+        first = iem_source._build_bronze_record(
+            product_text="First version of the body",
+            requested_pil="AFDIND",
+        )
+        second = iem_source._build_bronze_record(
+            product_text="Completely different body",
+            requested_pil="AFDIND",
+        )
+
+        assert first["source_id"] == second["source_id"]
+        assert first["raw_text"] != second["raw_text"]
 
 # # Bronze record construction
-# class TestBronzeConstruction():
-#     def test_parse_product_chunk_returns_required_fields(): ...
-#     def test_parse_product_chunk_preserves_raw_text(): ...
-#     def test_parse_product_chunk_prefers_header_pil(): ...
-#     def test_parse_product_chunk_uses_fallback_pil(): ...
-#     def test_parse_product_chunk_raises_for_invalid_timestamp(): ...
+class TestBronzeConstruction:
+    def test_build_bronze_record_returns_required_fields(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        header = make_header()
+
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_header",
+            lambda product_text: header,
+        )
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_product_timestamp",
+            lambda product_text, pil: (
+                "238 PM EDT Thu Jul 9 2026",
+                "2026-07-09T18:38:00+00:00",
+            ),
+        )
+
+        result = iem_source._build_bronze_record(
+            product_text="AFOS product text",
+            requested_pil="AFDIND",
+        )
+
+        assert set(result) == {
+            "source_id",
+            "pil",
+            "header",
+            "issued_at_text",
+            "published_at",
+            "raw_text",
+        }
+
+        assert result["source_id"]
+        assert result["pil"] == "AFDIND"
+        assert result["header"] == header
+        assert result["issued_at_text"] == (
+            "238 PM EDT Thu Jul 9 2026"
+        )
+        assert result["published_at"] == (
+            "2026-07-09T18:38:00+00:00"
+        )
+
+    def test_build_bronze_record_preserves_raw_text(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        raw_text = (
+            "000\n"
+            "FXUS63 KIND 091838\n"
+            "AFDIND\n"
+            "\n"
+            "Area Forecast Discussion\n"
+            "Full raw product body."
+        )
+
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_header",
+            lambda product_text: make_header(),
+        )
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_product_timestamp",
+            lambda product_text, pil: (
+                "238 PM EDT Thu Jul 9 2026",
+                "2026-07-09T18:38:00+00:00",
+            ),
+        )
+
+        result = iem_source._build_bronze_record(
+            product_text=raw_text,
+            requested_pil="AFDIND",
+        )
+
+        assert result["raw_text"] == raw_text
+
+    # def test_build_bronze_record_prefers_header_pil(
+    #     self,
+    #     iem_source,
+    #     monkeypatch,
+    # ):
+    #     monkeypatch.setattr(
+    #         iem_source,
+    #         "_parse_header",
+    #         lambda product_text: make_header(pil="AFDIND"),
+    #     )
+    #     monkeypatch.setattr(
+    #         iem_source,
+    #         "_parse_product_timestamp",
+    #         lambda product_text, pil: (
+    #             "238 PM EDT Thu Jul 9 2026",
+    #             "2026-07-09T18:38:00+00:00",
+    #         ),
+    #     )
+
+    #     result = iem_source._build_bronze_record(
+    #         product_text="AFOS product",
+    #         requested_pil="HWOIND",
+    #     )
+
+    #     assert result["pil"] == "AFDIND"
+
+    def test_build_bronze_record_uses_requested_pil_fallback(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_header",
+            lambda product_text: make_header(pil=None),
+        )
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_product_timestamp",
+            lambda product_text, pil: (
+                "238 PM EDT Thu Jul 9 2026",
+                "2026-07-09T18:38:00+00:00",
+            ),
+        )
+
+        result = iem_source._build_bronze_record(
+            product_text="AFOS product",
+            requested_pil="AFDIND",
+        )
+
+        assert result["pil"] == "AFDIND"
+
+    def test_build_bronze_record_raises_for_invalid_timestamp(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_header",
+            lambda product_text: make_header(),
+        )
+
+        def fake_parse_product_timestamp(product_text, pil):
+            raise AFOSProductParseError(
+                f"Invalid product timestamp for PIL={pil}"
+            )
+
+        monkeypatch.setattr(
+            iem_source,
+            "_parse_product_timestamp",
+            fake_parse_product_timestamp,
+        )
+
+        with pytest.raises(
+            AFOSProductParseError,
+            match="Invalid product timestamp",
+        ):
+            iem_source._build_bronze_record(
+                product_text="AFOS product",
+                requested_pil="AFDIND",
+            )
 
 # # Error isolation and deduplication
-# class TestErrorHandling():
-#     def test_parse_response_item_parses_all_valid_products(): ...
-#     def test_parse_response_item_skips_malformed_product(): ...
-#     def test_parse_response_item_logs_malformed_product(): ...
-#     def test_parse_records_combines_multiple_responses(): ...
-#     def test_parse_records_removes_duplicate_source_ids(): ...
-#     def test_parse_records_preserves_first_duplicate(): ...
+class TestErrorHandling:
+    def test_build_records_from_response_builds_all_valid_products(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        product_texts = [
+            "first product",
+            "second product",
+        ]
+
+        monkeypatch.setattr(
+            iem_source,
+            "_split_products",
+            lambda response_text: product_texts,
+        )
+
+        def fake_build_bronze_record(
+            product_text,
+            requested_pil,
+        ):
+            return make_bronze_record(
+                source_id=f"id-{product_text}",
+                pil=requested_pil,
+                raw_text=product_text,
+            )
+
+        monkeypatch.setattr(
+            iem_source,
+            "_build_bronze_record",
+            fake_build_bronze_record,
+        )
+
+        result = iem_source._build_records_from_response(
+            {
+                "pil": "AFDIND",
+                "response": "combined response",
+            }
+        )
+
+        assert len(result) == 2
+        assert [record["raw_text"] for record in result] == [
+            "first product",
+            "second product",
+        ]
+
+    def test_build_records_from_response_skips_malformed_product(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            iem_source,
+            "_split_products",
+            lambda response_text: [
+                "valid product",
+                "malformed product",
+                "another valid product",
+            ],
+        )
+
+        def fake_build_bronze_record(
+            product_text,
+            requested_pil,
+        ):
+            if product_text == "malformed product":
+                raise AFOSProductParseError(
+                    "Missing product timestamp"
+                )
+
+            return make_bronze_record(
+                source_id=f"id-{product_text}",
+                pil=requested_pil,
+                raw_text=product_text,
+            )
+
+        monkeypatch.setattr(
+            iem_source,
+            "_build_bronze_record",
+            fake_build_bronze_record,
+        )
+
+        result = iem_source._build_records_from_response(
+            {
+                "pil": "AFDIND",
+                "response": "combined response",
+            }
+        )
+
+        assert len(result) == 2
+        assert [record["raw_text"] for record in result] == [
+            "valid product",
+            "another valid product",
+        ]
+
+    def test_build_records_from_response_logs_malformed_product(
+        self,
+        iem_source,
+        monkeypatch,
+        caplog,
+    ):
+        monkeypatch.setattr(
+            iem_source,
+            "_split_products",
+            lambda response_text: ["malformed product"],
+        )
+
+        def fake_build_bronze_record(
+            product_text,
+            requested_pil,
+        ):
+            raise AFOSProductParseError(
+                "Missing product timestamp"
+            )
+
+        monkeypatch.setattr(
+            iem_source,
+            "_build_bronze_record",
+            fake_build_bronze_record,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = iem_source._build_records_from_response(
+                {
+                    "pil": "AFDIND",
+                    "response": "combined response",
+                }
+            )
+
+        assert result == []
+        assert "Skipping malformed AFOS product" in caplog.text
+        assert "pil=AFDIND" in caplog.text
+        assert "product=1" in caplog.text
+        assert "Missing product timestamp" in caplog.text
+
+    def test_build_bronze_records_combines_multiple_responses(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        responses = [
+            {
+                "pil": "AFDIND",
+                "response": "AFD response",
+            },
+            {
+                "pil": "HWOIND",
+                "response": "HWO response",
+            },
+        ]
+
+        def fake_build_records_from_response(response):
+            return [
+                make_bronze_record(
+                    source_id=f"id-{response['pil']}",
+                    pil=response["pil"],
+                )
+            ]
+
+        monkeypatch.setattr(
+            iem_source,
+            "_build_records_from_response",
+            fake_build_records_from_response,
+        )
+
+        result = iem_source._build_bronze_records(responses)
+
+        assert len(result) == 2
+        assert [record["pil"] for record in result] == [
+            "AFDIND",
+            "HWOIND",
+        ]
+
+    def test_build_bronze_records_removes_duplicate_source_ids(
+        self,
+        iem_source,
+        monkeypatch,
+    ):
+        duplicate_id = "duplicate-id"
+
+        def fake_build_records_from_response(response):
+            return [
+                make_bronze_record(
+                    source_id=duplicate_id,
+                    pil=response["pil"],
+                )
+            ]
+
+        monkeypatch.setattr(
+            iem_source,
+            "_build_records_from_response",
+            fake_build_records_from_response,
+        )
+
+        result = iem_source._build_bronze_records(
+            [
+                {
+                    "pil": "AFDIND",
+                    "response": "first response",
+                },
+                {
+                    "pil": "AFDIND",
+                    "response": "second response",
+                },
+            ]
+        )
+
+        assert len(result) == 1
+        assert result[0]["source_id"] == duplicate_id
+
+    def test_deduplicate_records_preserves_first_duplicate(
+        self,
+        iem_source,
+    ):
+        first = make_bronze_record(
+            source_id="duplicate-id",
+            raw_text="first version",
+        )
+        second = make_bronze_record(
+            source_id="duplicate-id",
+            raw_text="second version",
+        )
+
+        result = iem_source._deduplicate_records(
+            [first, second]
+        )
+
+        assert result == [first]
+        assert result[0]["raw_text"] == "first version"

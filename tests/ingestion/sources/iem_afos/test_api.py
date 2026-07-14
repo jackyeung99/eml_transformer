@@ -224,7 +224,7 @@ class TestFetchRaw:
             fake_fetch_pil,
         )
 
-        result = iem_source._fetch_raw(
+        result = iem_source._fetch_responses(
             from_date="2026-07-01",
             to_date="2026-07-10",
         )
@@ -274,7 +274,7 @@ class TestFetchRaw:
             fake_fetch_pil,
         )
 
-        result = iem_source._fetch_raw(
+        result = iem_source._fetch_responses(
             from_date="2026-07-01",
             to_date="2026-07-10",
         )
@@ -314,7 +314,7 @@ class TestFetchRaw:
             fake_fetch_pil,
         )
 
-        result = iem_source._fetch_raw(
+        result = iem_source.fetch_records(
             from_date="2026-07-01",
             to_date="2026-07-10",
         )
@@ -323,9 +323,9 @@ class TestFetchRaw:
 
 
 class TestFetchRecords:
-    """Tests the public fetch-and-parse workflow."""
+    """Tests the public fetch-and-build workflow."""
 
-    def test_runs_fetch_and_parse_workflow(
+    def test_runs_fetch_and_bronze_workflow(
         self,
         iem_source,
         monkeypatch,
@@ -337,7 +337,7 @@ class TestFetchRecords:
             }
         ]
 
-        parsed_records = [
+        bronze_records = [
             {
                 "source_id": "iem-record-1",
                 "pil": "AFDIND",
@@ -345,16 +345,13 @@ class TestFetchRecords:
                 "header": {
                     "raw_id": "000",
                     "wmo": "FXUS63",
-                    "wmo_header": (
-                        "FXUS63 KIND 091838"
-                    ),
+                    "wmo_header": "FXUS63 KIND 091838",
                     "office": "KIND",
                     "issued_code": "091838",
                     "pil": "AFDIND",
                 },
                 "issued_at_text": (
-                    "Issued at 238 PM EDT "
-                    "Thu Jul 9 2026"
+                    "Issued at 238 PM EDT Thu Jul 9 2026"
                 ),
                 "published_at": (
                     "2026-07-09T18:38:00+00:00"
@@ -364,7 +361,7 @@ class TestFetchRecords:
 
         calls = {}
 
-        def fake_fetch_raw(
+        def fake_fetch_responses(
             from_date: str,
             to_date: str,
         ):
@@ -374,19 +371,19 @@ class TestFetchRecords:
             }
             return raw_responses
 
-        def fake_parse_records(responses):
-            calls["parse"] = responses
-            return parsed_records
+        def fake_build_bronze_records(responses):
+            calls["build"] = responses
+            return bronze_records
 
         monkeypatch.setattr(
             iem_source,
-            "_fetch_raw",
-            fake_fetch_raw,
+            "_fetch_responses",
+            fake_fetch_responses,
         )
         monkeypatch.setattr(
             iem_source,
-            "_parse_records",
-            fake_parse_records,
+            "_build_bronze_records",
+            fake_build_bronze_records,
         )
 
         result = iem_source.fetch_records(
@@ -394,13 +391,13 @@ class TestFetchRecords:
             to_date="2026-07-10",
         )
 
-        assert result == parsed_records
+        assert result == bronze_records
 
         assert calls["fetch"] == {
             "from_date": "2026-07-01",
             "to_date": "2026-07-10",
         }
 
-        # The exact response object returned by _fetch_raw is passed
-        # directly into _parse_records.
-        assert calls["parse"] is raw_responses
+        # The response collection is passed directly into bronze
+        # construction without being copied or modified.
+        assert calls["build"] is raw_responses

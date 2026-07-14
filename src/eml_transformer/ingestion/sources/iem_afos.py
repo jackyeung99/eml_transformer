@@ -19,6 +19,9 @@ from eml_transformer.utils.stamping import stable_hash
 
 logger = logging.getLogger(__name__)
 
+class AFOSProductParseError(ValueError):
+    """Raised when an AFOS product cannot become a bronze record."""
+
 
 @dataclass(frozen=True)
 class ParsedSection:
@@ -177,71 +180,24 @@ class IEMAFOSSource(TextSource):
     # ------------------------------------------------------------------
     # Public pipeline interface
     # ------------------------------------------------------------------
-
     def fetch_records(
         self,
         from_date: str,
         to_date: str,
     ) -> list[dict[str, Any]]:
-        """Fetch and minimally parse source-native records for bronze."""
-        responses = self._fetch_raw(from_date=from_date, to_date=to_date)
-        return self._parse_records(responses)
-
-    def standardize_record(self, record: dict[str, Any]) -> TextRecord:
-        """Convert one bronze AFOS record into the silver schema."""
-        self._validate_bronze_record(record)
-
-        pil = str(record["pil"])
-        raw_text = str(record["raw_text"])
-        header = record.get("header") or self._parse_header(raw_text)
-        sections = self._parse_sections(raw_text)
-
-        issued_at_text = record.get("issued_at_text")
-        published_at = record.get("published_at")
-        if not published_at:
-            issued_at_text, published_at = self._parse_published_at(
-                raw_text=raw_text,
-                pil=pil,
-            )
-
-        product_type = pil[:3]
-        office = self._resolve_office(pil=pil, header=header)
-
-        return TextRecord(
-            record_id=str(record["source_id"]),
-            source=self.name,
-            source_type=self.source_type,
-            title=self._make_title(
-                product_type=product_type,
-                office=office,
-                issued_at_text=issued_at_text,
-            ),
-            text=self._build_text(sections=sections, raw_text=raw_text),
-            published_at=str(published_at),
-            retrieved_at=datetime.now(timezone.utc).isoformat(),
-            url=self.base_url,
-            region=office[-3:],
-            categories=[
-                "weather",
-                "nws",
-                "iem",
-                "afos",
-                product_type.lower(),
-            ],
-            metadata={
-                "pil": pil,
-                "product_type": product_type,
-                "office": office,
-                "header": header,
-                "sections": {
-                    name: section.to_dict()
-                    for name, section in sections.items()
-                },
-                "issued_at_text": issued_at_text,
-                "published_at_standardized": published_at,
-            },
-            raw=raw_text,
+        raw_responses = self._fetch_responses(
+            from_date=from_date,
+            to_date=to_date,
         )
+        return self._build_bronze_records(raw_responses)
+
+
+    def standardize_record(
+        self,
+        record: dict[str, Any],
+    ) -> TextRecord:
+        self._validate_bronze_record(record)
+        return self._build_silver_record(record)
 
     def get_checkpoint_value(
         self,
@@ -261,7 +217,7 @@ class IEMAFOSSource(TextSource):
     # API access
     # ------------------------------------------------------------------
 
-    def _fetch_raw(
+    def _fetch_responses(
         self,
         from_date: str,
         to_date: str,
@@ -269,15 +225,22 @@ class IEMAFOSSource(TextSource):
         responses: list[dict[str, str]] = []
 
         for pil in self._pils_to_fetch():
-            text = self._fetch_pil(
+            response_text = self._fetch_pil(
                 pil=pil,
                 from_date=from_date,
                 to_date=to_date,
             )
-            if text is not None:
-                responses.append({"pil": pil, "response": text})
+
+            if response_text is not None:
+                responses.append(
+                    {
+                        "pil": pil,
+                        "response": response_text,
+                    }
+                )
 
         return responses
+
 
     def _fetch_pil(
         self,
@@ -285,27 +248,43 @@ class IEMAFOSSource(TextSource):
         from_date: str,
         to_date: str,
     ) -> str | None:
-        minimum_delay, maximum_delay = self._request_delay
-        self._sleep(random.uniform(minimum_delay, maximum_delay))
+        self._wait_before_request()
 
         response = self._session.get(
             self.base_url,
-            params={
-                "pil": pil,
-                "sdate": from_date,
-                "edate": to_date,
-                "limit": self.limit,
-                "fmt": self.fmt,
-            },
+            params=self._build_request_params(
+                pil=pil,
+                from_date=from_date,
+                to_date=to_date,
+            ),
             timeout=self.timeout,
         )
         response.raise_for_status()
 
-        text = response.text.strip()
-        if not text or text.startswith("ERROR:"):
+        response_text = response.text.strip()
+
+        if not response_text:
             return None
 
-        return text
+        if response_text.startswith("ERROR:"):
+            return None
+
+        return response_text
+    
+    def _build_request_params(
+        self,
+        pil: str,
+        from_date: str,
+        to_date: str,
+    ) -> dict[str, str | int]:
+        """Build query parameters for an IEM AFOS request."""
+        return {
+            "pil": pil,
+            "sdate": from_date,
+            "edate": to_date,
+            "limit": self.limit,
+            "fmt": self.fmt,
+    }
 
     def _pils_to_fetch(self) -> list[str]:
         if self.pil:
@@ -316,84 +295,88 @@ class IEMAFOSSource(TextSource):
             for product_type in self.product_types
             for wfo in self.wfos
         ]
+    
+
+    def _wait_before_request(self) -> None:
+        """Apply the configured delay before an API request."""
+        minimum_delay, maximum_delay = self._request_delay
+        delay = random.uniform(minimum_delay, maximum_delay)
+        self._sleep(delay)
 
     # ------------------------------------------------------------------
-    # Bronze parsing
+    # Bronze construction
     # ------------------------------------------------------------------
 
-    def _parse_records(
+    def _build_bronze_records(
         self,
-        raw_responses: list[dict[str, Any]],
+        responses: list[dict[str, str]],
     ) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
-        seen_ids: set[str] = set()
 
-        for response_item in raw_responses:
-            for record in self._parse_response_item(response_item):
-                source_id = record["source_id"]
-                if source_id in seen_ids:
-                    continue
+        for response in responses:
+            records.extend(
+                self._build_records_from_response(response)
+            )
 
-                seen_ids.add(source_id)
-                records.append(record)
+        return self._deduplicate_records(records)
 
-        return records
 
-    def _parse_response_item(
+    def _build_records_from_response(
         self,
-        item: dict[str, Any],
+        response: dict[str, str],
     ) -> list[dict[str, Any]]:
-        fallback_pil = str(item["pil"])
-        response_text = str(item["response"])
+        requested_pil = response["pil"]
+        product_texts = self._split_products(response["response"])
         records: list[dict[str, Any]] = []
 
-        for chunk_number, chunk in enumerate(
-            self._split_products(response_text),
+        for product_number, product_text in enumerate(
+            product_texts,
             start=1,
         ):
             try:
-                records.append(
-                    self._parse_product_chunk(
-                        chunk=chunk,
-                        fallback_pil=fallback_pil,
-                    )
+                record = self._build_bronze_record(
+                    product_text=product_text,
+                    requested_pil=requested_pil,
                 )
-            except (TypeError, ValueError):
+            except AFOSProductParseError as exc:
                 logger.warning(
-                    "Skipping malformed AFOS product | pil=%s | chunk=%d",
-                    fallback_pil,
-                    chunk_number,
-                    exc_info=True,
+                    "Skipping malformed AFOS product | "
+                    "pil=%s | product=%d | error=%s",
+                    requested_pil,
+                    product_number,
+                    exc,
                 )
+                continue
+
+            records.append(record)
 
         return records
-
-    def _parse_product_chunk(
+    
+    def _build_bronze_record(
         self,
-        chunk: str,
-        fallback_pil: str,
+        product_text: str,
+        requested_pil: str,
     ) -> dict[str, Any]:
-        header = self._parse_header(chunk)
-        parsed_pil = header.get("pil") or fallback_pil
+        header = self._parse_header(product_text)
 
-        issued_at_text, published_at = self._parse_published_at(
-            raw_text=chunk,
-            pil=parsed_pil,
-        )
-        source_id = self._make_source_record_id(
-            pil=parsed_pil,
-            header=header,
-            published_at=published_at,
+        issued_at_text, published_at = self._parse_product_timestamp(
+            product_text=product_text,
+            pil=requested_pil,
         )
 
         return {
-            "source_id": source_id,
-            "pil": parsed_pil,
-            "raw_text": chunk,
+            "source_id": self._make_source_record_id(
+                pil=requested_pil,
+                header=header,
+                published_at=published_at,
+            ),
+            "pil": requested_pil,
             "header": header,
             "issued_at_text": issued_at_text,
             "published_at": published_at,
+            "raw_text": product_text,
         }
+
 
     def _split_products(self, raw: str) -> list[str]:
         text = self._normalize_newlines(raw)
@@ -429,52 +412,50 @@ class IEMAFOSSource(TextSource):
             "pil": match.group("pil"),
         }
 
-    def _extract_product_issued_text(
+
+
+    def _parse_product_timestamp(
         self,
-        text: str,
-    ) -> str | None:
-        match = self.PRODUCT_TIMESTAMP_RE.search(
-            self._normalize_newlines(text)
+        product_text: str,
+        pil: str,
+    ) -> tuple[str, str]:
+        """Extract and convert the required product timestamp."""
+        timestamp_text = self._extract_product_timestamp_text(
+            product_text
         )
+
+        if timestamp_text is None:
+            raise AFOSProductParseError(
+                f"Missing product issuance timestamp for PIL={pil}"
+            )
+
+        try:
+            published_at = self._parse_timestamp_to_utc(
+                timestamp_text=timestamp_text,
+                field_name=f"published_at for PIL={pil}",
+            )
+        except ValueError as exc:
+            raise AFOSProductParseError(
+                f"Invalid product issuance timestamp for PIL={pil}: "
+                f"{timestamp_text!r}"
+            ) from exc
+
+        return timestamp_text, published_at
+
+
+    def _extract_product_timestamp_text(
+        self,
+        product_text: str,
+    ) -> str | None:
+        """Extract the top-level product timestamp text."""
+        normalized_text = self._normalize_newlines(product_text)
+        match = self.PRODUCT_TIMESTAMP_RE.search(normalized_text)
+
         if match is None:
             return None
 
         return match.group("issued_at").strip()
     
-    
-    def _parse_published_at(
-        self,
-        raw_text: str,
-        pil: str,
-    ) -> tuple[str, str]:
-        issued_at_text = self._extract_product_issued_text(raw_text)
-
-        if not issued_at_text:
-            raise ValueError(
-                f"Missing product issuance timestamp for PIL={pil}"
-            )
-
-        try:
-            published_at = parse_issued_at(issued_at_text)
-        except Exception as exc:
-            raise ValueError(
-                f"Failed to parse published_at for PIL={pil}: "
-                f"{issued_at_text!r}"
-            ) from exc
-
-        if not isinstance(published_at, str) or not published_at:
-            raise ValueError(
-                f"Missing published_at for PIL={pil}: "
-                f"{issued_at_text!r}"
-            )
-
-        published_at_utc = self._parse_iso_datetime(
-            published_at,
-            field_name=f"published_at for PIL={pil}",
-        )
-
-        return issued_at_text, published_at_utc.isoformat()
-
     def _make_source_record_id(
         self,
         pil: str,
@@ -492,9 +473,69 @@ class IEMAFOSSource(TextSource):
             }
         )
 
+    @staticmethod
+    def _deduplicate_records(
+        records: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Keep the first record for each source ID."""
+        unique_records: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+
+        for record in records:
+            source_id = str(record["source_id"])
+
+            if source_id in seen_ids:
+                continue
+
+            seen_ids.add(source_id)
+            unique_records.append(record)
+
+        return unique_records
+    
     # ------------------------------------------------------------------
     # Silver parsing
     # ------------------------------------------------------------------
+    def _build_silver_record(
+        self,
+        record: dict[str, Any],
+    ) -> TextRecord:
+        pil = str(record["pil"])
+        product_text = str(record["raw_text"])
+        header = record["header"]
+
+        product_type = pil[:3]
+        office = self._resolve_office(
+            pil=pil,
+            header=header,
+        )
+        sections = self._parse_sections(product_text)
+
+        return TextRecord(
+            record_id=str(record["source_id"]),
+            source=self.name,
+            source_type=self.source_type,
+            title=self._build_title(
+                product_type=product_type,
+                office=office,
+                issued_at_text=str(record["issued_at_text"]),
+            ),
+            text=self._build_text(
+                sections=sections,
+                product_text=product_text,
+            ),
+            published_at=str(record["published_at"]),
+            retrieved_at=datetime.now(timezone.utc).isoformat(),
+            url=self.base_url,
+            region=office[-3:],
+            categories=self._build_categories(product_type),
+            metadata=self._build_metadata(
+                record=record,
+                product_type=product_type,
+                office=office,
+                sections=sections,
+            ),
+            raw=product_text,
+        )
 
     def _parse_sections(self, text: str) -> dict[str, ParsedSection]:
         sections: dict[str, ParsedSection] = {}
@@ -584,43 +625,36 @@ class IEMAFOSSource(TextSource):
         )
 
     # ------------------------------------------------------------------
-    # Shared validation and normalization helpers
+    # Shared Utilities
     # ------------------------------------------------------------------
 
-    def _validate_bronze_record(self, record: dict[str, Any]) -> None:
-        required_fields = {"source_id", "pil", "raw_text"}
-        missing_fields = [
-            field
-            for field in sorted(required_fields)
-            if not record.get(field)
-        ]
 
-        if missing_fields:
-            raise ValueError(
-                "AFOS bronze record is missing required fields: "
-                f"{missing_fields}"
-            )
-
-    def _try_parse_issued_at(self, value: str | None) -> str | None:
-        if not value:
-            return None
-
+    def _parse_timestamp_to_utc(
+        self,
+        timestamp_text: str,
+        field_name: str,
+    ) -> str:
+        """Convert an NWS timestamp to a UTC ISO string."""
         try:
-            parsed = parse_issued_at(value)
-            if not isinstance(parsed, str) or not parsed:
-                return None
+            parsed_value = parse_issued_at(timestamp_text)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Failed to parse {field_name}: {timestamp_text!r}"
+            ) from exc
 
-            return self._parse_iso_datetime(
-                parsed,
-                field_name="section published_at",
-            ).isoformat()
-        except (TypeError, ValueError):
-            logger.debug(
-                "Could not parse AFOS section timestamp | value=%r",
-                value,
-                exc_info=True,
+        if not isinstance(parsed_value, str) or not parsed_value:
+            raise ValueError(
+                f"Timestamp parser returned no value for {field_name}: "
+                f"{timestamp_text!r}"
             )
-            return None
+
+        parsed_datetime = self._parse_iso_datetime(
+            parsed_value,
+            field_name=field_name,
+        )
+
+        return parsed_datetime.isoformat()
+
 
     @staticmethod
     def _parse_iso_datetime(value: str, field_name: str) -> datetime:
