@@ -60,7 +60,7 @@ class BackfillPipeline:
         end_date: str,
         window_days: int = 30,
     ):
-        results = {}
+        results = []
 
         for source_name, source_config in source_configs.items():
             source = create_source(
@@ -71,13 +71,13 @@ class BackfillPipeline:
             if not source.supports_backfill:
                 continue
 
-            results[source_name] = self.run_source(
+            results.append(self.run_source(
                 source_name=source_name,
                 source_config=source_config,
                 start_date=start_date,
                 end_date=end_date,
                 window_days=window_days,
-            )
+            ))
 
         return results
 
