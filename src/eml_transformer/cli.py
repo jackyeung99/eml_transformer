@@ -231,6 +231,7 @@ def backfill(
             start_date=start_date,
             end_date=end_date,
             window_days=window_days,
+            seed_checkpoint=init_checkpoint,
         )
     else:
         source_config = get_source_config(source, rt.source_configs)

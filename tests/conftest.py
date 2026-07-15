@@ -32,8 +32,16 @@ def fake_ingestion_pipeline():
 
 
 @pytest.fixture
-def fake_source():
-    return FakeSource()
+def fake_source_factory():
+    def create(**overrides):
+        return FakeSource(**overrides)
+
+    return create
+
+
+@pytest.fixture
+def fake_source(fake_source_factory):
+    return fake_source_factory()
 
 @pytest.fixture
 def fake_scraper(sample_scraped_article):

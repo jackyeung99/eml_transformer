@@ -170,9 +170,12 @@ class GDELTSource(TextSource):
             raw=record,
         )
     
-    def get_checkpoint_value(self, record: dict[str, Any]) -> datetime | None:
-        return record.get("DATE")
-    
+    def get_checkpoint_value(
+        self,
+        record: dict[str, Any],
+    ) -> datetime | None:
+        value = record.get("DATE")
+        return self._parse_gdelt_timestamp(value)
     
     
     def _filter_records(
@@ -356,18 +359,71 @@ class GDELTSource(TextSource):
         dt = datetime.strptime(timestamp, "%Y%m%d%H%M%S")
         return dt.replace(tzinfo=timezone.utc).isoformat()
     
-    def _get_timestamps(self, from_date, to_date):
-        timestamps = (
+    def _get_timestamps(
+        self,
+        from_date: str,
+        to_date: str,
+    ) -> list[str]:
+        start = pd.Timestamp(from_date)
+        requested_end = pd.Timestamp(to_date)
+
+        if start.tzinfo is not None:
+            start = (
+                start
+                .tz_convert("UTC")
+                .tz_localize(None)
+            )
+
+        if requested_end.tzinfo is not None:
+            requested_end = (
+                requested_end
+                .tz_convert("UTC")
+                .tz_localize(None)
+            )
+
+        start = start.floor("15min")
+
+        if self._is_date_only(to_date):
+            requested_end = (
+                requested_end
+                + pd.Timedelta(days=1)
+                - pd.Timedelta(minutes=15)
+            )
+        else:
+            requested_end = requested_end.floor("15min")
+
+        # GDELT files may not be available immediately.
+        latest_available = (
+            pd.Timestamp.now(tz="UTC")
+            .floor("15min")
+            - pd.Timedelta(minutes=30)
+        ).tz_localize(None)
+
+        end = min(
+            requested_end,
+            latest_available,
+        )
+
+        if start > end:
+            return []
+
+        return (
             pd.date_range(
-                start=from_date,
-                end=pd.to_datetime(to_date) + pd.Timedelta(days=1) - pd.Timedelta(minutes=15),
+                start=start,
+                end=end,
                 freq="15min",
             )
             .strftime("%Y%m%d%H%M%S")
             .tolist()
         )
-        
-        return timestamps
+
+
+    @staticmethod
+    def _is_date_only(value: str) -> bool:
+        return (
+            isinstance(value, str)
+            and len(value.strip()) == 10
+        )
   
     def _get_records(
         self,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from dataclasses import dataclass
 from typing import Any
 
@@ -59,25 +59,29 @@ class BackfillPipeline:
         start_date: str,
         end_date: str,
         window_days: int = 30,
-    ):
+        seed_checkpoint: bool = False,
+    ) -> list[BackfillResult]:
         results = []
 
         for source_name, source_config in source_configs.items():
             source = create_source(
                 source_name,
-                **source_config.get('ingestion', {}),
+                **source_config.get("ingestion", {}),
             )
 
             if not source.supports_backfill:
                 continue
 
-            results.append(self.run_source(
-                source_name=source_name,
-                source_config=source_config,
-                start_date=start_date,
-                end_date=end_date,
-                window_days=window_days,
-            ))
+            results.append(
+                self.run_source(
+                    source_name=source_name,
+                    source_config=source_config,
+                    start_date=start_date,
+                    end_date=end_date,
+                    window_days=window_days,
+                    seed_checkpoint=seed_checkpoint,
+                )
+            )
 
         return results
 
@@ -187,13 +191,19 @@ class BackfillPipeline:
             )
 
         if seed_checkpoint and ingestion_results:
-            final_end = windows[-1][1]
+            final_end_date = date.fromisoformat(windows[-1][1])
+
+            checkpoint_value = datetime.combine(
+                final_end_date,
+                time.max,
+                tzinfo=timezone.utc,
+            )
 
             self.ingestion_pipeline.initialize_checkpoint(
                 source_name=source_name,
-                checkpoint_value=final_end,
+                checkpoint_value=checkpoint_value.isoformat(),
                 run_id="backfill_seed",
-            )
+)
 
         return self._summarize_backfill(
             source_name=source_name,

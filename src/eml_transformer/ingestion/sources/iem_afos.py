@@ -159,7 +159,7 @@ class IEMAFOSSource(TextSource):
         timeout: int = 30,
         session: requests.Session | None = None,
         sleep_fn: Callable[[float], None] = time.sleep,
-        request_delay: tuple[float, float] = (0.5, 1.5),
+        request_delay: tuple[float, float] = (0.5, 1),
     ) -> None:
         self.pil = pil.upper() if pil else None
         self.wfos = self._normalize_codes(wfos or self.DEFAULT_MISO_WFOS)

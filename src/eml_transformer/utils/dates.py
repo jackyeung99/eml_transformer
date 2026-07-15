@@ -1,6 +1,8 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
+
+DateLike = str | date | datetime
 
 TZ_MAP = {
     "EST": "America/New_York",
@@ -22,6 +24,43 @@ WEEKDAY_FIXES = {
     "Mo": "Mon",
     "We": "Wed",
 }
+
+
+def parse_utc_datetime(value: str | date | datetime) -> datetime:
+    """Convert supported input into a timezone-aware UTC datetime."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, date):
+        parsed = datetime.combine(value, time.min)
+    else:
+        normalized = value.strip().replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+
+    if parsed.tzinfo is None:
+        # Existing naive values are interpreted as UTC.
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+
+    return parsed
+
+
+def to_checkpoint_iso(value: DateLike) -> str:
+    """Serialize a value as a canonical UTC checkpoint."""
+    return (
+        parse_utc_datetime(value)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def to_source_iso(value: DateLike) -> str:
+    """Serialize UTC as the naive ISO format expected by legacy sources."""
+    return (
+        parse_utc_datetime(value)
+        .replace(tzinfo=None)
+        .isoformat()
+    )
 
 
 def parse_issued_at(text: str) -> str | None:

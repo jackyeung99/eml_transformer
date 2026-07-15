@@ -51,7 +51,7 @@ class IngestionResult:
 
 
 class IngestionPipeline:
-    SUPPORTED_UPDATE_MODES = {"incremental", "full"}
+    SUPPORTED_UPDATE_MODES = {"incremental", "snapshot"}
 
     def __init__(
         self,
@@ -137,6 +137,12 @@ class IngestionPipeline:
                 run_time=run_time,
             )
 
+            effective_to_date = self._resolve_to_date(
+                source=source,
+                requested_to_date=to_date,
+                run_time=run_time,
+            )
+
             logger.info(
                 (
                     "Fetching raw records | source=%s | update_mode=%s "
@@ -145,13 +151,13 @@ class IngestionPipeline:
                 source.name,
                 source.update_mode,
                 effective_from_date,
-                to_date,
+                effective_to_date,
             )
 
             raw_records = list(
                 source.fetch_records(
                     from_date=effective_from_date,
-                    to_date=to_date,
+                    to_date=effective_to_date,
                 )
             )
             records_fetched = len(raw_records)
@@ -309,6 +315,24 @@ class IngestionPipeline:
                     f"default_lookback_days for {source.name} "
                     "must not be negative"
                 )
+    
+    def _resolve_to_date(
+        self,
+        source: TextSource,
+        requested_to_date: str | None,
+        run_time: datetime,
+    ) -> str | None:
+        if requested_to_date is not None:
+            return self._to_iso_date(
+                requested_to_date,
+                field_name="to_date",
+            )
+
+        if source.update_mode == "incremental":
+            return run_time.date().isoformat()
+
+        return None
+
 
     def _resolve_from_date(
         self,
@@ -316,20 +340,20 @@ class IngestionPipeline:
         requested_from_date: str | None,
         run_time: datetime,
     ) -> str | None:
-        """
-        Resolve the starting point for an ingestion request.
-
-        Precedence for incremental sources:
-
-        1. Explicit from_date
-        2. Saved checkpoint
-        3. Source default lookback
-        """
         if source.update_mode != "incremental":
-            return requested_from_date
+            if requested_from_date is None:
+                return None
+
+            return self._to_iso_date(
+                requested_from_date,
+                field_name="from_date",
+            )
 
         if requested_from_date is not None:
-            return requested_from_date
+            return self._to_iso_date(
+                requested_from_date,
+                field_name="from_date",
+            )
 
         checkpoint = self._load_checkpoint(source.name)
 
@@ -339,8 +363,9 @@ class IngestionPipeline:
             )
 
             if checkpoint_value is not None:
-                return self._normalize_checkpoint_string(
-                    checkpoint_value
+                return self._to_iso_date(
+                    checkpoint_value,
+                    field_name="last_checkpoint_value",
                 )
 
         lookback_days = getattr(
@@ -596,6 +621,28 @@ class IngestionPipeline:
     def _make_run_id(run_time: datetime) -> str:
         return run_time.strftime("%Y%m%dT%H%M%S")
 
+    @staticmethod
+    def _to_iso_date(
+        value: str,
+        field_name: str,
+    ) -> str:
+        if not isinstance(value, str):
+            raise TypeError(
+                f"{field_name} must be an ISO date or datetime string, "
+                f"got {type(value).__name__}"
+            )
+
+        try:
+            parsed = datetime.fromisoformat(
+                value.replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Malformed ISO date for {field_name}: {value!r}"
+            ) from exc
+
+        return parsed.date().isoformat()
+    
     @staticmethod
     def _normalize_checkpoint_string(value: Any) -> str:
         if not isinstance(value, str):

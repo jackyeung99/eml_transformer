@@ -35,7 +35,7 @@ sources:
       timeout: 30
 
   newsapi:
-    enabled: true
+    enabled: false
     embedding_input: records
 
     ingestion:

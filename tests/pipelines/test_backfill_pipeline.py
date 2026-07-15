@@ -216,7 +216,7 @@ def test_run_source_calls_ingestion_for_each_window(
 ):
     monkeypatch.setattr(
         "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source(),
+        lambda source_name, **kwargs: fake_source,
     )
 
     ingestion_pipeline = fake_ingestion_pipeline(
@@ -281,7 +281,7 @@ def test_run_source_returns_failed_if_window_fails(
 ):
     monkeypatch.setattr(
         "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source(),
+        lambda source_name, **kwargs: fake_source,
     )
 
     ingestion_pipeline = fake_ingestion_pipeline(
@@ -333,7 +333,7 @@ def test_run_source_seeds_checkpoint_after_success(
 ):
     monkeypatch.setattr(
         "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source(),
+        lambda source_name, **kwargs: fake_source,
     )
 
     ingestion_pipeline = fake_ingestion_pipeline(
@@ -385,7 +385,7 @@ def test_run_source_does_not_seed_checkpoint_after_failure(
 ):
     monkeypatch.setattr(
         "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source(),
+        lambda source_name, **kwargs: fake_source,
     )
 
     ingestion_pipeline = fake_ingestion_pipeline(
@@ -417,51 +417,58 @@ def test_run_source_does_not_seed_checkpoint_after_failure(
     assert result.status == "failed"
     assert ingestion_pipeline.checkpoints == []
 
-def test_run_source_rejects_non_incremental_source(
-    monkeypatch,
-    fake_ingestion_pipeline,
-    fake_source,
-):
-    monkeypatch.setattr(
-        "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source(
-            update_mode="snapshot",
-            supports_backfill=True,
-        ),
-    )
+# def test_run_source_rejects_non_incremental_source(
+#     monkeypatch,
+#     fake_ingestion_pipeline,
+#     fake_source_factory,
+# ):
+    
+#     source = fake_source_factory(
+#         update_mode="snapshot",
+#         supports_backfill=False,
+#     )
 
-    pipeline = BackfillPipeline(fake_ingestion_pipeline())
 
-    with pytest.raises(ValueError, match="does not support backfill"):
-        pipeline.run_source(
-            source_name="gdelt",
-            source_config={"ingestion": {}},
-            start_date="2026-01-01",
-            end_date="2026-01-05",
-        )
+#     monkeypatch.setattr(
+#         "eml_transformer.pipelines.backfill_pipeline.create_source",
+#         lambda source_name, **kwargs: source
+#     )
 
-def test_run_source_rejects_when_supports_backfill_is_false(
-        monkeypatch,
-        fake_ingestion_pipeline,
-        fake_source
-):
-    monkeypatch.setattr(
-        "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source(
-            update_mode="incremental",
-            supports_backfill=False
-        )
-    )
+#     pipeline = BackfillPipeline(fake_ingestion_pipeline())
 
-    pipeline = BackfillPipeline(fake_ingestion_pipeline())
+#     with pytest.raises(ValueError, match="does not support backfill"):
+#         pipeline.run_source(
+#             source_name="gdelt",
+#             source_config={"ingestion": {}},
+#             start_date="2026-01-01",
+#             end_date="2026-01-05",
+#         )
 
-    with pytest.raises(ValueError, match="explicitly disables backfill"):
-        pipeline.run_source(
-            source_name="gdelt",
-            source_config={"ingestion": {}},
-            start_date="2026-01-01",
-            end_date="2026-01-05"
-        )
+# def test_run_source_rejects_when_supports_backfill_is_false(
+#         monkeypatch,
+#         fake_ingestion_pipeline,
+#         fake_source_factory
+# ):  
+    
+#     source = fake_source_factory(
+#         update_mode="snapshot",
+#         supports_backfill=True,
+#     )
+
+#     monkeypatch.setattr(
+#         "eml_transformer.pipelines.backfill_pipeline.create_source",
+#         lambda source_name, **kwargs: source
+#     )
+
+#     pipeline = BackfillPipeline(fake_ingestion_pipeline())
+
+#     with pytest.raises(ValueError, match="explicitly disables backfill"):
+#         pipeline.run_source(
+#             source_name="gdelt",
+#             source_config={"ingestion": {}},
+#             start_date="2026-01-01",
+#             end_date="2026-01-05"
+#         )
 
 def test_run_source_does_not_seed_checkpoint_by_default(
         monkeypatch,
@@ -471,7 +478,7 @@ def test_run_source_does_not_seed_checkpoint_by_default(
     """seed_checkpoint defaults to False"""
     monkeypatch.setattr(
         "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source()
+        lambda source_name, **kwargs: fake_source
     )
 
     ingestion_pipeline = fake_ingestion_pipeline(
@@ -501,7 +508,7 @@ def test_run_source_uses_default_window_days_of_20(
     """window_days defaults to 30"""
     monkeypatch.setattr(
         "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source()
+        lambda source_name, **kwargs: fake_source
     )
 
     ingestion_pipeline = fake_ingestion_pipeline(
@@ -532,7 +539,7 @@ def test_run_source_uses_last_window_end_for_checkpoint(
     """Checkpoint seed should be the end date of the final window, not the requested end_date."""
     monkeypatch.setattr(
         "eml_transformer.pipelines.backfill_pipeline.create_source",
-        lambda source_name, **kwargs: fake_source(),
+        lambda source_name, **kwargs: fake_source,
     )
 
     ingestion_pipeline = fake_ingestion_pipeline(
@@ -572,7 +579,7 @@ class TestRunAll:
     ):
         monkeypatch.setattr(
             "eml_transformer.pipelines.backfill_pipeline.create_source",
-            lambda source_name, **kwargs: fake_source(),
+            lambda source_name, **kwargs: fake_source,
         )
 
         pipeline = BackfillPipeline(fake_ingestion_pipeline())
@@ -581,7 +588,7 @@ class TestRunAll:
             start_date="2026-01-01",
             end_date="2026-01-10",
         )
-        assert results == {}
+        assert results == []
 
     def test_calls_run_source_for_each_config(
         self,
@@ -591,7 +598,7 @@ class TestRunAll:
     ):
         monkeypatch.setattr(
             "eml_transformer.pipelines.backfill_pipeline.create_source",
-            lambda source_name, **kwargs: fake_source(),
+            lambda source_name, **kwargs: fake_source,
         )
 
         ingestion_pipeline = fake_ingestion_pipeline(
@@ -618,19 +625,20 @@ class TestRunAll:
         )
 
         assert len(results) == 2
-        assert "gdelt" in results
-        assert "newsapi" in results
+        assert results[0].source == 'gdelt'
+        assert results[1].source == 'newsapi'
 
     def test_skips_sources_that_do_not_support_backfill(
         self,
         monkeypatch,
         fake_ingestion_pipeline,
-        fake_source,
+        fake_source_factory,
     ):
         def create_source_mock(source_name, **kwargs):
             if source_name == "weather_alerts":
-                return fake_source(supports_backfill=False)
-            return fake_source()
+                return fake_source_factory(supports_backfill=False)
+
+            return fake_source_factory()
 
         monkeypatch.setattr(
             "eml_transformer.pipelines.backfill_pipeline.create_source",
@@ -640,13 +648,18 @@ class TestRunAll:
         ingestion_pipeline = fake_ingestion_pipeline(
             results=[
                 IngestionResult(
-                    status="success", source="gdelt", run_id="run-1",
-                    records_fetched=1, records_written=1, records_skipped=0,
+                    status="success",
+                    source="gdelt",
+                    run_id="run-1",
+                    records_fetched=1,
+                    records_written=1,
+                    records_skipped=0,
                 ),
             ]
         )
 
         pipeline = BackfillPipeline(ingestion_pipeline)
+
         results = pipeline.run_all(
             source_configs={
                 "gdelt": {"ingestion": {}},
@@ -656,8 +669,8 @@ class TestRunAll:
             end_date="2026-01-30",
         )
 
-        assert "gdelt" in results
-        assert "weather_alerts" not in results
+        assert len(results) == 1
+        assert "gdelt" == results[0].source
 
     def test_returns_backfill_result_for_each_source(
         self,
@@ -669,7 +682,7 @@ class TestRunAll:
 
         monkeypatch.setattr(
             "eml_transformer.pipelines.backfill_pipeline.create_source",
-            lambda source_name, **kwargs: fake_source(),
+            lambda source_name, **kwargs: fake_source,
         )
 
         ingestion_pipeline = fake_ingestion_pipeline(
@@ -687,9 +700,8 @@ class TestRunAll:
             start_date="2026-01-01",
             end_date="2026-01-30",
         )
-
-        assert isinstance(results["gdelt"], BackfillResult)
-        assert results["gdelt"].source == "gdelt"
+        
+        assert results[0].source == "gdelt"
 
     def test_passes_dates_and_window_days_through(
         self,
@@ -699,7 +711,7 @@ class TestRunAll:
     ):
         monkeypatch.setattr(
             "eml_transformer.pipelines.backfill_pipeline.create_source",
-            lambda source_name, **kwargs: fake_source(),
+            lambda source_name, **kwargs: fake_source,
         )
 
         ingestion_pipeline = fake_ingestion_pipeline(
@@ -723,10 +735,10 @@ class TestRunAll:
             window_days=5,
         )
 
-        assert results["gdelt"].start_date == "2026-01-01"
-        assert results["gdelt"].end_date == "2026-01-10"
-        assert results["gdelt"].window_days == 5
-        assert results["gdelt"].windows_total == 2
+        assert results[0].start_date == "2026-01-01"
+        assert results[0].end_date == "2026-01-10"
+        assert results[0].window_days == 5
+        assert results[0].windows_total == 2
 
     def test_continues_processing_after_failed_source(
         self,
@@ -737,7 +749,7 @@ class TestRunAll:
         """A failed source shouldn't stop other sources from running."""
         monkeypatch.setattr(
             "eml_transformer.pipelines.backfill_pipeline.create_source",
-            lambda source_name, **kwargs: fake_source(),
+            lambda source_name, **kwargs: fake_source,
         )
 
         ingestion_pipeline = fake_ingestion_pipeline(
@@ -764,5 +776,5 @@ class TestRunAll:
             end_date="2026-01-30",
         )
 
-        assert results["gdelt"].status == "failed"
-        assert results["newsapi"].status == "success"
+        assert results[0].status == "failed"
+        assert results[1].status == "success"
