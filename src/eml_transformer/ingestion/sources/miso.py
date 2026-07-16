@@ -8,7 +8,9 @@ from bs4 import BeautifulSoup
 
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
-from eml_transformer.ingestion.schema import TextRecord, utc_now
+from eml_transformer.ingestion.schema import TextRecord
+from eml_transformer.utils.dates import utc_now
+
 
 logger = logging.getLogger(__name__)
 

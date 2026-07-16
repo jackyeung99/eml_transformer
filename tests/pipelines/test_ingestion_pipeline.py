@@ -241,14 +241,14 @@ class TestDateResolution:
             }
         ]
 
-    def test_full_source_does_not_use_checkpoint(
+    def test_snapshot_source_does_not_use_checkpoint(
         self,
         pipeline,
         fake_source,
         storage,
         paths,
     ):
-        fake_source.update_mode = "full"
+        fake_source.update_mode = "snapshot"
 
         storage.json_data[
             paths.checkpoint_key(fake_source.name)
@@ -299,7 +299,7 @@ class TestBronzeConstruction:
     ):
         raw_record = make_record("one")
 
-        fake_source.update_mode = "full"
+        fake_source.update_mode = "snapshot"
         fake_source.records = [raw_record]
 
         result = pipeline.run_source(
@@ -349,7 +349,7 @@ class TestBronzeConstruction:
             ),
         }
 
-        fake_source.update_mode = "full"
+        fake_source.update_mode = "snapshot"
         fake_source.records = [raw_record]
 
         pipeline.run_source("fake", {})
@@ -427,7 +427,7 @@ class TestDeduplication:
     ):
         raw_record = make_record("one")
 
-        fake_source.update_mode = "full"
+        fake_source.update_mode = "snapshot"
         fake_source.records = [
             raw_record,
             deepcopy(raw_record),
@@ -460,7 +460,7 @@ class TestDeduplication:
         raw_record = make_record("one")
         raw_hash = stable_hash(raw_record)
 
-        fake_source.update_mode = "full"
+        fake_source.update_mode = "snapshot"
         fake_source.records = [raw_record]
 
         dedupe_key = paths.dedupe_state(
@@ -499,7 +499,7 @@ class TestDeduplication:
         old_hash = stable_hash(old_record)
         new_hash = stable_hash(new_record)
 
-        fake_source.update_mode = "full"
+        fake_source.update_mode = "snapshot"
         fake_source.records = [old_record, new_record]
 
         dedupe_key = paths.dedupe_state(
@@ -697,14 +697,14 @@ class TestCheckpointBehavior:
             not in storage.json_data
         )
 
-    def test_full_source_does_not_update_checkpoint(
+    def test_snapshot_source_does_not_update_checkpoint(
         self,
         pipeline,
         fake_source,
         storage,
         paths,
     ):
-        fake_source.update_mode = "full"
+        fake_source.update_mode = "snapshot"
         fake_source.records = [
             make_record("one")
         ]
@@ -1047,14 +1047,14 @@ class TestRunAll:
     ):
         good_source = Mock()
         good_source.name = "good"
-        good_source.update_mode = "full"
+        good_source.update_mode = "snapshot"
         good_source.default_lookback_days = 7
         good_source.fetch_records.return_value = []
         good_source.get_checkpoint_value.return_value = None
 
         bad_source = Mock()
         bad_source.name = "bad"
-        bad_source.update_mode = "full"
+        bad_source.update_mode = "snapshot"
         bad_source.default_lookback_days = 7
         bad_source.fetch_records.side_effect = (
             RuntimeError("source failed")
