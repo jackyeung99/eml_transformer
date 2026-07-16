@@ -26,6 +26,11 @@ WEEKDAY_FIXES = {
 }
 
 
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def parse_utc_datetime(value: str | date | datetime) -> datetime:
     """Convert supported input into a timezone-aware UTC datetime."""
     if isinstance(value, datetime):

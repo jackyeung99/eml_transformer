@@ -12,6 +12,7 @@ from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
 from eml_transformer.utils.stamping import stable_hash
 from eml_transformer.ingestion.base import TextSource 
+from eml_transformer.utils.dates import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +64,9 @@ class IngestionPipeline:
         self.storage = storage
         self.paths = paths
         self.source_factory = source_factory
-        self.clock = clock or self._utc_now
+        self.clock = clock or utc_now
 
-    @staticmethod
-    def _utc_now() -> datetime:
-        return datetime.now(timezone.utc)
+    
 
     def run_all(
         self,
@@ -91,8 +90,8 @@ class IngestionPipeline:
         self,
         source_name: str,
         source_config: Mapping[str, Any],
-        from_date: str | None = None,
-        to_date: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
         update_checkpoint: bool = True,
     ) -> IngestionResult:
         """
@@ -135,13 +134,13 @@ class IngestionPipeline:
                 source=source,
                 requested_from_date=from_date,
                 run_time=run_time,
-            )
+            ) # should be datetime 
 
             effective_to_date = self._resolve_to_date(
                 source=source,
                 requested_to_date=to_date,
                 run_time=run_time,
-            )
+            ) # should be datetime 
 
             logger.info(
                 (
@@ -284,6 +283,7 @@ class IngestionPipeline:
             **dict(ingestion_config),
         )
 
+
     def _validate_source(
         self,
         source: TextSource,
@@ -382,7 +382,7 @@ class IngestionPipeline:
                         f"got {type(raw_record).__name__}"
                     )
 
-                raw_hash = stable_hash(raw_record)
+                raw_hash = source.unique_id(raw_record)
 
                 if (
                     raw_hash in existing_hashes
@@ -394,7 +394,7 @@ class IngestionPipeline:
                     {
                         "source": source.name,
                         "run_id": run_id,
-                        "retrieved_at": run_time.isoformat(),
+                        "retrieved_at": run_time,
                         "raw_record_hash": raw_hash,
                         "raw": raw_record,
                     }
@@ -472,19 +472,16 @@ class IngestionPipeline:
             checkpoint={
                 "source": source.name,
                 "last_successful_run_id": run_id,
-                "last_checkpoint_value": (
-                    last_checkpoint_value.isoformat()
-                ),
+                "last_checkpoint_value": last_checkpoint_value
             },
         )
 
         logger.info(
             "Checkpoint updated | source=%s | value=%s",
             source.name,
-            last_checkpoint_value.isoformat(),
+            last_checkpoint_value,
         )
 
-    
 
     def _load_checkpoint(
         self,
@@ -513,7 +510,7 @@ class IngestionPipeline:
 
         payload = {
             **checkpoint,
-            "updated_at": self._get_run_time().isoformat(),
+            "updated_at": self._get_run_time(),
         }
 
         self.storage.write_json(
@@ -560,7 +557,7 @@ class IngestionPipeline:
             {
                 "seen": sorted(seen),
                 "count": len(seen),
-                "updated_at": self._get_run_time().isoformat(),
+                "updated_at": self._get_run_time(),
             },
             key,
         )
@@ -597,14 +594,7 @@ class IngestionPipeline:
         if from_date is None or to_date is None:
             return
 
-        parsed_from = datetime.fromisoformat(
-            from_date.replace("Z", "+00:00")
-        )
-        parsed_to = datetime.fromisoformat(
-            to_date.replace("Z", "+00:00")
-        )
-
-        if parsed_from > parsed_to:
+        if to_date > from_date:
             raise ValueError(
                 f"from_date must not be after to_date: "
                 f"{from_date!r} > {to_date!r}"

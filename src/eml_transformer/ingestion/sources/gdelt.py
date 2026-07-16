@@ -66,7 +66,6 @@ class GDELTSource(TextSource):
         logger.debug("target_locations=%d", len(self.target_locations))
        
 
-
     def fetch_records(
         self,
         from_date: str,
@@ -288,6 +287,7 @@ class GDELTSource(TextSource):
                 self._parse_organizations(value) & self.target_organizations
             )
         )
+    
     
     def _parse_locations(self, value) -> set[str]:
         if pd.isna(value):

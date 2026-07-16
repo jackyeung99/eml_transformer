@@ -17,6 +17,7 @@ class TextSource(ABC):
     name: str
     source_type: str
 
+
     @abstractmethod
     def fetch_records(self) -> Any:
         '''
@@ -31,32 +32,6 @@ class TextSource(ABC):
         '''
         pass
 
-    def validate_schema(self, df: pd.DataFrame) -> None:
-        missing = [
-            col for col in TEXT_RECORD_COLUMNS
-            if col not in df.columns
-        ]
 
-        if missing:
-            raise ValueError(
-                f"{self.name} missing required columns: {missing}"
-            )
 
     
-    def _make_record_id(
-        self,
-        *parts: str | None,
-    ) -> str:
-        """
-        Generate deterministic record ID from stable fields.
-        """
-
-        key = "|".join(
-            str(part).strip()
-            for part in parts
-            if part is not None
-        )
-
-        return hashlib.sha256(
-            key.encode("utf-8")
-        ).hexdigest()
