@@ -50,24 +50,6 @@ def parse_utc_datetime(value: str | date | datetime) -> datetime:
     return parsed
 
 
-def to_checkpoint_iso(value: DateLike) -> str:
-    """Serialize a value as a canonical UTC checkpoint."""
-    return (
-        parse_utc_datetime(value)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-
-
-def to_source_iso(value: DateLike) -> str:
-    """Serialize UTC as the naive ISO format expected by legacy sources."""
-    return (
-        parse_utc_datetime(value)
-        .replace(tzinfo=None)
-        .isoformat()
-    )
-
-
 def parse_issued_at(text: str) -> str | None:
     if not text:
         return None

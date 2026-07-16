@@ -14,6 +14,7 @@ from eml_transformer.pipelines.ingestion_pipeline import IngestionPipeline
 from eml_transformer.pipelines.standardization_pipeline import StandardizationPipeline
 from eml_transformer.pipelines.scraping_pipeline import ScrapingPipeline
 from eml_transformer.runtime import build_runtime
+from eml_transformer.utils.dates import parse_utc_datetime
 
 load_dotenv()
 
@@ -208,13 +209,17 @@ def run_all(
 @app.command()
 def backfill(
     source: str = typer.Option(..., "--source", "-s"),
-    start_date: str = typer.Option(..., "--start-date"),
-    end_date: str = typer.Option(..., "--end-date"),
+    from_date: str = typer.Option(..., "--from-date"),
+    to_date: str = typer.Option(..., "--to-date"),
     window_days: int = typer.Option(30, "--window-days"),
     config: str = typer.Option("configs/dev.yaml", "--config", "-c"),
     init_checkpoint: bool = typer.Option(False, "--init-checkpoint"),
 ):
     rt = build_runtime(config)
+
+    # convert iso to utc timezone aware
+    from_date_utc = parse_utc_datetime(from_date)
+    to_date_utc = parse_utc_datetime(to_date)
 
     ingestion_pipeline = IngestionPipeline(
         storage=rt.storage,
@@ -228,8 +233,8 @@ def backfill(
     if source.lower() == "all":
         results = pipeline.run_all(
             source_configs=rt.source_configs,
-            start_date=start_date,
-            end_date=end_date,
+            from_date=from_date_utc,
+            to_date=to_date_utc,
             window_days=window_days,
             seed_checkpoint=init_checkpoint,
         )

@@ -56,8 +56,8 @@ class BackfillPipeline:
     def run_all(
         self,
         source_configs: dict[str, dict[str, Any]],
-        start_date: str,
-        end_date: str,
+        from_date: datetime,
+        to_date: datetime,
         window_days: int = 30,
         seed_checkpoint: bool = False,
     ) -> list[BackfillResult]:
@@ -76,8 +76,8 @@ class BackfillPipeline:
                 self.run_source(
                     source_name=source_name,
                     source_config=source_config,
-                    start_date=start_date,
-                    end_date=end_date,
+                    from_date=from_date,
+                    to_date=to_date,
                     window_days=window_days,
                     seed_checkpoint=seed_checkpoint,
                 )
@@ -89,8 +89,8 @@ class BackfillPipeline:
         self,
         source_name: str,
         source_config: dict[str, Any],
-        start_date: str,
-        end_date: str,
+        from_date: datetime,
+        to_date: datetime,
         window_days: int = 30,
         seed_checkpoint: bool = False,
     ) -> BackfillResult:
@@ -114,14 +114,12 @@ class BackfillPipeline:
                 f"{source_name}"
             )
 
-        start = date.fromisoformat(start_date)
-        end = date.fromisoformat(end_date)
 
 
         windows = list(
             self._iter_date_windows(
-                start=start,
-                end=end,
+                from_date=from_date,
+                to_date=to_date,
                 window_days=window_days,
             )
         )
@@ -181,8 +179,8 @@ class BackfillPipeline:
         if failed_result:
             return self._summarize_backfill(
                 source_name=source_name,
-                start_date=start_date,
-                end_date=end_date,
+                from_date=from_date,
+                to_date=to_date,
                 window_days=window_days,
                 windows_total=len(windows),
                 ingestion_results=ingestion_results,
@@ -191,24 +189,21 @@ class BackfillPipeline:
             )
 
         if seed_checkpoint and ingestion_results:
-            final_end_date = date.fromisoformat(windows[-1][1])
+            final_end_date_time = windows[-1][1]
 
-            checkpoint_value = datetime.combine(
-                final_end_date,
-                time.max,
-                tzinfo=timezone.utc,
-            )
-
-            self.ingestion_pipeline.initialize_checkpoint(
+            self.ingestion_pipeline._save_checkpoint(
                 source_name=source_name,
-                checkpoint_value=checkpoint_value.isoformat(),
-                run_id="backfill_seed",
-)
+                checkpoint={
+                    "source": source_name,
+                    "last_successful_run_id": "backfill_seed",
+                    "last_checkpoint_value": final_end_date_time,
+                },
+            )
 
         return self._summarize_backfill(
             source_name=source_name,
-            start_date=start_date,
-            end_date=end_date,
+            from_date=from_date,
+            to_date=to_date,
             window_days=window_days,
             windows_total=len(windows),
             ingestion_results=ingestion_results,
@@ -253,47 +248,32 @@ class BackfillPipeline:
             error=error,
         )
     
-    def initialize_checkpoint(
-        self,
-        source_name: str,
-        checkpoint_value: str,
-        run_id: str = "manual_init",
-    ) -> None:
-        """
-        Manually initialize an incremental checkpoint.
 
-        The provided timestamp must be an ISO-formatted, timezone-aware
-        datetime.
-        """
-        normalized_value = self._normalize_checkpoint_string(
-            checkpoint_value
-        )
+        
 
-        self._save_checkpoint(
-            source_name=source_name,
-            checkpoint={
-                "source": source_name,
-                "last_successful_run_id": run_id,
-                "last_checkpoint_value": normalized_value,
-            },
-        )
+
     @staticmethod
     def _iter_date_windows(
-        start: date,
-        end: date,
+        from_date: datetime,
+        to_date: datetime,
         window_days: int,
     ):
-        current = start
+        if window_days < 1:
+            raise ValueError("window_days must be at least 1")
 
-        while current <= end:
+        if from_date.tzinfo is None or to_date.tzinfo is None:
+            raise ValueError("Backfill dates must be timezone-aware")
+
+        if from_date > to_date:
+            raise ValueError("from_date must be before or equal to to_date")
+
+        current = from_date
+
+        while current <= to_date:
             window_end = min(
-                current + timedelta(days=window_days - 1),
-                end,
+                current + timedelta(days=window_days),
+                to_date,
             )
 
-            yield (
-                current.isoformat(),
-                window_end.isoformat(),
-            )
-
-            current = window_end + timedelta(days=1)
+            yield current, window_end
+            current = window_end
