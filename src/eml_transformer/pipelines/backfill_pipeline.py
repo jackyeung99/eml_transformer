@@ -252,6 +252,31 @@ class BackfillPipeline:
             ),
             error=error,
         )
+    
+    def initialize_checkpoint(
+        self,
+        source_name: str,
+        checkpoint_value: str,
+        run_id: str = "manual_init",
+    ) -> None:
+        """
+        Manually initialize an incremental checkpoint.
+
+        The provided timestamp must be an ISO-formatted, timezone-aware
+        datetime.
+        """
+        normalized_value = self._normalize_checkpoint_string(
+            checkpoint_value
+        )
+
+        self._save_checkpoint(
+            source_name=source_name,
+            checkpoint={
+                "source": source_name,
+                "last_successful_run_id": run_id,
+                "last_checkpoint_value": normalized_value,
+            },
+        )
     @staticmethod
     def _iter_date_windows(
         start: date,

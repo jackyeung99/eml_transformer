@@ -301,7 +301,7 @@ class IngestionPipeline:
             lookback_days = getattr(
                 source,
                 "default_lookback_days",
-                7,
+                1,
             )
 
             if not isinstance(lookback_days, int):
@@ -319,17 +319,14 @@ class IngestionPipeline:
     def _resolve_to_date(
         self,
         source: TextSource,
-        requested_to_date: str | None,
+        requested_to_date: datetime | None,
         run_time: datetime,
-    ) -> str | None:
+    ) -> datetime | None:
         if requested_to_date is not None:
-            return self._to_iso_date(
-                requested_to_date,
-                field_name="to_date",
-            )
+            return requested_to_date
 
         if source.update_mode == "incremental":
-            return run_time.date().isoformat()
+            return run_time
 
         return None
 
@@ -337,46 +334,33 @@ class IngestionPipeline:
     def _resolve_from_date(
         self,
         source: TextSource,
-        requested_from_date: str | None,
+        requested_from_date: datetime | None,
         run_time: datetime,
-    ) -> str | None:
-        if source.update_mode != "incremental":
-            if requested_from_date is None:
-                return None
-
-            return self._to_iso_date(
-                requested_from_date,
-                field_name="from_date",
-            )
-
+    ) -> datetime | None:
+        if source.update_mode != "incremental":  
+            return None
+            
         if requested_from_date is not None:
-            return self._to_iso_date(
-                requested_from_date,
-                field_name="from_date",
-            )
+            return requested_from_date
 
         checkpoint = self._load_checkpoint(source.name)
-
         if checkpoint is not None:
             checkpoint_value = checkpoint.get(
                 "last_checkpoint_value"
             )
 
             if checkpoint_value is not None:
-                return self._to_iso_date(
-                    checkpoint_value,
-                    field_name="last_checkpoint_value",
-                )
+                return checkpoint_value
 
         lookback_days = getattr(
             source,
             "default_lookback_days",
-            7,
+            1,
         )
 
         return (
             run_time - timedelta(days=lookback_days)
-        ).date().isoformat()
+        )
 
     def _build_bronze_rows(
         self,
@@ -500,30 +484,7 @@ class IngestionPipeline:
             last_checkpoint_value.isoformat(),
         )
 
-    def initialize_checkpoint(
-        self,
-        source_name: str,
-        checkpoint_value: str,
-        run_id: str = "manual_init",
-    ) -> None:
-        """
-        Manually initialize an incremental checkpoint.
-
-        The provided timestamp must be an ISO-formatted, timezone-aware
-        datetime.
-        """
-        normalized_value = self._normalize_checkpoint_string(
-            checkpoint_value
-        )
-
-        self._save_checkpoint(
-            source_name=source_name,
-            checkpoint={
-                "source": source_name,
-                "last_successful_run_id": run_id,
-                "last_checkpoint_value": normalized_value,
-            },
-        )
+    
 
     def _load_checkpoint(
         self,
@@ -621,50 +582,11 @@ class IngestionPipeline:
     def _make_run_id(run_time: datetime) -> str:
         return run_time.strftime("%Y%m%dT%H%M%S")
 
-    @staticmethod
-    def _to_iso_date(
-        value: str,
-        field_name: str,
-    ) -> str:
-        if not isinstance(value, str):
-            raise TypeError(
-                f"{field_name} must be an ISO date or datetime string, "
-                f"got {type(value).__name__}"
-            )
-
-        try:
-            parsed = datetime.fromisoformat(
-                value.replace("Z", "+00:00")
-            )
-        except ValueError as exc:
-            raise ValueError(
-                f"Malformed ISO date for {field_name}: {value!r}"
-            ) from exc
-
-        return parsed.date().isoformat()
-    
-    @staticmethod
-    def _normalize_checkpoint_string(value: Any) -> str:
-        if not isinstance(value, str):
-            raise TypeError(
-                "Saved checkpoint value must be an ISO datetime string"
-            )
-
-        parsed = datetime.fromisoformat(
-            value.replace("Z", "+00:00")
-        )
-
-        if parsed.tzinfo is None:
-            raise ValueError(
-                "Checkpoint value must be timezone-aware"
-            )
-
-        return parsed.astimezone(timezone.utc).isoformat()
 
     @staticmethod
     def _validate_date_range(
-        from_date: str | None,
-        to_date: str | None,
+        from_date: datetime | None,
+        to_date: datetime | None,
     ) -> None:
         """
         Validate ordering when both values are ISO date or datetime strings.
