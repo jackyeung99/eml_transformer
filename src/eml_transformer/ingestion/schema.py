@@ -44,6 +44,3 @@ TEXT_RECORD_COLUMNS = [
     "raw",
 ]
 
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)

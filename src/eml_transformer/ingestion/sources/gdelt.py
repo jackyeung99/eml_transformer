@@ -12,7 +12,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
-from eml_transformer.ingestion.schema import TextRecord, utc_now
+from eml_transformer.ingestion.schema import TextRecord
+from eml_transformer.utils.dates import utc_now
 
 import logging
 logger = logging.getLogger(__name__)
@@ -68,8 +69,8 @@ class GDELTSource(TextSource):
 
     def fetch_records(
         self,
-        from_date: str,
-        to_date: str,
+        from_date: datetime,
+        to_date: datetime,
     ) -> list[dict[str, Any]]:
         logger.info(
             "Starting GDELT fetch | from_date=%s | to_date=%s",
@@ -137,7 +138,7 @@ class GDELTSource(TextSource):
             title=self._extract_page_title(record),
             text="",  # article text added after scraping
             published_at=published_at,
-            retrieved_at=datetime.now(timezone.utc).isoformat(),
+            retrieved_at=utc_now(),
             url=record.get("DocumentIdentifier"),
             region=locations[0] if locations else None,
             categories=themes,
@@ -361,50 +362,21 @@ class GDELTSource(TextSource):
     
     def _get_timestamps(
         self,
-        from_date: str,
-        to_date: str,
+        from_date: datetime,
+        to_date: datetime,
     ) -> list[str]:
-        start = pd.Timestamp(from_date)
-        requested_end = pd.Timestamp(to_date)
 
-        if start.tzinfo is not None:
-            start = (
-                start
-                .tz_convert("UTC")
-                .tz_localize(None)
-            )
+        start = pd.Timestamp(from_date).floor("15min")
+        requested_end = pd.Timestamp(to_date).floor("15min")
 
-        if requested_end.tzinfo is not None:
-            requested_end = (
-                requested_end
-                .tz_convert("UTC")
-                .tz_localize(None)
-            )
-
-        start = start.floor("15min")
-
-        if self._is_date_only(to_date):
-            requested_end = (
-                requested_end
-                + pd.Timedelta(days=1)
-                - pd.Timedelta(minutes=15)
-            )
-        else:
-            requested_end = requested_end.floor("15min")
-
-        # GDELT files may not be available immediately.
         latest_available = (
-            pd.Timestamp.now(tz="UTC")
-            .floor("15min")
+            pd.Timestamp.now(tz="UTC").floor("15min")
             - pd.Timedelta(minutes=30)
-        ).tz_localize(None)
-
-        end = min(
-            requested_end,
-            latest_available,
         )
 
-        if start > end:
+        end = min(requested_end, latest_available)
+
+        if start >= end:
             return []
 
         return (
@@ -412,19 +384,12 @@ class GDELTSource(TextSource):
                 start=start,
                 end=end,
                 freq="15min",
+                inclusive="left",
             )
             .strftime("%Y%m%d%H%M%S")
             .tolist()
         )
-
-
-    @staticmethod
-    def _is_date_only(value: str) -> bool:
-        return (
-            isinstance(value, str)
-            and len(value.strip()) == 10
-        )
-  
+    
     def _get_records(
         self,
         timestamps: list[str],

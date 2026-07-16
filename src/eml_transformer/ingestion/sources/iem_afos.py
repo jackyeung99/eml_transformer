@@ -182,8 +182,8 @@ class IEMAFOSSource(TextSource):
     # ------------------------------------------------------------------
     def fetch_records(
         self,
-        from_date: str,
-        to_date: str,
+        from_date: datetime,
+        to_date: datetime,
     ) -> list[dict[str, Any]]:
         raw_responses = self._fetch_responses(
             from_date=from_date,
@@ -219,8 +219,8 @@ class IEMAFOSSource(TextSource):
 
     def _fetch_responses(
         self,
-        from_date: str,
-        to_date: str,
+        from_date: datetime,
+        to_date: datetime,
     ) -> list[dict[str, str]]:
         responses: list[dict[str, str]] = []
 
@@ -245,8 +245,8 @@ class IEMAFOSSource(TextSource):
     def _fetch_pil(
         self,
         pil: str,
-        from_date: str,
-        to_date: str,
+        from_date: datetime,
+        to_date: datetime,
     ) -> str | None:
         self._wait_before_request()
 
@@ -274,8 +274,8 @@ class IEMAFOSSource(TextSource):
     def _build_request_params(
         self,
         pil: str,
-        from_date: str,
-        to_date: str,
+        from_date: datetime,
+        to_date: datetime,
     ) -> dict[str, str | int]:
         """Build query parameters for an IEM AFOS request."""
         return {
