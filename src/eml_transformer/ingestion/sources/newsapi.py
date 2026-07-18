@@ -103,11 +103,7 @@ class NewsAPISource(TextSource):
         source_name = source_info.get("name")
 
         return TextRecord(
-            record_id=self._make_record_id(
-                url,
-                published_at,
-                title,
-            ),
+            record_id=self.unique_id(article),
             source=self.name,
             source_type=self.source_type,
             title=title,

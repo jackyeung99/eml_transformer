@@ -84,12 +84,7 @@ class WeatherAlertSource(TextSource):
         source_id = props.get("id") or feature.get("id")
 
         return TextRecord(
-            record_id=self._make_record_id(
-                self.name,
-                source_id,
-                props.get("sent"),
-                headline,
-            ),
+            record_id=self.unique_id(record),
             source=self.name,
             source_type=self.source_type,
             title=headline,

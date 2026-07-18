@@ -71,13 +71,8 @@ class MISONotificationSource(TextSource):
         url = self._build_url(notification)
 
         return TextRecord(
-            record_id=self._make_record_id(
-                self.name,
-                notification.get("id"),
-                url,
-                publish_date,
-                subject,
-            ),
+            record_id=self.unique_id(record),
+
             source=self.name,
             source_type=self.source_type,
             title=subject,
