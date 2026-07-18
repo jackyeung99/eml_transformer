@@ -180,6 +180,9 @@ class IEMAFOSSource(TextSource):
     # ------------------------------------------------------------------
     # Public pipeline interface
     # ------------------------------------------------------------------
+    def native_id(self, raw_record: dict[str, Any]) -> str |None:
+        return raw_record.get("source_id")
+    
     def fetch_records(
         self,
         from_date: datetime,

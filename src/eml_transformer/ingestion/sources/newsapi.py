@@ -55,6 +55,16 @@ class NewsAPISource(TextSource):
             "User-Agent": "eml-transformer-research",
         }
 
+    def native_id(self, raw_record: dict[str, Any]) -> str | None:
+        return None
+    
+    def hash_payload(self, raw_record: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "url": raw_record.get("url"),
+            "publishedAt": raw_record.get("publishedAt"),
+            "title": raw_record.get("title")
+        }
+
     def fetch_records(
         self,
         from_date: str | None = None,

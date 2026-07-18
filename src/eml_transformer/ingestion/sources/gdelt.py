@@ -66,6 +66,13 @@ class GDELTSource(TextSource):
         logger.debug("target_organizations=%d", len(self.target_organizations))
         logger.debug("target_locations=%d", len(self.target_locations))
        
+    def native_id(self, raw_record: dict[str, Any]) -> str | None:
+        value = raw_record.get("GKGRECORDID")
+        
+        if value is None or pd.isna(value):
+            return None
+        
+        return str(value)
 
     def fetch_records(
         self,
