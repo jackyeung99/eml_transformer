@@ -6,6 +6,8 @@ import pandas as pd
 from copy import deepcopy
 from datetime import datetime
 
+from eml_transformer.utils.stamping import stable_hash
+
 class FakeStorage:
     def __init__(self):
         self.data: dict[str, pd.DataFrame] = {}
@@ -173,6 +175,18 @@ class FakeSource:
         self.fetch_calls: list[
             dict[str, str | None]
         ] = []
+
+    def native_id(self, raw_record: dict[str: Any]) -> str | None:
+        return raw_record.get("id")
+    
+    def unique_id(self, raw_record: dict[str: Any]) -> str:
+        native = self.native_id(raw_record)
+        if native:
+            return f"{self.name}:{native}"
+        return f"{self.name}:{stable_hash(self.hash_payload(raw_record))}"
+    
+    def hash_payload(self, raw_record:dict[str: Any]) -> dict[str, Any]:
+        return raw_record
 
     def fetch_records(
         self,
