@@ -287,10 +287,8 @@ def test_standardize_record_casts_record_id_to_string(gdelt_source):
 
 
 def test_standardize_record_requires_gkg_record_id(gdelt_source):
-    record = make_standardized_gdelt_record()
-    record.pop("GKGRECORDID")
-
-    with pytest.raises(KeyError):
+    record = {}  # no GKGRECORDID
+    with pytest.raises(ValueError, match="GKGRECORDID"):
         gdelt_source.standardize_record(record)
 
 

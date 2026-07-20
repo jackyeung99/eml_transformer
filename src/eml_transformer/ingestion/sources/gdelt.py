@@ -70,7 +70,10 @@ class GDELTSource(TextSource):
         value = raw_record.get("GKGRECORDID")
         
         if value is None or pd.isna(value):
-            return None
+            raise ValueError(
+                f"GDELT record missing required GKGRECORDID: "
+                f"{raw_record.get('DocumentIdentifier')}"
+            )
         
         return str(value)
 
