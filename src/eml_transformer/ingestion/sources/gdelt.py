@@ -105,7 +105,7 @@ class GDELTSource(TextSource):
     
 
     def standardize_record(self, record: dict[str, Any]) -> TextRecord:
-        record_id = str(record["GKGRECORDID"])
+        record_id = self.unique_id(record)
 
         precise_timestamp = self._extract_precise_time(record)
         has_precise_published_at = bool(precise_timestamp)

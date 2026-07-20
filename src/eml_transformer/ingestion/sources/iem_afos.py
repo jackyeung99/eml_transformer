@@ -514,7 +514,7 @@ class IEMAFOSSource(TextSource):
         sections = self._parse_sections(product_text)
 
         return TextRecord(
-            record_id=str(record["source_id"]),
+            record_id=self.unique_id(record),
             source=self.name,
             source_type=self.source_type,
             title=self._build_title(
