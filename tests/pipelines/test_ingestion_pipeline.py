@@ -326,9 +326,7 @@ class TestBronzeConstruction:
                 FIXED_TIME
             ),
             "retrieved_at": FIXED_TIME.isoformat(),
-            "raw_record_hash": stable_hash(
-                raw_record
-            ),
+            "raw_record_hash": fake_source.unique_id(raw_record),
             "raw": raw_record,
         }
 
@@ -458,7 +456,7 @@ class TestDeduplication:
         paths,
     ):
         raw_record = make_record("one")
-        raw_hash = stable_hash(raw_record)
+        raw_hash = fake_source.unique_id(raw_record)
 
         fake_source.update_mode = "snapshot"
         fake_source.records = [raw_record]
@@ -496,8 +494,8 @@ class TestDeduplication:
         old_record = make_record("old")
         new_record = make_record("new")
 
-        old_hash = stable_hash(old_record)
-        new_hash = stable_hash(new_record)
+        old_hash = fake_source.unique_id(old_record)
+        new_hash = fake_source.unique_id(new_record)
 
         fake_source.update_mode = "snapshot"
         fake_source.records = [old_record, new_record]

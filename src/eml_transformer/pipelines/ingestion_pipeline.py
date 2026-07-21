@@ -562,6 +562,7 @@ class IngestionPipeline:
             key,
         )
 
+
     def _get_run_time(self) -> datetime:
         value = self.clock()
 

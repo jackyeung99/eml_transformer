@@ -48,6 +48,11 @@ class WeatherAlertSource(TextSource):
             "Accept": "application/geo+json",
         }
 
+    def native_id(self, raw_record: dict[str, Any]) -> str | None:
+        feature = raw_record.get("feature") or {}
+        props = feature.get("properties") or {}
+        return props.get("id") or feature.get("id")
+
     def fetch_records(
         self,
         from_date=None,
@@ -79,12 +84,7 @@ class WeatherAlertSource(TextSource):
         source_id = props.get("id") or feature.get("id")
 
         return TextRecord(
-            record_id=self._make_record_id(
-                self.name,
-                source_id,
-                props.get("sent"),
-                headline,
-            ),
+            record_id=self.unique_id(record),
             source=self.name,
             source_type=self.source_type,
             title=headline,

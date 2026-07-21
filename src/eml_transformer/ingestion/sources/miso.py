@@ -39,6 +39,10 @@ class MISONotificationSource(TextSource):
             "Referer": "https://www.misoenergy.org/markets-and-operations/notifications/",
         }
 
+    def native_id(self, raw_record: dict[str, Any]) -> str | None:
+        notification = raw_record.get("notification") or {}
+        return notification.get("id")
+
     def fetch_records(
         self,
         from_date=None,
@@ -67,13 +71,8 @@ class MISONotificationSource(TextSource):
         url = self._build_url(notification)
 
         return TextRecord(
-            record_id=self._make_record_id(
-                self.name,
-                notification.get("id"),
-                url,
-                publish_date,
-                subject,
-            ),
+            record_id=self.unique_id(record),
+
             source=self.name,
             source_type=self.source_type,
             title=subject,
