@@ -7,6 +7,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from eml_transformer.utils.stamping import stable_hash
+from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
 
 class FakeStorage:
     def __init__(self):
@@ -176,23 +177,12 @@ class FakeSource:
             dict[str, str | None]
         ] = []
 
-    def native_id(self, raw_record: dict[str: Any]) -> str | None:
-        return raw_record.get("id")
-    
-    def unique_id(self, raw_record: dict[str: Any]) -> str:
-        native = self.native_id(raw_record)
-        if native:
-            return f"{self.name}:{native}"
-        return f"{self.name}:{stable_hash(self.hash_payload(raw_record))}"
-    
-    def hash_payload(self, raw_record:dict[str: Any]) -> dict[str, Any]:
-        return raw_record
 
     def fetch_records(
         self,
-        from_date: str | None = None,
-        to_date: str | None = None,
-    ) -> list[dict[str, Any]]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> list[BronzeRecord]:
         self.fetch_calls.append(
             {
                 "from_date": from_date,
@@ -205,55 +195,17 @@ class FakeSource:
 
         return self.records
 
-    def get_checkpoint_value(
-        self,
-        record: dict[str, Any],
-    ) -> datetime | None:
-        value = record.get("published_at")
-
-        if value is None:
-            return None
-
-        if isinstance(value, Exception):
-            raise value
-
-        if isinstance(value, datetime):
-            return value
-
-        if isinstance(value, str):
-            parsed = datetime.fromisoformat(
-                value.replace("Z", "+00:00")
-            )
-
-            if parsed.tzinfo is None:
-                raise ValueError(
-                    "Checkpoint datetime must be "
-                    "timezone-aware"
-                )
-
-            return parsed
-
-        # Returning this value allows pipeline tests to verify
-        # that invalid checkpoint types are rejected.
-        return value  # type: ignore[return-value]
-
-    def fetch_raw(self) -> pd.DataFrame:
-        if self.fetch_error is not None:
-            raise self.fetch_error
-
-        return pd.DataFrame(self.records)
-
-    def parse_records(
-        self,
-        raw: pd.DataFrame,
-    ) -> list[dict[str, Any]]:
-        return raw.to_dict("records")
-
     def standardize_record(
         self,
-        record: dict[str, Any],
-    ) -> dict[str, Any]:
-        return record
+        record: BronzeRecord,
+    ) -> TextRecord:
+        return TextRecord(
+            source=record.source,
+            record_id=record.record_id,
+            published_at=record.published_at,
+            text=str(record.raw.get("text", "")),
+            metadata={},
+    )
 
 class FakeIngestionPipeline:
     def __init__(self, results=None):
@@ -281,17 +233,16 @@ class FakeIngestionPipeline:
 
         return self.results[len(self.calls) - 1]
 
-    def initialize_checkpoint(
+
+    def _save_checkpoint(
         self,
-        source_name,
-        checkpoint_value,
-        run_id,
-    ):
+        source_name: str,
+        checkpoint: dict[str, object],
+    ) -> None:
         self.checkpoints.append(
             {
                 "source_name": source_name,
-                "checkpoint_value": checkpoint_value,
-                "run_id": run_id,
+                "checkpoint": checkpoint,
             }
         )
 

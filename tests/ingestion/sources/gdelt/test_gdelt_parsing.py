@@ -138,7 +138,7 @@ def test_extract_precise_time(gdelt_source):
     }
 
     assert (
-        gdelt_source._extract_precise_time(record)
+        gdelt_source._extract_precise_timestamp(record)
         == "20260101123045"
     )
 
@@ -154,11 +154,11 @@ def test_extract_precise_time_malformed_missing_closing_tag(gdelt_source):
         "Extras": "<PAGE_PRECISEPUBTIMESTAMP>20260101123045"
     }
 
-    assert gdelt_source._extract_precise_time(record) == ""
+    assert gdelt_source._extract_precise_timestamp(record) == ""
 
 def test_extract_precise_time_malformed_missing_opening_tag(gdelt_source):
     record = {
         "Extras": "20260101123045</PAGE_PRECISEPUBTIMESTAMP>"
     }
 
-    assert gdelt_source._extract_precise_time(record) == ""
+    assert gdelt_source._extract_precise_timestamp(record) == ""

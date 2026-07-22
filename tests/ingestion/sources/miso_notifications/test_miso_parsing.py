@@ -14,6 +14,7 @@ from eml_transformer.ingestion.registry import register_source
 from eml_transformer.ingestion.schema import TextRecord
 from eml_transformer.ingestion.sources.miso import MISONotificationSource
 from eml_transformer.utils.dates import utc_now
+from eml_transformer.utils.stamping import stable_hash
 
 class TestHTMLToText:
     """Test the _HTML_to_text_helper"""
@@ -60,41 +61,137 @@ class TestParseRecords:
     """Test the _parse_records method"""
 
     def test_empty_response_returns_empty_list(self, miso_source):
-        result = miso_source._parse_records([])
+        result = miso_source._build_bronze_records([])
+
         assert result == []
-    
-    def test_parses_grouped_notifications(self, miso_source):
+
+
+    def test_builds_records_from_grouped_notifications(
+        self,
+        miso_source,
+    ):
+        first_notification = {
+            "id": "1",
+            "subject": "First",
+        }
+        second_notification = {
+            "id": "2",
+            "subject": "Second",
+        }
+
         raw = [
             {
                 "topic": "Market Notice",
                 "notifications": [
-                    {"id": "1", "subject": "First"},
-                    {"id": "2", "subject": "Second"}
-                ]
+                    first_notification,
+                    second_notification,
+                ],
             }
         ]
-        result = miso_source._parse_records(raw)
+
+        result = miso_source._build_bronze_records(raw)
+
         assert len(result) == 2
-        assert result[0]["topic"] == "Market Notice"
-        assert result[0]["notification"]["id"] == "1"
-        assert result[1]["notification"]["id"] == "2"
-    
-    def test_handles_multiple_topics(self, miso_source):
+
+        first, second = result
+
+        first_fingerprint = stable_hash(
+            {
+                "subject": "First",
+                "publish_date": None,
+                "permanent_link": None,
+            }
+        )
+        second_fingerprint = stable_hash(
+            {
+                "subject": "Second",
+                "publish_date": None,
+                "permanent_link": None,
+            }
+        )
+
+        assert first.source == "miso_notifications"
+        assert first.record_id == (
+            f"miso:{first_fingerprint}"
+        )
+        assert first.raw == {
+            "topic": "Market Notice",
+            "notification": first_notification,
+        }
+
+        assert second.source == "miso_notifications"
+        assert second.record_id == (
+            f"miso:{second_fingerprint}"
+        )
+        assert second.raw == {
+            "topic": "Market Notice",
+            "notification": second_notification,
+        }
+
+    def test_builds_records_from_multiple_topics(
+        self,
+        miso_source,
+    ):
+        first_notification = {
+            "subject": "First",
+            "publishDate": "2026-01-15T12:00:00Z",
+            "permanentLinkUrl": "/notifications/first",
+        }
+        second_notification = {
+            "subject": "Second",
+            "publishDate": "2026-01-16T12:00:00Z",
+            "permanentLinkUrl": "/notifications/second",
+        }
+
         raw = [
-            {"topic": "Topic 1", "notifications": [{"id": "1"}]},
-            {"topic": "Topic 2", "notifications": [{"id": "2"}]}
+            {
+                "topic": "Topic 1",
+                "notifications": [first_notification],
+            },
+            {
+                "topic": "Topic 2",
+                "notifications": [second_notification],
+            },
         ]
-        result = miso_source._parse_records(raw)
+
+        result = miso_source._build_bronze_records(raw)
+
         assert len(result) == 2
-        assert result[0]["topic"] == "Topic 1"
-        assert result[1]["topic"] == "Topic 2"
-    
-    def test_handles_topic_with_no_notifications(self, miso_source):
+
+        assert result[0].raw == {
+            "topic": "Topic 1",
+            "notification": first_notification,
+        }
+        assert result[0].record_id == miso_source._make_record_id(
+            first_notification
+        )
+
+        assert result[1].raw == {
+            "topic": "Topic 2",
+            "notification": second_notification,
+        }
+        assert result[1].record_id == miso_source._make_record_id(
+            second_notification
+        )
+
+    def test_skips_topic_with_no_notifications(
+        self,
+        miso_source,
+    ):
         raw = [
-            {"topic": "Topic 1", "notifications": []},
-            {"topic": "Topic 2", "notifications": [{"id": "1"}]}
+            {
+                "topic": "Topic 1",
+                "notifications": [],
+            },
+            {
+                "topic": "Topic 2",
+                "notifications": [{"id": "1"}],
+            },
         ]
-        result = miso_source._parse_records(raw)
+
+        result = miso_source._build_bronze_records(raw)
+
         assert len(result) == 1
-        assert result[0]["topic"] == "Topic 2"
+        assert result[0].raw["topic"] == "Topic 2"
+        assert result[0].raw["notification"]["id"] == "1"
 

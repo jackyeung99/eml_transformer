@@ -1,9 +1,10 @@
 from dataclasses import fields
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
-from eml_transformer.ingestion.sources.gdelt import GDELTSource
+from eml_transformer.ingestion.schema import BronzeRecord
+
 
 
 EXPECTED_TEXT_RECORD_FIELDS = {
@@ -20,10 +21,27 @@ EXPECTED_TEXT_RECORD_FIELDS = {
     "metadata",
     "raw",
 }
+RETRIEVED_AT = datetime(
+    2026,
+    1,
+    2,
+    12,
+    0,
+    tzinfo=timezone.utc,
+)
 
+DEFAULT_PUBLISHED_AT = datetime(
+    2026,
+    1,
+    1,
+    12,
+    30,
+    45,
+    tzinfo=timezone.utc,
+)
 
-def make_standardized_gdelt_record(**overrides):
-    record = {
+def make_gdelt_raw(**overrides):
+    raw = {
         "GKGRECORDID": "20260101000000-0000000000",
         "DATE": "20260101000000",
         "GDELT_TIMESTAMP": "20260101000000",
@@ -32,11 +50,17 @@ def make_standardized_gdelt_record(**overrides):
         "Themes": "POWER;GRID;WEATHER",
         "Organizations": "MISO;NWS",
         "Persons": "Jane Doe;John Smith",
-        "Locations": "1#Indiana#US#USIN#39.7684#-86.1581",
+        "Locations": (
+            "1#Indiana#US#USIN#39.7684#-86.1581"
+        ),
         "Tone": "-1.25,0.0,2.5,0.5,1.0,0.0",
         "Extras": (
-            "<PAGE_TITLE>Major Power Outage Hits Indiana</PAGE_TITLE>"
-            "<PAGE_PRECISEPUBTIMESTAMP>20260101123045</PAGE_PRECISEPUBTIMESTAMP>"
+            "<PAGE_TITLE>"
+            "Major Power Outage Hits Indiana"
+            "</PAGE_TITLE>"
+            "<PAGE_PRECISEPUBTIMESTAMP>"
+            "20260101123045"
+            "</PAGE_PRECISEPUBTIMESTAMP>"
         ),
         "theme_match": True,
         "organization_match": True,
@@ -44,74 +68,133 @@ def make_standardized_gdelt_record(**overrides):
         "filter_match_count": 3,
     }
 
-    record.update(overrides)
-    return record
+    raw.update(overrides)
+    return raw
 
 
-def test_standardize_record_returns_expected_core_fields(gdelt_source):
+def make_standardized_gdelt_record(
+    *,
+    record_id: str = "20260101000000-0000000000",
+    published_at: datetime | None = DEFAULT_PUBLISHED_AT,
+    retrieved_at: datetime = RETRIEVED_AT,
+    **raw_overrides,
+) -> BronzeRecord:
+    raw = make_gdelt_raw(
+        GKGRECORDID=record_id,
+        **raw_overrides,
+    )
+
+    return BronzeRecord(
+        source="gdelt",
+        record_id=record_id,
+        published_at=published_at,
+        retrieved_at=retrieved_at,
+        raw=raw,
+    )
+
+def test_standardize_record_returns_expected_core_fields(
+    gdelt_source,
+):
     record = make_standardized_gdelt_record()
 
     result = gdelt_source.standardize_record(record)
 
-    assert result.record_id == "20260101000000-0000000000"
+    assert result.record_id == record.record_id
     assert result.source == gdelt_source.name
     assert result.source_type == gdelt_source.source_type
     assert result.title == "Major Power Outage Hits Indiana"
     assert result.text == ""
+    assert result.published_at == record.published_at
+    assert result.retrieved_at == record.retrieved_at
     assert result.url == "https://example.com/article"
-    assert result.categories == ["POWER", "GRID", "WEATHER"]
-    assert result.raw is record
+    assert result.categories == [
+        "POWER",
+        "GRID",
+        "WEATHER",
+    ]
+    assert result.raw is record.raw
 
 
-def test_standardize_record_uses_precise_page_timestamp_when_available(gdelt_source):
-    record = make_standardized_gdelt_record(
+from datetime import datetime, timezone
+
+
+def test_build_bronze_record_uses_precise_page_timestamp_when_available(
+    gdelt_source,
+):
+    raw = make_gdelt_raw(
         Extras=(
             "<PAGE_TITLE>Title</PAGE_TITLE>"
-            "<PAGE_PRECISEPUBTIMESTAMP>20260101123045</PAGE_PRECISEPUBTIMESTAMP>"
+            "<PAGE_PRECISEPUBTIMESTAMP>"
+            "20260101123045"
+            "</PAGE_PRECISEPUBTIMESTAMP>"
         ),
         GDELT_TIMESTAMP="20260101000000",
         DATE="20260101000000",
     )
 
-    result = gdelt_source.standardize_record(record)
-
-    assert result.published_at.startswith("2026-01-01T12:30:45")
-    assert result.metadata["published_at"] == {
-        "source": "page_metadata",
-        "precision": "second",
-    }
-
-
-def test_standardize_record_falls_back_to_gdelt_timestamp(gdelt_source):
-    record = make_standardized_gdelt_record(
-        Extras="<PAGE_TITLE>Title</PAGE_TITLE>",
-        GDELT_TIMESTAMP="20260101001500",
-        DATE="20260101000000",
+    result = gdelt_source._build_bronze_record(
+        raw,
+        retrieved_at=RETRIEVED_AT,
     )
 
-    result = gdelt_source.standardize_record(record)
+    assert result.published_at == datetime(
+        2026,
+        1,
+        1,
+        12,
+        30,
+        45,
+        tzinfo=timezone.utc,
+    )
 
-    assert result.published_at.startswith("2026-01-01T00:15:00")
-    assert result.metadata["published_at"] == {
-        "source": "gdelt",
-        "precision": "15min",
-    }
 
-
-def test_standardize_record_falls_back_to_date_when_gdelt_timestamp_missing(gdelt_source):
-    record = make_standardized_gdelt_record(
+def test_build_bronze_record_falls_back_to_date_when_gdelt_timestamp_missing(
+    gdelt_source,
+):
+    raw = make_gdelt_raw(
         Extras="",
         GDELT_TIMESTAMP=None,
         DATE="20260101003000",
     )
 
-    result = gdelt_source.standardize_record(record)
+    result = gdelt_source._build_bronze_record(
+        raw,
+        retrieved_at=RETRIEVED_AT,
+    )
 
-    assert result.published_at.startswith("2026-01-01T00:30:00")
-    assert result.metadata["published_at"] == {
-        "source": "gdelt",
-        "precision": "15min",
-    }
+    assert result.published_at == datetime(
+        2026,
+        1,
+        1,
+        0,
+        30,
+        tzinfo=timezone.utc,
+    )
+
+def test_build_bronze_record_falls_back_to_gdelt_timestamp(
+    gdelt_source,
+):
+    raw = make_gdelt_raw(
+        Extras="<PAGE_TITLE>Title</PAGE_TITLE>",
+        GDELT_TIMESTAMP="20260101001500",
+        DATE="20260101000000",
+    )
+
+    result = gdelt_source._build_bronze_record(
+        raw,
+        retrieved_at=RETRIEVED_AT,
+    )
+
+    assert result.published_at == datetime(
+        2026,
+        1,
+        1,
+        0,
+        15,
+        tzinfo=timezone.utc,
+    )
+
+
 
 
 def test_standardize_record_strips_empty_theme_values(gdelt_source):
@@ -257,13 +340,25 @@ def test_standardize_record_handles_missing_title(gdelt_source):
     assert result.title == ""
 
 
-def test_standardize_record_handles_missing_extras(gdelt_source):
-    record = make_standardized_gdelt_record()
-    record.pop("Extras")
+def test_standardize_record_handles_missing_extras(
+    gdelt_source,
+):
+    record = make_standardized_gdelt_record(
+        published_at=datetime(
+            2026,
+            1,
+            1,
+            0,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+    record.raw.pop("Extras")
 
     result = gdelt_source.standardize_record(record)
 
     assert result.title == ""
+    assert result.published_at == record.published_at
     assert result.metadata["published_at"] == {
         "source": "gdelt",
         "precision": "15min",
@@ -278,28 +373,38 @@ def test_standardize_record_handles_missing_document_identifier(gdelt_source):
     assert result.url is None
 
 
-def test_standardize_record_casts_record_id_to_string(gdelt_source):
-    record = make_standardized_gdelt_record(GKGRECORDID=12345)
+def test_standardize_record_preserves_bronze_record_id(
+    gdelt_source,
+):
+    record = make_standardized_gdelt_record(
+        record_id="12345",
+    )
 
     result = gdelt_source.standardize_record(record)
 
     assert result.record_id == "12345"
 
 
-def test_standardize_record_requires_gkg_record_id(gdelt_source):
-    record = {}  # no GKGRECORDID
-    with pytest.raises(ValueError, match="GKGRECORDID"):
-        gdelt_source.standardize_record(record)
+def test_standardize_record_does_not_require_raw_gkg_record_id(
+    gdelt_source,
+):
+    record = make_standardized_gdelt_record()
+    record.raw.pop("GKGRECORDID")
+
+    result = gdelt_source.standardize_record(record)
+
+    assert result.record_id == record.record_id
 
 
-def test_standardize_record_retrieved_at_is_valid_iso_timestamp(gdelt_source):
+def test_standardize_record_preserves_retrieved_at(
+    gdelt_source,
+):
     record = make_standardized_gdelt_record()
 
     result = gdelt_source.standardize_record(record)
 
-    parsed = datetime.fromisoformat(result.retrieved_at)
-
-    assert parsed.tzinfo is not None
+    assert result.retrieved_at == record.retrieved_at
+    assert result.retrieved_at.tzinfo is not None
 
 
 def test_standardize_record_returns_complete_text_record(gdelt_source):

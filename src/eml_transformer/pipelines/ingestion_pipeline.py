@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Protocol
+from typing import Any
 
 import eml_transformer.ingestion.sources  # noqa: F401
 from eml_transformer.ingestion.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
-from eml_transformer.utils.stamping import stable_hash
 from eml_transformer.ingestion.base import TextSource 
-from eml_transformer.utils.dates import utc_now
+from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.utils.dates import utc_now, parse_utc_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,6 @@ class IngestionResult:
     records_fetched: int
     records_written: int
     records_skipped: int = 0
-    records_failed: int = 0
     bronze_key: str | None = None
     dedupe_key: str | None = None
     error: str | None = None
@@ -42,7 +41,6 @@ class IngestionResult:
             "fetched": self.records_fetched,
             "written": self.records_written,
             "skipped": self.records_skipped,
-            "failed": self.records_failed,
         }
 
         if self.error:
@@ -110,7 +108,6 @@ class IngestionPipeline:
         records_fetched = 0
         records_written = 0
         records_skipped = 0
-        records_failed = 0
 
         try:
             self._validate_date_range(
@@ -153,43 +150,40 @@ class IngestionPipeline:
                 effective_to_date,
             )
 
-            raw_records = list(
-                source.fetch_records(
-                    from_date=effective_from_date,
-                    to_date=effective_to_date,
-                )
+            records = source.fetch_records(
+                from_date=effective_from_date,
+                to_date=effective_to_date,
             )
-            records_fetched = len(raw_records)
 
-            existing_hashes = self._load_seen(dedupe_key)
+            records_fetched = len(records)
+            existing_ids = self._load_seen(dedupe_key)
 
-            bronze_rows, new_hashes, records_failed = (
-                self._build_bronze_rows(
-                    source=source,
-                    raw_records=raw_records,
-                    existing_hashes=existing_hashes,
-                    run_id=run_id,
-                    run_time=run_time,
-                )
+
+            self._validate_source_output(source, records)
+
+            # dedupe 
+            new_records, new_ids = self._filter_new_records(
+                records,
+                existing_ids,
             )
 
             records_skipped = (
                 records_fetched
-                - len(bronze_rows)
-                - records_failed
+                - len(new_records)
             )
 
-            if bronze_rows:
+            if new_records:
                 # Bronze data must be written before the records are marked seen.
                 self.storage.append_jsonl(
                     bronze_key,
-                    bronze_rows,
+                    [record.to_dict() for record in new_records],
                 )
-                records_written = len(bronze_rows)
+
+                records_written = len(new_records)
 
                 self._save_seen(
                     key=dedupe_key,
-                    seen=existing_hashes | new_hashes,
+                    seen=existing_ids | new_ids,
                 )
 
             is_bounded_run = (
@@ -201,46 +195,38 @@ class IngestionPipeline:
                 source.update_mode == "incremental"
                 and update_checkpoint
                 and not is_bounded_run
-                and bool(raw_records)
-                and records_failed == 0
+                and bool(records)
             )
 
             if should_update_checkpoint:
                 # Checkpoints are updated only after bronze and dedupe
                 # persistence complete successfully.
                 self._update_checkpoint(
-                    source=source,
+                    source_name=source.name,
                     run_id=run_id,
-                    raw_records=raw_records,
+                    records=records,
                 )
 
-            status = (
-                "partial_success"
-                if records_failed > 0
-                else "success"
-            )
 
             logger.info(
                 (
                     "Ingestion completed | source=%s | run_id=%s "
-                    "| fetched=%s | written=%s | skipped=%s | failed=%s"
+                    "| fetched=%s | written=%s | skipped=%s"
                 ),
                 source.name,
                 run_id,
                 records_fetched,
                 records_written,
                 records_skipped,
-                records_failed,
             )
 
             return IngestionResult(
-                status=status,
+                status="success",
                 source=source.name,
                 run_id=run_id,
                 records_fetched=records_fetched,
                 records_written=records_written,
                 records_skipped=records_skipped,
-                records_failed=records_failed,
                 bronze_key=bronze_key,
                 dedupe_key=dedupe_key,
             )
@@ -259,7 +245,6 @@ class IngestionPipeline:
                 records_fetched=records_fetched,
                 records_written=records_written,
                 records_skipped=records_skipped,
-                records_failed=records_failed,
                 error=str(exc),
                 bronze_key=bronze_key,
                 dedupe_key=dedupe_key,
@@ -343,14 +328,11 @@ class IngestionPipeline:
         if requested_from_date is not None:
             return requested_from_date
 
-        checkpoint = self._load_checkpoint(source.name)
-        if checkpoint is not None:
-            checkpoint_value = checkpoint.get(
-                "last_checkpoint_value"
-            )
+        checkpoint_value = self._load_checkpoint(source.name)
+        
 
-            if checkpoint_value is not None:
-                return checkpoint_value
+        if checkpoint_value is not None:
+            return checkpoint_value
 
         lookback_days = getattr(
             source,
@@ -362,144 +344,60 @@ class IngestionPipeline:
             run_time - timedelta(days=lookback_days)
         )
 
-    def _build_bronze_rows(
-        self,
-        source: TextSource,
-        raw_records: list[dict[str, Any]],
-        existing_hashes: set[str],
-        run_id: str,
-        run_time: datetime,
-    ) -> tuple[list[dict[str, Any]], set[str], int]:
-        bronze_rows: list[dict[str, Any]] = []
-        new_hashes: set[str] = set()
-        records_failed = 0
-
-        for record_index, raw_record in enumerate(raw_records):
-            try:
-                if not isinstance(raw_record, dict):
-                    raise TypeError(
-                        "Raw record must be a dictionary, "
-                        f"got {type(raw_record).__name__}"
-                    )
-
-                raw_hash = source.unique_id(raw_record)
-
-                if (
-                    raw_hash in existing_hashes
-                    or raw_hash in new_hashes
-                ):
-                    continue
-
-                bronze_rows.append(
-                    {
-                        "source": source.name,
-                        "run_id": run_id,
-                        "retrieved_at": run_time,
-                        "raw_record_hash": raw_hash,
-                        "raw": raw_record,
-                    }
-                )
-
-                new_hashes.add(raw_hash)
-
-            except Exception:
-                records_failed += 1
-
-                logger.warning(
-                    (
-                        "Skipping malformed raw record "
-                        "| source=%s | record_index=%s"
-                    ),
-                    source.name,
-                    record_index,
-                    exc_info=True,
-                )
-
-        return bronze_rows, new_hashes, records_failed
+   
 
     def _update_checkpoint(
         self,
-        source: TextSource,
+        source_name: str,
         run_id: str,
-        raw_records: list[dict[str, Any]],
+        records: list[BronzeRecord],
     ) -> None:
-        checkpoint_values: list[datetime] = []
-
-        for record_index, record in enumerate(raw_records):
-            try:
-                value = source.get_checkpoint_value(record)
-
-                if value is None:
-                    continue
-
-                if not isinstance(value, datetime):
-                    raise TypeError(
-                        "get_checkpoint_value() must return "
-                        f"datetime or None, got {type(value).__name__}"
-                    )
-
-                if value.tzinfo is None:
-                    raise ValueError(
-                        "Checkpoint datetime must be timezone-aware"
-                    )
-
-                checkpoint_values.append(
-                    value.astimezone(timezone.utc)
-                )
-
-            except Exception:
-                logger.warning(
-                    (
-                        "Skipping malformed checkpoint value "
-                        "| source=%s | record_index=%s"
-                    ),
-                    source.name,
-                    record_index,
-                    exc_info=True,
-                )
+        checkpoint_values = [
+            record.published_at.astimezone(timezone.utc)
+            for record in records
+            if record.published_at is not None
+        ]
 
         if not checkpoint_values:
             logger.info(
-                "No valid checkpoint values found | source=%s",
-                source.name,
+                "No checkpoint values found | source=%s",
+                source_name,
             )
             return
 
         last_checkpoint_value = max(checkpoint_values)
 
         self._save_checkpoint(
-            source_name=source.name,
+            source_name=source_name,
             checkpoint={
-                "source": source.name,
+                "source": source_name,
                 "last_successful_run_id": run_id,
-                "last_checkpoint_value": last_checkpoint_value
+                "last_checkpoint_value": last_checkpoint_value,
             },
         )
 
         logger.info(
             "Checkpoint updated | source=%s | value=%s",
-            source.name,
-            last_checkpoint_value,
+            source_name,
+            last_checkpoint_value.isoformat(),
         )
-
 
     def _load_checkpoint(
         self,
         source_name: str,
-    ) -> dict[str, Any] | None:
-        checkpoint_key = self.paths.checkpoint_key(source_name)
+    ) -> datetime | None:
+        key = self.paths.checkpoint_key(source_name)
 
-        if not self.storage.exists(checkpoint_key):
+        if not self.storage.exists(key):
             return None
 
-        checkpoint = self.storage.read_json(checkpoint_key)
+        checkpoint = self.storage.read_json(key)
 
-        if not isinstance(checkpoint, dict):
-            raise TypeError(
-                f"Checkpoint state for {source_name} must be a dictionary"
-            )
+        value = checkpoint.get("last_checkpoint_value")
+        if value is None:
+            return None
 
-        return checkpoint
+        return parse_utc_datetime(value)
 
     def _save_checkpoint(
         self,
@@ -575,6 +473,62 @@ class IngestionPipeline:
             )
 
         return value.astimezone(timezone.utc)
+    
+    @staticmethod
+    def _filter_new_records(
+        records: list[BronzeRecord],
+        existing_ids: set[str],
+    ) -> tuple[list[BronzeRecord], set[str]]:
+        new_records: list[BronzeRecord] = []
+        new_ids: set[str] = set()
+
+        for record in records:
+            record_id = record.record_id
+
+            if record_id in existing_ids or record_id in new_ids:
+                continue
+
+            new_records.append(record)
+            new_ids.add(record_id)
+
+        return new_records, new_ids
+
+    @staticmethod
+    def _validate_source_output(
+        source: TextSource,
+        records: list[BronzeRecord],
+    ) -> None:
+        if not isinstance(records, list):
+            raise TypeError("fetch_records() must return a list")
+
+        for index, record in enumerate(records):
+            if not isinstance(record, BronzeRecord):
+                raise TypeError(
+                    f"{source.name}.fetch_records() returned "
+                    f"{type(record).__name__} at index {index}; "
+                    "expected BronzeRecord"
+                )
+
+            if record.source != source.name:
+                raise ValueError(
+                    f"Record source {record.source!r} does not match "
+                    f"{source.name!r}"
+                )
+
+            if not record.record_id.strip():
+                raise ValueError("source_record_id cannot be empty")
+
+            if (
+                record.published_at is not None
+                and record.published_at.tzinfo is None
+            ):
+                raise ValueError("published_at must be timezone-aware")
+
+            if record.retrieved_at.tzinfo is None:
+                raise ValueError("retrieved_at must be timezone-aware")
+
+            if not isinstance(record.raw, dict):
+                raise TypeError("raw must be a dictionary")
 
     @staticmethod
     def _make_run_id(run_time: datetime) -> str:
@@ -595,7 +549,7 @@ class IngestionPipeline:
         if from_date is None or to_date is None:
             return
 
-        if to_date > from_date:
+        if from_date > to_date:
             raise ValueError(
                 f"from_date must not be after to_date: "
                 f"{from_date!r} > {to_date!r}"

@@ -7,7 +7,7 @@ from eml_transformer.ingestion.sources.gdelt import GDELTSource
 def test_filter_themes_requires_minimum_number_of_matches():
     source = GDELTSource(
         target_themes={"POWER", "GRID", "WEATHER"},
-        min_filter_matches=2,
+        min_theme_matches=2,
     )
 
     df = pd.DataFrame(
@@ -21,7 +21,7 @@ def test_filter_themes_requires_minimum_number_of_matches():
         }
     )
 
-    result = source._filter_themes(df, required_themes=2)
+    result, count = source._filter_themes(df)
 
     assert result.tolist() == [True, False, False, False]
 
@@ -29,6 +29,7 @@ def test_filter_themes_requires_minimum_number_of_matches():
 def test_filter_themes_is_case_insensitive_and_strips_whitespace():
     source = GDELTSource(
         target_themes={"POWER", "GRID"},
+        min_theme_matches=1
     )
 
     df = pd.DataFrame(
@@ -41,7 +42,7 @@ def test_filter_themes_is_case_insensitive_and_strips_whitespace():
         }
     )
 
-    result = source._filter_themes(df, required_themes=1)
+    result, count = source._filter_themes(df)
 
     assert result.tolist() == [True, True, False]
 
@@ -94,7 +95,7 @@ def test_filter_records_keeps_theme_and_location_match():
         target_themes={"POWER", "GRID"},
         target_locations={"US-IN"},
         target_organizations={"MISO"},
-        min_filter_matches=2,
+        min_theme_matches=2,
     )
 
     df = pd.DataFrame(
@@ -126,7 +127,7 @@ def test_filter_records_keeps_organization_match_even_without_theme_or_location(
         target_themes={"POWER", "GRID"},
         target_locations={"US-IN"},
         target_organizations={"MISO"},
-        min_filter_matches=2,
+        min_theme_matches=2,
     )
 
     df = pd.DataFrame(
@@ -158,7 +159,7 @@ def test_filter_records_rejects_location_match_without_enough_themes():
         target_themes={"POWER", "GRID"},
         target_locations={"US-IN"},
         target_organizations={"MISO"},
-        min_filter_matches=2,
+        min_theme_matches=2,
     )
 
     df = pd.DataFrame(

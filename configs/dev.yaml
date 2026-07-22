@@ -34,52 +34,11 @@ sources:
       fmt: text
       timeout: 30
 
-  newsapi:
-    enabled: false
-    embedding_input: records
-
-    ingestion:
-      api_key_env: NEWSAPI_KEY
-      query: >
-        (
-          "Midcontinent Independent System Operator"
-          OR ERCOT
-          OR PJM
-        )
-        AND
-        (
-          electricity
-          OR grid
-          OR "power market"
-          OR transmission
-        )
-      language: en
-      page_size: 100
 
   miso_notifications:
     enabled: true
     embedding_input: records
-
-  weather_alerts:
-    enabled: true
-    embedding_input: records
-
-    ingestion:
-      areas:
-        - IN
-        - IL
-        - MI
-        - OH
-        - KY
-        - WI
-        - MN
-        - IA
-        - MO
-        - AR
-        - LA
-        - MS
-        - ND
-        - SD
+  
 
   gdelt:
     enabled: true
@@ -170,6 +129,51 @@ sources:
       timeout: 30
       batch_size: 100
       max_concurrency: 5
+
+  # newsapi:
+  #   enabled: false
+  #   embedding_input: records
+
+  #   ingestion:
+  #     api_key_env: NEWSAPI_KEY
+  #     query: >
+  #       (
+  #         "Midcontinent Independent System Operator"
+  #         OR ERCOT
+  #         OR PJM
+  #       )
+  #       AND
+  #       (
+  #         electricity
+  #         OR grid
+  #         OR "power market"
+  #         OR transmission
+  #       )
+  #     language: en
+  #     page_size: 100
+
+  # weather_alerts:
+  #   enabled: False
+  #   embedding_input: records
+
+  #   ingestion:
+  #     areas:
+  #       - IN
+  #       - IL
+  #       - MI
+  #       - OH
+  #       - KY
+  #       - WI
+  #       - MN
+  #       - IA
+  #       - MO
+  #       - AR
+  #       - LA
+  #       - MS
+  #       - ND
+  #       - SD
+
+ 
 
 embeddings:
   provider: sentence_transformer

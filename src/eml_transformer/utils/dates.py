@@ -30,6 +30,9 @@ WEEKDAY_FIXES = {
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
+def format_utc_datetime(value: datetime) -> str:
+    """Serialize a datetime as an ISO 8601 UTC string."""
+    return parse_utc_datetime(value).isoformat()
 
 def parse_utc_datetime(value: str | date | datetime) -> datetime:
     """Convert supported input into a timezone-aware UTC datetime."""

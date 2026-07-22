@@ -8,9 +8,9 @@ from bs4 import BeautifulSoup
 
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
-from eml_transformer.ingestion.schema import TextRecord
-from eml_transformer.utils.dates import utc_now
-
+from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
+from eml_transformer.utils.dates import parse_utc_datetime, utc_now
+from eml_transformer.utils.stamping import stable_hash
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +39,10 @@ class MISONotificationSource(TextSource):
             "Referer": "https://www.misoenergy.org/markets-and-operations/notifications/",
         }
 
-    def native_id(self, raw_record: dict[str, Any]) -> str | None:
-        notification = raw_record.get("notification") or {}
-        return notification.get("id")
-
+    # ------------------------------------------------------------------
+    # Public pipeline interface
+    # ------------------------------------------------------------------
+    
     def fetch_records(
         self,
         from_date=None,
@@ -54,44 +54,58 @@ class MISONotificationSource(TextSource):
         Returns source-native MISO notification records ready to write to bronze.
         """
         raw_response = self._fetch_raw()
-        return self._parse_records(raw_response)
+        return self._build_bronze_records(raw_response)
 
     def standardize_record(
         self,
-        record: dict[str, Any],
+        record: BronzeRecord,
     ) -> TextRecord:
-        topic = record.get("topic")
-        notification = record.get("notification", {})
+        
+        raw = record.raw
+
+        topic = raw.get("topic")
+        notification = raw.get("notification", {})
 
         subject = notification.get("subject")
-        publish_date = notification.get("publishDate")
         body_html = notification.get("body") or ""
 
         body_text = self._html_to_text(body_html)
         url = self._build_url(notification)
 
-        return TextRecord(
-            record_id=self.unique_id(record),
+        categories = [
+            category
+            for category in [
+                "market_notice",
+                topic,
+            ]
+            if category
+        ]
 
-            source=self.name,
+        return TextRecord(
+            record_id=record.record_id,
+            source=record.source,
             source_type=self.source_type,
             title=subject,
             text=body_text,
-            published_at=publish_date,
-            retrieved_at=utc_now(),
+            published_at=record.published_at,
+            retrieved_at=record.retrieved_at,
             url=url,
             region="MISO",
-            categories=[
-                "market_notice",
-                topic,
-            ],
+            categories=categories,
             metadata={
                 "topic": topic,
                 "notification_id": notification.get("id"),
-                "publish_date": publish_date,
+                "publish_date": notification.get("publishDate"),
             },
-            raw=notification,
+            raw=raw,
         )
+
+
+    
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
 
     def _fetch_raw(self) -> Any:
         """
@@ -112,28 +126,62 @@ class MISONotificationSource(TextSource):
         response.raise_for_status()
         return response.json()
 
-    def _parse_records(
+    def _build_bronze_records(
         self,
         raw_response: Any,
-    ) -> list[dict[str, Any]]:
-        """
-        Convert grouped MISO notification response into source-native records.
-        """
-        records: list[dict[str, Any]] = []
+    ) -> list[BronzeRecord]:
+        """Convert the grouped API response into bronze records."""
+        records: list[BronzeRecord] = []
+        retrieved_at = utc_now()
 
         for group in raw_response:
             topic = group.get("topic")
-            notifications = group.get("notifications", [])
 
-            for notification in notifications:
+            for notification in group.get("notifications", []):
+                raw = {
+                    "topic": topic,
+                    "notification": notification,
+                }
+
                 records.append(
-                    {
-                        "topic": topic,
-                        "notification": notification,
-                    }
+                    BronzeRecord(
+                        source=self.name,
+                        record_id=self._make_record_id(notification),
+                        published_at=self._parse_published_at(notification),
+                        retrieved_at=retrieved_at,
+                        raw=raw,
+                    )
                 )
 
         return records
+
+
+    def _make_record_id(
+        self,
+        notification: dict[str, Any],
+    ) -> str:
+        """Return a stable, source-scoped identifier."""
+        fingerprint = stable_hash(
+            {
+                "subject": notification.get("subject"),
+                "publish_date": notification.get("publishDate"),
+                "permanent_link": notification.get("permanentLinkUrl"),
+            }
+        )
+
+        return f"miso:{fingerprint}"
+
+
+    def _parse_published_at(
+        self,
+        notification: dict[str, Any],
+    ):
+        value = notification.get("publishDateUnformatted")
+
+        if not value:
+            return None
+
+        return parse_utc_datetime(value)
 
     def _html_to_text(
         self,

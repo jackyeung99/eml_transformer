@@ -83,24 +83,59 @@ class TestFetchRecords:
         assert result == []
     
     @patch("eml_transformer.ingestion.sources.miso.requests.get")
-    def test_returns_parsed_records(self, mock_get, miso_source):
+    def test_returns_bronze_records(
+        self,
+        mock_get,
+        miso_source,
+    ):
+        first_notification = {
+            "subject": "First",
+            "publishDate": "2026-01-15T12:00:00Z",
+            "permanentLinkUrl": "/notifications/first",
+        }
+        second_notification = {
+            "subject": "Second",
+            "publishDate": "2026-01-16T12:00:00Z",
+            "permanentLinkUrl": "/notifications/second",
+        }
+
         mock_response = MagicMock()
         mock_response.json.return_value = [
             {
                 "topic": "Market Notice",
                 "notifications": [
-                    {"id": "1", "subject": "First"},
-                    {"id": "2", "subject": "Second"}
-                ]
+                    first_notification,
+                    second_notification,
+                ],
             }
         ]
         mock_get.return_value = mock_response
 
         result = miso_source.fetch_records()
+
         assert len(result) == 2
-        assert result[0]["topic"] == "Market Notice"
-        assert result[0]["notification"]["id"] == "1"
-        assert result[1]["notification"]["id"] == "2"
+
+        first, second = result
+
+        assert first.source == "miso_notifications"
+        assert first.record_id == miso_source._make_record_id(
+            first_notification
+        )
+        assert first.raw == {
+            "topic": "Market Notice",
+            "notification": first_notification,
+        }
+
+        assert second.source == "miso_notifications"
+        assert second.record_id == miso_source._make_record_id(
+            second_notification
+        )
+        assert second.raw == {
+            "topic": "Market Notice",
+            "notification": second_notification,
+        }
+
+        mock_response.raise_for_status.assert_called_once()
 
     @patch("eml_transformer.ingestion.sources.miso.requests.get")
     def test_flattens_multiple_topics(self, mock_get, miso_source):

@@ -13,9 +13,10 @@ import requests
 
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
-from eml_transformer.ingestion.schema import TextRecord
+from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
 from eml_transformer.utils.dates import parse_issued_at
 from eml_transformer.utils.stamping import stable_hash
+from eml_transformer.utils.dates import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ class IEMAFOSSource(TextSource):
         timeout: int = 30,
         session: requests.Session | None = None,
         sleep_fn: Callable[[float], None] = time.sleep,
-        request_delay: tuple[float, float] = (0.5, 1),
+        request_delay: tuple[float, float] = (0.25, 0.5),
     ) -> None:
         self.pil = pil.upper() if pil else None
         self.wfos = self._normalize_codes(wfos or self.DEFAULT_MISO_WFOS)
@@ -180,8 +181,6 @@ class IEMAFOSSource(TextSource):
     # ------------------------------------------------------------------
     # Public pipeline interface
     # ------------------------------------------------------------------
-    def native_id(self, raw_record: dict[str, Any]) -> str |None:
-        return raw_record.get("source_id")
     
     def fetch_records(
         self,
@@ -199,22 +198,46 @@ class IEMAFOSSource(TextSource):
         self,
         record: dict[str, Any],
     ) -> TextRecord:
-        self._validate_bronze_record(record)
-        return self._build_silver_record(record)
+        raw = record.raw
 
-    def get_checkpoint_value(
-        self,
-        record: dict[str, Any],
-    ) -> datetime | None:
-        """Return the record timestamp used by incremental ingestion."""
-        published_at = record.get("published_at")
-        if not published_at:
-            return None
+        pil = str(raw["pil"])
+        product_text = str(raw["raw_text"])
+        header = raw["header"]
 
-        return self._parse_iso_datetime(
-            str(published_at),
-            field_name="checkpoint",
+        product_type = pil[:3]
+        office = self._resolve_office(
+            pil=pil,
+            header=header,
         )
+        sections = self._parse_sections(product_text)
+
+        return TextRecord(
+            record_id=record.record_id,
+            source=record.source,
+            source_type=self.source_type,
+            title=self._build_title(
+                product_type=product_type,
+                office=office,
+                issued_at_text=str(raw["issued_at_text"]),
+            ),
+            text=self._build_text(
+                sections=sections,
+                product_text=product_text,
+            ),
+            published_at=record.published_at,
+            retrieved_at=record.retrieved_at,
+            url=self.base_url,
+            region=office[-3:],
+            categories=self._build_categories(product_type),
+            metadata=self._build_metadata(
+                record=raw,
+                product_type=product_type,
+                office=office,
+                sections=sections,
+            ),
+            raw=product_text,
+        )
+
 
     # ------------------------------------------------------------------
     # API access
@@ -313,8 +336,8 @@ class IEMAFOSSource(TextSource):
     def _build_bronze_records(
         self,
         responses: list[dict[str, str]],
-    ) -> list[dict[str, Any]]:
-        records: list[dict[str, Any]] = []
+    ) -> list[BronzeRecord]:
+        records: list[BronzeRecord] = []
 
         for response in responses:
             records.extend(
@@ -327,10 +350,12 @@ class IEMAFOSSource(TextSource):
     def _build_records_from_response(
         self,
         response: dict[str, str],
-    ) -> list[dict[str, Any]]:
+    ) -> list[BronzeRecord]:
         requested_pil = response["pil"]
         product_texts = self._split_products(response["response"])
-        records: list[dict[str, Any]] = []
+        records: list[BronzeRecord] = []
+
+        retrieved_at = utc_now()
 
         for product_number, product_text in enumerate(
             product_texts,
@@ -340,6 +365,7 @@ class IEMAFOSSource(TextSource):
                 record = self._build_bronze_record(
                     product_text=product_text,
                     requested_pil=requested_pil,
+                    retrieved_at=retrieved_at,
                 )
             except AFOSProductParseError as exc:
                 logger.warning(
@@ -354,31 +380,40 @@ class IEMAFOSSource(TextSource):
             records.append(record)
 
         return records
-    
+
+
     def _build_bronze_record(
         self,
         product_text: str,
         requested_pil: str,
-    ) -> dict[str, Any]:
+        retrieved_at: datetime,
+    ) -> BronzeRecord:
         header = self._parse_header(product_text)
+        pil = header.get("pil") or requested_pil
 
         issued_at_text, published_at = self._parse_product_timestamp(
             product_text=product_text,
-            pil=requested_pil,
+            pil=pil,
         )
 
-        return {
-            "source_id": self._make_source_record_id(
-                pil=requested_pil,
+        return BronzeRecord(
+            source=self.name,
+            record_id=self._make_source_record_id(
+                pil=pil,
                 header=header,
                 published_at=published_at,
             ),
-            "pil": requested_pil,
-            "header": header,
-            "issued_at_text": issued_at_text,
-            "published_at": published_at,
-            "raw_text": product_text,
-        }
+            published_at=published_at,
+            retrieved_at=retrieved_at,
+            raw={
+                "pil": pil,
+                "header": header,
+                "issued_at_text": issued_at_text,
+                "raw_text": product_text,
+            },
+        )
+
+
 
 
     def _split_products(self, raw: str) -> list[str]:
@@ -465,7 +500,7 @@ class IEMAFOSSource(TextSource):
         header: dict[str, str | None],
         published_at: str,
     ) -> str:
-        return stable_hash(
+        fingerprint = stable_hash(
             {
                 "source": self.name,
                 "pil": pil,
@@ -476,16 +511,18 @@ class IEMAFOSSource(TextSource):
             }
         )
 
+        return f"iem::{fingerprint}"
+
     @staticmethod
     def _deduplicate_records(
-        records: list[dict[str, Any]],
+        records: list[BronzeRecord],
     ) -> list[dict[str, Any]]:
         """Keep the first record for each source ID."""
         unique_records: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
 
         for record in records:
-            source_id = str(record["source_id"])
+            source_id = str(record.record_id)
 
             if source_id in seen_ids:
                 continue
@@ -498,47 +535,7 @@ class IEMAFOSSource(TextSource):
     # ------------------------------------------------------------------
     # Silver parsing
     # ------------------------------------------------------------------
-    def _build_silver_record(
-        self,
-        record: dict[str, Any],
-    ) -> TextRecord:
-        pil = str(record["pil"])
-        product_text = str(record["raw_text"])
-        header = record["header"]
-
-        product_type = pil[:3]
-        office = self._resolve_office(
-            pil=pil,
-            header=header,
-        )
-        sections = self._parse_sections(product_text)
-
-        return TextRecord(
-            record_id=self.unique_id(record),
-            source=self.name,
-            source_type=self.source_type,
-            title=self._build_title(
-                product_type=product_type,
-                office=office,
-                issued_at_text=str(record["issued_at_text"]),
-            ),
-            text=self._build_text(
-                sections=sections,
-                product_text=product_text,
-            ),
-            published_at=str(record["published_at"]),
-            retrieved_at=datetime.now(timezone.utc).isoformat(),
-            url=self.base_url,
-            region=office[-3:],
-            categories=self._build_categories(product_type),
-            metadata=self._build_metadata(
-                record=record,
-                product_type=product_type,
-                office=office,
-                sections=sections,
-            ),
-            raw=product_text,
-        )
+        
 
     def _parse_sections(self, text: str) -> dict[str, ParsedSection]:
         sections: dict[str, ParsedSection] = {}

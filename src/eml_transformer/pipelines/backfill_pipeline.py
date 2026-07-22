@@ -17,8 +17,8 @@ from eml_transformer.pipelines.ingestion_pipeline import (
 class BackfillResult:
     status: str
     source: str
-    start_date: str
-    end_date: str
+    from_date: datetime
+    to_date: datetime
     window_days: int
     windows_total: int
     windows_completed: int
@@ -213,8 +213,8 @@ class BackfillPipeline:
     def _summarize_backfill(
         self,
         source_name: str,
-        start_date: str,
-        end_date: str,
+        from_date: str,
+        to_date: str,
         window_days: int,
         windows_total: int,
         ingestion_results: list[Any],
@@ -224,8 +224,8 @@ class BackfillPipeline:
         return BackfillResult(
             status=status,
             source=source_name,
-            start_date=start_date,
-            end_date=end_date,
+            from_date=from_date,
+            to_date=to_date,
             window_days=window_days,
             windows_total=windows_total,
             windows_completed=len(ingestion_results),
@@ -265,11 +265,13 @@ class BackfillPipeline:
             raise ValueError("Backfill dates must be timezone-aware")
 
         if from_date > to_date:
-            raise ValueError("from_date must be before or equal to to_date")
+            raise ValueError(
+                "from_date must be before or equal to to_date"
+            )
 
         current = from_date
 
-        while current <= to_date:
+        while current < to_date:
             window_end = min(
                 current + timedelta(days=window_days),
                 to_date,

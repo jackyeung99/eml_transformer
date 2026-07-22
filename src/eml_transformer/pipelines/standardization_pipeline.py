@@ -11,7 +11,7 @@ from eml_transformer.ingestion.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
 from eml_transformer.text_processing.cleaning import clean_text
-from eml_transformer.ingestion.schema import TextRecord
+from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +112,11 @@ class StandardizationPipeline:
 
             bronze_rows = self.storage.read_jsonl(bronze_key)
 
+            bronze_records = [
+                BronzeRecord.from_dict(row)
+                for row in bronze_rows
+            ]
+
             logger.info(
                 "Loaded bronze records | source=%s | rows=%s",
                 source.name,
@@ -121,18 +126,15 @@ class StandardizationPipeline:
             records = []
             failed_records = 0
 
-            for row in bronze_rows:
+            for bronze_record in bronze_records:
                 try:
-                    raw_record = row["raw"]
-
                     text_record = source.standardize_record(
-                        raw_record,
+                        bronze_record,
                     )
 
                     text_record = self._clean_record(
                         text_record,
                     )
-    
 
                     records.append(text_record)
 
@@ -140,8 +142,9 @@ class StandardizationPipeline:
                     failed_records += 1
 
                     logger.exception(
-                        "Failed to standardize record | source=%s",
+                        "Failed to standardize record | source=%s | record_id=%s",
                         source.name,
+                        bronze_record.record_id,
                     )
 
 

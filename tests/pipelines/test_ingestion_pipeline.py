@@ -4,6 +4,8 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import Mock
+from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.utils.dates import parse_utc_datetime
 
 import pytest
 
@@ -27,13 +29,19 @@ FIXED_TIME = datetime(
 
 def make_record(
     record_id: str,
-    published_at: Any = "2026-07-14T12:00:00Z",
-) -> dict[str, Any]:
-    return {
-        "id": record_id,
-        "text": f"Record {record_id}",
-        "published_at": published_at,
-    }
+    published_at: datetime | None = None,
+    raw: dict[str, Any] | None = None,
+) -> BronzeRecord:
+    return BronzeRecord(
+        source="fake",
+        record_id=f"fake:{record_id}",
+        published_at=published_at,
+        retrieved_at=FIXED_TIME,
+        raw=raw if raw is not None else {
+            "id": record_id,
+            "text": f"Record {record_id}",
+        },
+    )
 
 
 @pytest.fixture
@@ -73,7 +81,6 @@ class TestIngestionResult:
             "fetched": 3,
             "written": 2,
             "skipped": 1,
-            "failed": 0,
         }
 
     def test_to_summary_includes_error(self):
@@ -211,12 +218,18 @@ class TestDateResolution:
 
         assert fake_source.fetch_calls == [
             {
-                "from_date": (
-                    "2026-07-01T12:00:00+00:00"
+                "from_date": datetime(
+                    2026,
+                    7,
+                    1,
+                    12,
+                    0,
+                    tzinfo=timezone.utc,
                 ),
-                "to_date": None,
+                "to_date": FIXED_TIME,
             }
         ]
+
 
     def test_incremental_run_uses_default_lookback(
         self,
@@ -230,14 +243,12 @@ class TestDateResolution:
             source_config={},
         )
 
-        expected_date = (
-            FIXED_TIME - timedelta(days=7)
-        ).date().isoformat()
-
         assert fake_source.fetch_calls == [
             {
-                "from_date": expected_date,
-                "to_date": None,
+                "from_date": (
+                    FIXED_TIME - timedelta(days=7)
+                ),
+                "to_date": FIXED_TIME,
             }
         ]
 
@@ -290,17 +301,17 @@ class TestDateResolution:
 
 
 class TestBronzeConstruction:
-    def test_writes_new_record_with_bronze_envelope(
+    def test_writes_serialized_bronze_record(
         self,
         pipeline,
         fake_source,
         storage,
         paths,
     ):
-        raw_record = make_record("one")
+        bronze_record = make_record("one")
 
         fake_source.update_mode = "snapshot"
-        fake_source.records = [raw_record]
+        fake_source.records = [bronze_record]
 
         result = pipeline.run_source(
             source_name="fake",
@@ -316,19 +327,22 @@ class TestBronzeConstruction:
         assert result.records_fetched == 1
         assert result.records_written == 1
         assert result.records_skipped == 0
-        assert result.records_failed == 0
 
-        assert len(rows) == 1
-
-        assert rows[0] == {
-            "source": fake_source.name,
-            "run_id": pipeline._make_run_id(
-                FIXED_TIME
-            ),
-            "retrieved_at": FIXED_TIME.isoformat(),
-            "raw_record_hash": fake_source.unique_id(raw_record),
-            "raw": raw_record,
-        }
+        assert rows == [
+            {
+                "source": bronze_record.source,
+                "record_id": bronze_record.record_id,
+                "published_at": (
+                    bronze_record.published_at.isoformat()
+                    if bronze_record.published_at is not None
+                    else None
+                ),
+                "retrieved_at": (
+                    bronze_record.retrieved_at.isoformat()
+                ),
+                "raw": bronze_record.raw,
+            }
+        ]
 
     def test_preserves_raw_record(
         self,
@@ -337,31 +351,43 @@ class TestBronzeConstruction:
         storage,
         paths,
     ):
-        raw_record = {
+        raw = {
             "id": "one",
             "nested": {
                 "values": [1, 2, 3],
             },
-            "published_at": (
-                "2026-07-14T12:00:00Z"
-            ),
+            "published_at": "2026-07-14T12:00:00Z",
         }
 
-        fake_source.update_mode = "snapshot"
-        fake_source.records = [raw_record]
+        bronze_record = make_record(
+            record_id="one",
+            published_at=datetime(
+                2026,
+                7,
+                14,
+                12,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            raw=raw,
+        )
 
-        pipeline.run_source("fake", {})
+        fake_source.update_mode = "snapshot"
+        fake_source.records = [bronze_record]
+
+        result = pipeline.run_source(
+            source_name="fake",
+            source_config={},
+        )
 
         bronze_key = paths.bronze_records(
             fake_source.name
         )
+        stored_record = storage.jsonl_data[bronze_key][0]
 
-        assert (
-            storage.jsonl_data[bronze_key][0][
-                "raw"
-            ]
-            == raw_record
-        )
+        assert result.status == "success"
+        assert result.records_written == 1
+        assert stored_record["raw"] == raw
 
     def test_empty_fetch_writes_nothing(
         self,
@@ -391,14 +417,14 @@ class TestBronzeConstruction:
             not in storage.json_data
         )
 
-    def test_malformed_record_returns_partial_success(
+    def test_invalid_source_output_fails_run(
         self,
         pipeline,
         fake_source,
     ):
         fake_source.records = [
             make_record("valid"),
-            "not-a-dictionary",
+            "not-a-bronze-record",
         ]
 
         result = pipeline.run_source(
@@ -408,11 +434,9 @@ class TestBronzeConstruction:
             to_date="2014-01-02",
         )
 
-        assert result.status == "partial_success"
-        assert result.records_fetched == 2
-        assert result.records_written == 1
-        assert result.records_skipped == 0
-        assert result.records_failed == 1
+        assert result.status == "failed"
+        assert result.records_written == 0
+        assert "BronzeRecord" in result.error
 
 
 class TestDeduplication:
@@ -423,12 +447,12 @@ class TestDeduplication:
         storage,
         paths,
     ):
-        raw_record = make_record("one")
+        bronze_record = make_record("one")
 
         fake_source.update_mode = "snapshot"
         fake_source.records = [
-            raw_record,
-            deepcopy(raw_record),
+            bronze_record,
+            deepcopy(bronze_record),
         ]
 
         result = pipeline.run_source(
@@ -455,18 +479,17 @@ class TestDeduplication:
         storage,
         paths,
     ):
-        raw_record = make_record("one")
-        raw_hash = fake_source.unique_id(raw_record)
+        bronze_record = make_record("one")
 
         fake_source.update_mode = "snapshot"
-        fake_source.records = [raw_record]
+        fake_source.records = [bronze_record]
 
         dedupe_key = paths.dedupe_state(
             fake_source.name
         )
 
         storage.json_data[dedupe_key] = {
-            "seen": [raw_hash],
+            "seen": [bronze_record.record_id],
             "count": 1,
         }
 
@@ -484,7 +507,7 @@ class TestDeduplication:
             not in storage.jsonl_data
         )
 
-    def test_new_hashes_are_added_to_existing_state(
+    def test_new_record_ids_are_added_to_existing_state(
         self,
         pipeline,
         fake_source,
@@ -494,18 +517,18 @@ class TestDeduplication:
         old_record = make_record("old")
         new_record = make_record("new")
 
-        old_hash = fake_source.unique_id(old_record)
-        new_hash = fake_source.unique_id(new_record)
-
         fake_source.update_mode = "snapshot"
-        fake_source.records = [old_record, new_record]
+        fake_source.records = [
+            old_record,
+            new_record,
+        ]
 
         dedupe_key = paths.dedupe_state(
             fake_source.name
         )
 
         storage.json_data[dedupe_key] = {
-            "seen": [old_hash],
+            "seen": [old_record.record_id],
             "count": 1,
         }
 
@@ -520,8 +543,8 @@ class TestDeduplication:
         assert result.records_skipped == 1
 
         assert set(state["seen"]) == {
-            old_hash,
-            new_hash,
+            old_record.record_id,
+            new_record.record_id,
         }
         assert state["count"] == 2
 
@@ -556,6 +579,8 @@ class TestDeduplication:
         )
 
         assert first_result.records_written == 2
+        assert first_result.records_skipped == 0
+
         assert second_result.records_written == 0
         assert second_result.records_skipped == 2
 
@@ -586,6 +611,7 @@ class TestDeduplication:
         )
 
         assert result.status == "failed"
+        assert result.error is not None
         assert "must be a list" in result.error
 
         assert (
@@ -605,11 +631,27 @@ class TestCheckpointBehavior:
         fake_source.records = [
             make_record(
                 "one",
-                "2026-07-14T08:00:00-04:00",
+                published_at=datetime(
+                    2026,
+                    7,
+                    14,
+                    8,
+                    0,
+                    tzinfo=timezone(
+                        timedelta(hours=-4)
+                    ),
+                ),
             ),
             make_record(
                 "two",
-                "2026-07-14T14:00:00Z",
+                published_at=datetime(
+                    2026,
+                    7,
+                    14,
+                    14,
+                    0,
+                    tzinfo=timezone.utc,
+                ),
             ),
         ]
 
@@ -621,20 +663,25 @@ class TestCheckpointBehavior:
         checkpoint_key = paths.checkpoint_key(
             fake_source.name
         )
-        checkpoint = storage.json_data[
-            checkpoint_key
-        ]
+        checkpoint = storage.json_data[checkpoint_key]
 
         assert result.status == "success"
-        assert checkpoint["source"] == (
-            fake_source.name
+        assert checkpoint["source"] == fake_source.name
+        assert (
+            checkpoint["last_successful_run_id"]
+            == result.run_id
         )
-        assert checkpoint[
-            "last_successful_run_id"
-        ] == result.run_id
-        assert checkpoint[
-            "last_checkpoint_value"
-        ] == "2026-07-14T14:00:00+00:00"
+        assert (
+            checkpoint["last_checkpoint_value"]
+            == datetime(
+                    2026,
+                    7,
+                    14,
+                    14,
+                    0,
+                    tzinfo=timezone.utc,
+                )
+        )
 
     @pytest.mark.parametrize(
         ("from_date", "to_date"),
@@ -653,9 +700,7 @@ class TestCheckpointBehavior:
         from_date,
         to_date,
     ):
-        fake_source.records = [
-            make_record("one")
-        ]
+        fake_source.records = [make_record("one")]
 
         pipeline.run_source(
             source_name="fake",
@@ -668,10 +713,7 @@ class TestCheckpointBehavior:
             fake_source.name
         )
 
-        assert (
-            checkpoint_key
-            not in storage.json_data
-        )
+        assert checkpoint_key not in storage.json_data
 
     def test_update_checkpoint_false_prevents_update(
         self,
@@ -680,9 +722,7 @@ class TestCheckpointBehavior:
         storage,
         paths,
     ):
-        fake_source.records = [
-            make_record("one")
-        ]
+        fake_source.records = [make_record("one")]
 
         pipeline.run_source(
             source_name="fake",
@@ -703,9 +743,7 @@ class TestCheckpointBehavior:
         paths,
     ):
         fake_source.update_mode = "snapshot"
-        fake_source.records = [
-            make_record("one")
-        ]
+        fake_source.records = [make_record("one")]
 
         pipeline.run_source(
             source_name="fake",
@@ -736,7 +774,7 @@ class TestCheckpointBehavior:
             not in storage.json_data
         )
 
-    def test_malformed_record_prevents_checkpoint_update(
+    def test_records_without_published_at_do_not_update_checkpoint(
         self,
         pipeline,
         fake_source,
@@ -744,69 +782,8 @@ class TestCheckpointBehavior:
         paths,
     ):
         fake_source.records = [
-            make_record("valid"),
-            "not-a-dictionary",
-        ]
-
-        result = pipeline.run_source(
-            source_name="fake",
-            source_config={},
-        )
-
-        assert result.status == "partial_success"
-
-        assert (
-            paths.checkpoint_key(fake_source.name)
-            not in storage.json_data
-        )
-
-    def test_invalid_checkpoint_value_is_skipped(
-        self,
-        pipeline,
-        fake_source,
-        storage,
-        paths,
-        caplog,
-    ):
-        fake_source.records = [
-            make_record("bad", 123),
-            make_record(
-                "good",
-                "2026-07-14T15:00:00Z",
-            ),
-        ]
-
-        with caplog.at_level(logging.WARNING):
-            pipeline.run_source(
-                source_name="fake",
-                source_config={},
-            )
-
-        checkpoint = storage.json_data[
-            paths.checkpoint_key(
-                fake_source.name
-            )
-        ]
-
-        assert checkpoint[
-            "last_checkpoint_value"
-        ] == "2026-07-14T15:00:00+00:00"
-
-        assert (
-            "Skipping malformed checkpoint value"
-            in caplog.text
-        )
-
-    def test_no_valid_checkpoint_does_not_write_checkpoint(
-        self,
-        pipeline,
-        fake_source,
-        storage,
-        paths,
-    ):
-        fake_source.records = [
-            make_record("one", None),
-            make_record("two", None),
+            make_record("one", published_at=None),
+            make_record("two", published_at=None),
         ]
 
         result = pipeline.run_source(
@@ -815,54 +792,13 @@ class TestCheckpointBehavior:
         )
 
         assert result.status == "success"
+        assert result.records_written == 2
         assert (
             paths.checkpoint_key(fake_source.name)
             not in storage.json_data
         )
 
-    def test_initialize_checkpoint_normalizes_to_utc(
-        self,
-        pipeline,
-        fake_source,
-        storage,
-        paths,
-    ):
-        pipeline.initialize_checkpoint(
-            source_name=fake_source.name,
-            checkpoint_value=(
-                "2026-07-14T08:00:00-04:00"
-            ),
-        )
-
-        checkpoint = storage.json_data[
-            paths.checkpoint_key(
-                fake_source.name
-            )
-        ]
-
-        assert checkpoint[
-            "last_checkpoint_value"
-        ] == "2026-07-14T12:00:00+00:00"
-
-        assert checkpoint[
-            "last_successful_run_id"
-        ] == "manual_init"
-
-    def test_initialize_checkpoint_rejects_naive_time(
-        self,
-        pipeline,
-        fake_source,
-    ):
-        with pytest.raises(
-            ValueError,
-            match="timezone-aware",
-        ):
-            pipeline.initialize_checkpoint(
-                source_name=fake_source.name,
-                checkpoint_value=(
-                    "2026-07-14T12:00:00"
-                ),
-            )
+    
 
 
 class TestFailureOrdering:
@@ -966,7 +902,17 @@ class TestFailureOrdering:
         paths,
     ):
         fake_source.records = [
-            make_record("one")
+            make_record(
+                "one",
+                published_at=datetime(
+                    2026,
+                    7,
+                    14,
+                    12,
+                    0,
+                    tzinfo=timezone.utc,
+                ),
+            )
         ]
 
         checkpoint_key = paths.checkpoint_key(

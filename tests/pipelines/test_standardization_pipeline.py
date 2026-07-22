@@ -1,9 +1,9 @@
 import pytest
 import pandas as pd
 from eml_transformer.pipelines.standardization_pipeline import StandardizationResult
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-from eml_transformer.ingestion.schema import TextRecord
+from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
 from eml_transformer.pipelines.standardization_pipeline import StandardizationPipeline
 
 
@@ -284,85 +284,229 @@ class TestRunSource:
         assert result.records_out == 0
         assert "No bronze data" in result.error
 
-    @patch("eml_transformer.pipelines.standardization_pipeline.create_source")
-    def test_successful_run(self, mock_create_source, storage, paths):
+    @patch(
+        "eml_transformer.pipelines.standardization_pipeline.create_source"
+    )
+    def test_successful_run(
+        self,
+        mock_create_source,
+        storage,
+        paths,
+    ):
+        timestamp = datetime(
+            2026,
+            7,
+            22,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        )
+
+        bronze_record = BronzeRecord(
+            source="gdelt",
+            record_id="gdelt:r1",
+            published_at=timestamp,
+            retrieved_at=timestamp,
+            raw={
+                "title": "Test Title",
+                "text": "Test Text",
+            },
+        )
+
+        text_record = TextRecord(
+            record_id="gdelt:r1",
+            source="gdelt",
+            source_type="news",
+            title="Test Title",
+            text="Test Text",
+            published_at=timestamp,
+            retrieved_at=timestamp,
+        )
+
         mock_source = MagicMock()
         mock_source.name = "gdelt"
-        now = datetime.now()
-        mock_source.standardize_record.return_value = TextRecord(
-            record_id="r1", source="gdelt", source_type="news", 
-            title="Test Title", text="Test Text", 
-            published_at=now, retrieved_at=now
-        )
+        mock_source.standardize_record.return_value = text_record
         mock_create_source.return_value = mock_source
 
-        bronze_key = paths.bronze_records(source="gdelt")
+        bronze_key = paths.bronze_records(
+            source="gdelt"
+        )
         storage.write_jsonl(
-            [{"raw": {"title": "Test Title", "text": "Test text"}}],
-            bronze_key
+            [bronze_record.to_dict()],
+            bronze_key,
         )
 
-        pipeline = StandardizationPipeline(storage=storage, paths=paths)
-        result = pipeline.run_source("gdelt", {})
+        pipeline = StandardizationPipeline(
+            storage=storage,
+            paths=paths,
+        )
+
+        result = pipeline.run_source(
+            source_name="gdelt",
+            source_config={},
+        )
 
         assert result.status == "success"
         assert result.records_read == 1
         assert result.records_out == 1
         assert result.records_failed == 0
-        silver_key = paths.silver_records(source="gdelt")
+
+        mock_source.standardize_record.assert_called_once_with(
+            bronze_record
+        )
+
+        silver_key = paths.silver_records(
+            source="gdelt"
+        )
         assert silver_key in storage.data
 
-    @patch("eml_transformer.pipelines.standardization_pipeline.create_source")
-    def test_counts_failed_records(self, mock_create_source, storage, paths):
+
+    @patch(
+        "eml_transformer.pipelines.standardization_pipeline.create_source"
+    )
+    def test_counts_failed_records(
+        self,
+        mock_create_source,
+        storage,
+        paths,
+    ):
+        timestamp = datetime(
+            2026,
+            7,
+            22,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        )
+
+        good_record = BronzeRecord(
+            source="gdelt",
+            record_id="gdelt:r1",
+            published_at=timestamp,
+            retrieved_at=timestamp,
+            raw={
+                "title": "Good",
+                "text": "Good text",
+            },
+        )
+        bad_record = BronzeRecord(
+            source="gdelt",
+            record_id="gdelt:r2",
+            published_at=timestamp,
+            retrieved_at=timestamp,
+            raw={
+                "title": "Bad",
+                "text": "Bad text",
+            },
+        )
+
         mock_source = MagicMock()
         mock_source.name = "gdelt"
-        now = datetime.now()
         mock_source.standardize_record.side_effect = [
             TextRecord(
-                record_id="r1", source="gdelt", source_type="news",
-                title="Good", text="Good text",
-                published_at=now, retrieved_at=now
+                record_id="gdelt:r1",
+                source="gdelt",
+                source_type="news",
+                title="Good",
+                text="Good text",
+                published_at=timestamp,
+                retrieved_at=timestamp,
             ),
-            Exception("Bad record")
+            Exception("Bad record"),
         ]
         mock_create_source.return_value = mock_source
 
-        bronze_key = paths.bronze_records(source="gdelt")
+        bronze_key = paths.bronze_records(
+            source="gdelt"
+        )
         storage.write_jsonl(
             [
-                {"raw": {"title": "Good", "text": "Good text"}},
-                {"raw": {"title": "Bad", "text": "Bad text"}}
+                good_record.to_dict(),
+                bad_record.to_dict(),
             ],
-            bronze_key
+            bronze_key,
         )
 
-        pipeline = StandardizationPipeline(storage=storage, paths=paths)
-        result = pipeline.run_source("gdelt", {})
+        pipeline = StandardizationPipeline(
+            storage=storage,
+            paths=paths,
+        )
+        result = pipeline.run_source(
+            source_name="gdelt",
+            source_config={},
+        )
 
         assert result.status == "success"
         assert result.records_read == 2
+        assert result.records_out == 1
         assert result.records_failed == 1
-
-    @patch("eml_transformer.pipelines.standardization_pipeline.create_source")
-    def test_no_parquet_written_when_all_fail(self, mock_create_source, storage, paths):
-        mock_source = MagicMock()
-        mock_source.name = "gdelt"
-        mock_source.standardize_record.side_effect = Exception("All bad")
-        mock_create_source.return_value = mock_source
-
-        bronze_key = paths.bronze_records(source="gdelt")
-        storage.write_jsonl(
-            [{"raw": {"title": "Bad", "text": "Bad text"}}],
-            bronze_key
+        assert (
+            mock_source.standardize_record.call_count
+            == 2
         )
 
-        pipeline = StandardizationPipeline(storage=storage, paths=paths)
-        result = pipeline.run_source("gdelt", {})
+
+    @patch(
+        "eml_transformer.pipelines.standardization_pipeline.create_source"
+    )
+    def test_no_parquet_written_when_all_fail(
+        self,
+        mock_create_source,
+        storage,
+        paths,
+    ):
+        timestamp = datetime(
+            2026,
+            7,
+            22,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        )
+
+        bronze_record = BronzeRecord(
+            source="gdelt",
+            record_id="gdelt:r1",
+            published_at=timestamp,
+            retrieved_at=timestamp,
+            raw={
+                "title": "Bad",
+                "text": "Bad text",
+            },
+        )
+
+        mock_source = MagicMock()
+        mock_source.name = "gdelt"
+        mock_source.standardize_record.side_effect = (
+            Exception("All bad")
+        )
+        mock_create_source.return_value = mock_source
+
+        bronze_key = paths.bronze_records(
+            source="gdelt"
+        )
+        storage.write_jsonl(
+            [bronze_record.to_dict()],
+            bronze_key,
+        )
+
+        pipeline = StandardizationPipeline(
+            storage=storage,
+            paths=paths,
+        )
+        result = pipeline.run_source(
+            source_name="gdelt",
+            source_config={},
+        )
 
         assert result.status == "success"
-        assert result.records_failed == 1
+        assert result.records_read == 1
         assert result.records_out == 0
-        silver_key = paths.silver_records(source="gdelt")
+        assert result.records_failed == 1
+
+        silver_key = paths.silver_records(
+            source="gdelt"
+        )
         assert silver_key not in storage.data
     
     @patch("eml_transformer.pipelines.standardization_pipeline.create_source")

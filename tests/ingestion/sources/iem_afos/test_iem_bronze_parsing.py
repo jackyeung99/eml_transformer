@@ -7,6 +7,8 @@ from eml_transformer.ingestion.sources.iem_afos import (
     AFOSProductParseError,
 )
 
+from eml_transformer.ingestion.schema import BronzeRecord
+
 
 def make_header(
     *,
@@ -23,21 +25,38 @@ def make_header(
     }
 
 
+AFOS_TIMESTAMP = datetime(
+    2026,
+    7,
+    9,
+    18,
+    38,
+    tzinfo=timezone.utc,
+)
+
+
 def make_bronze_record(
     *,
-    source_id: str = "record-1",
+    record_id: str = "iem_afos:record-1",
     pil: str = "AFDIND",
     raw_text: str = "AFOS product text",
-) -> dict[str, Any]:
-    return {
-        "source_id": source_id,
-        "pil": pil,
-        "raw_text": raw_text,
-        "header": make_header(pil=pil),
-        "issued_at_text": "238 PM EDT Thu Jul 9 2026",
-        "published_at": "2026-07-09T18:38:00+00:00",
-    }
-
+    published_at: datetime = AFOS_TIMESTAMP,
+    retrieved_at: datetime = AFOS_TIMESTAMP,
+) -> BronzeRecord:
+    return BronzeRecord(
+        source="iem_afos",
+        record_id=record_id,
+        published_at=published_at,
+        retrieved_at=retrieved_at,
+        raw={
+            "pil": pil,
+            "raw_text": raw_text,
+            "header": make_header(pil=pil),
+            "issued_at_text": (
+                "238 PM EDT Thu Jul 9 2026"
+            ),
+        },
+    )
 
 """
 Tests for minimal AFOS parsing performed before bronze storage.
@@ -575,14 +594,16 @@ class TestSourceId:
         first = iem_source._build_bronze_record(
             product_text="First version of the body",
             requested_pil="AFDIND",
+            retrieved_at=AFOS_TIMESTAMP
         )
         second = iem_source._build_bronze_record(
             product_text="Completely different body",
             requested_pil="AFDIND",
+            retrieved_at=AFOS_TIMESTAMP
         )
 
-        assert first["source_id"] == second["source_id"]
-        assert first["raw_text"] != second["raw_text"]
+        assert first.record_id == second.record_id
+        assert first.raw["raw_text"] != second.raw["raw_text"]
 
 # # Bronze record construction
 class TestBronzeConstruction:
@@ -603,33 +624,28 @@ class TestBronzeConstruction:
             "_parse_product_timestamp",
             lambda product_text, pil: (
                 "238 PM EDT Thu Jul 9 2026",
-                "2026-07-09T18:38:00+00:00",
+                AFOS_TIMESTAMP,
             ),
         )
 
         result = iem_source._build_bronze_record(
             product_text="AFOS product text",
             requested_pil="AFDIND",
+            retrieved_at=AFOS_TIMESTAMP
         )
 
-        assert set(result) == {
-            "source_id",
-            "pil",
-            "header",
-            "issued_at_text",
-            "published_at",
-            "raw_text",
+        assert isinstance(result, BronzeRecord)
+        assert result.source == "iem_afos"
+        assert result.record_id
+        assert result.published_at == AFOS_TIMESTAMP
+        assert result.retrieved_at.tzinfo is not None
+
+        assert result.raw == {
+            "pil": "AFDIND",
+            "header": header,
+            "issued_at_text": "238 PM EDT Thu Jul 9 2026",
+            "raw_text": "AFOS product text",
         }
-
-        assert result["source_id"]
-        assert result["pil"] == "AFDIND"
-        assert result["header"] == header
-        assert result["issued_at_text"] == (
-            "238 PM EDT Thu Jul 9 2026"
-        )
-        assert result["published_at"] == (
-            "2026-07-09T18:38:00+00:00"
-        )
 
     def test_build_bronze_record_preserves_raw_text(
         self,
@@ -662,9 +678,10 @@ class TestBronzeConstruction:
         result = iem_source._build_bronze_record(
             product_text=raw_text,
             requested_pil="AFDIND",
+            retrieved_at=AFOS_TIMESTAMP
         )
 
-        assert result["raw_text"] == raw_text
+        assert result.raw["raw_text"] == raw_text
 
     # def test_build_bronze_record_prefers_header_pil(
     #     self,
@@ -714,9 +731,10 @@ class TestBronzeConstruction:
         result = iem_source._build_bronze_record(
             product_text="AFOS product",
             requested_pil="AFDIND",
+            retrieved_at=AFOS_TIMESTAMP
         )
 
-        assert result["pil"] == "AFDIND"
+        assert result.raw["pil"] == "AFDIND"
 
     def test_build_bronze_record_raises_for_invalid_timestamp(
         self,
@@ -747,6 +765,7 @@ class TestBronzeConstruction:
             iem_source._build_bronze_record(
                 product_text="AFOS product",
                 requested_pil="AFDIND",
+                retrieved_at=AFOS_TIMESTAMP
             )
 
 # # Error isolation and deduplication
@@ -770,11 +789,13 @@ class TestErrorHandling:
         def fake_build_bronze_record(
             product_text,
             requested_pil,
+            retrieved_at,
         ):
             return make_bronze_record(
-                source_id=f"id-{product_text}",
+                record_id=f"id-{product_text}",
                 pil=requested_pil,
                 raw_text=product_text,
+                retrieved_at=retrieved_at,
             )
 
         monkeypatch.setattr(
@@ -791,7 +812,7 @@ class TestErrorHandling:
         )
 
         assert len(result) == 2
-        assert [record["raw_text"] for record in result] == [
+        assert [record.raw["raw_text"] for record in result] == [
             "first product",
             "second product",
         ]
@@ -814,6 +835,7 @@ class TestErrorHandling:
         def fake_build_bronze_record(
             product_text,
             requested_pil,
+            retrieved_at,
         ):
             if product_text == "malformed product":
                 raise AFOSProductParseError(
@@ -821,9 +843,10 @@ class TestErrorHandling:
                 )
 
             return make_bronze_record(
-                source_id=f"id-{product_text}",
+                record_id=f"id-{product_text}",
                 pil=requested_pil,
                 raw_text=product_text,
+                retrieved_at=retrieved_at,
             )
 
         monkeypatch.setattr(
@@ -840,7 +863,10 @@ class TestErrorHandling:
         )
 
         assert len(result) == 2
-        assert [record["raw_text"] for record in result] == [
+        assert [
+            record.raw["raw_text"]
+            for record in result
+        ] == [
             "valid product",
             "another valid product",
         ]
@@ -860,6 +886,7 @@ class TestErrorHandling:
         def fake_build_bronze_record(
             product_text,
             requested_pil,
+            retrieved_at,
         ):
             raise AFOSProductParseError(
                 "Missing product timestamp"
@@ -885,43 +912,7 @@ class TestErrorHandling:
         assert "product=1" in caplog.text
         assert "Missing product timestamp" in caplog.text
 
-    def test_build_bronze_records_combines_multiple_responses(
-        self,
-        iem_source,
-        monkeypatch,
-    ):
-        responses = [
-            {
-                "pil": "AFDIND",
-                "response": "AFD response",
-            },
-            {
-                "pil": "HWOIND",
-                "response": "HWO response",
-            },
-        ]
-
-        def fake_build_records_from_response(response):
-            return [
-                make_bronze_record(
-                    source_id=f"id-{response['pil']}",
-                    pil=response["pil"],
-                )
-            ]
-
-        monkeypatch.setattr(
-            iem_source,
-            "_build_records_from_response",
-            fake_build_records_from_response,
-        )
-
-        result = iem_source._build_bronze_records(responses)
-
-        assert len(result) == 2
-        assert [record["pil"] for record in result] == [
-            "AFDIND",
-            "HWOIND",
-        ]
+    
 
     def test_build_bronze_records_removes_duplicate_source_ids(
         self,
@@ -933,7 +924,7 @@ class TestErrorHandling:
         def fake_build_records_from_response(response):
             return [
                 make_bronze_record(
-                    source_id=duplicate_id,
+                    record_id=duplicate_id,
                     pil=response["pil"],
                 )
             ]
@@ -958,18 +949,18 @@ class TestErrorHandling:
         )
 
         assert len(result) == 1
-        assert result[0]["source_id"] == duplicate_id
+        assert result[0].record_id == duplicate_id
 
     def test_deduplicate_records_preserves_first_duplicate(
         self,
         iem_source,
     ):
         first = make_bronze_record(
-            source_id="duplicate-id",
+            record_id="duplicate-id",
             raw_text="first version",
         )
         second = make_bronze_record(
-            source_id="duplicate-id",
+            record_id="duplicate-id",
             raw_text="second version",
         )
 
@@ -978,4 +969,4 @@ class TestErrorHandling:
         )
 
         assert result == [first]
-        assert result[0]["raw_text"] == "first version"
+        assert result[0].raw['raw_text'] == "first version"

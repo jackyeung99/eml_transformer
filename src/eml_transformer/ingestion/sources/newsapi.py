@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import requests
 
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
-from eml_transformer.ingestion.schema import TextRecord
+from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
+from eml_transformer.utils.dates import parse_utc_datetime, utc_now
+from eml_transformer.utils.stamping import stable_hash
+
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,7 @@ class NewsAPISource(TextSource):
     """
     Ingest news articles from NewsAPI.
 
-    Supports normal incremental runs and date-windowed backfills.
+    Supports incremental ingestion and date-windowed backfills.
     """
 
     name = "newsapi"
@@ -35,18 +38,14 @@ class NewsAPISource(TextSource):
         sort_by: str = "relevancy",
         page_size: int = 100,
         max_pages: int = 1,
-        from_date: str | None = None,
-        to_date: str | None = None,
         timeout: int = 30,
-    ):
+    ) -> None:
         self.api_key = api_key
         self.query = query
         self.language = language
         self.sort_by = sort_by
         self.page_size = page_size
         self.max_pages = max_pages
-        self.from_date = from_date
-        self.to_date = to_date
         self.timeout = timeout
 
         self.base_url = "https://newsapi.org/v2/everything"
@@ -55,66 +54,64 @@ class NewsAPISource(TextSource):
             "User-Agent": "eml-transformer-research",
         }
 
-    def native_id(self, raw_record: dict[str, Any]) -> str | None:
-        return None
-    
-    def hash_payload(self, raw_record: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "url": raw_record.get("url"),
-            "publishedAt": raw_record.get("publishedAt"),
-            "title": raw_record.get("title")
-        }
+    # ------------------------------------------------------------------
+    # Public pipeline interface
+    # ------------------------------------------------------------------
 
     def fetch_records(
         self,
-        from_date: str | None = None,
-        to_date: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """
-        Public ingestion method.
-
-        Returns source-native NewsAPI article records ready to write to bronze.
-        """
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> list[BronzeRecord]:
+        """Fetch NewsAPI articles and construct bronze records."""
         raw_response = self._fetch_raw(
             from_date=from_date,
             to_date=to_date,
         )
 
-        return self._parse_records(raw_response)
+        return self._build_bronze_records(raw_response)
+
 
     def standardize_record(
         self,
-        article: dict[str, Any],
+        record: BronzeRecord,
     ) -> TextRecord:
+        """
+        Convert one bronze NewsAPI article into a silver TextRecord.
+        """
+        article = record.raw
         source_info = article.get("source") or {}
+
+        if not isinstance(source_info, dict):
+            source_info = {}
 
         title = article.get("title")
         description = article.get("description")
         content = article.get("content")
-        published_at = article.get("publishedAt")
-        url = article.get("url")
 
-        text = "\n".join(
-            part
-            for part in [title, description, content]
-            if part
+        text = "\n\n".join(
+            part.strip()
+            for part in [
+                title,
+                description,
+                content,
+            ]
+            if isinstance(part, str) and part.strip()
         )
 
-        source_name = source_info.get("name")
-
         return TextRecord(
-            record_id=self.unique_id(article),
-            source=self.name,
+            record_id=record.record_id,
+            source=record.source,
             source_type=self.source_type,
             title=title,
             text=text,
-            published_at=published_at,
-            retrieved_at=datetime.now(timezone.utc).isoformat(),
-            url=url,
+            published_at=record.published_at,
+            retrieved_at=record.retrieved_at,
+            url=article.get("url"),
             region=None,
             categories=["news"],
             metadata={
-                "news_source": source_name,
+                "news_source": source_info.get("name"),
                 "news_source_id": source_info.get("id"),
                 "author": article.get("author"),
                 "query": self.query,
@@ -124,16 +121,15 @@ class NewsAPISource(TextSource):
             raw=article,
         )
 
-    def get_checkpoint_value(
-        self,
-        raw_record: dict[str, Any],
-    ) -> str | None:
-        return raw_record.get("publishedAt")
+
+    # ------------------------------------------------------------------
+    # API access
+    # ------------------------------------------------------------------
 
     def _fetch_raw(
         self,
-        from_date: str | None = None,
-        to_date: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> dict[str, Any]:
         """
         Fetch all configured NewsAPI pages.
@@ -141,23 +137,30 @@ class NewsAPISource(TextSource):
         all_articles: list[dict[str, Any]] = []
         total_results: int | None = None
 
-        effective_from_date = from_date or self.from_date
-        effective_to_date = to_date or self.to_date
-
         for page in range(1, self.max_pages + 1):
             raw_page = self._fetch_page(
                 page=page,
-                from_date=effective_from_date,
-                to_date=effective_to_date,
+                from_date=from_date,
+                to_date=to_date,
             )
 
             if raw_page.get("status") != "ok":
-                raise RuntimeError(f"NewsAPI request failed: {raw_page}")
+                raise RuntimeError(
+                    f"NewsAPI request failed: {raw_page}"
+                )
 
             if total_results is None:
-                total_results = raw_page.get("totalResults")
+                value = raw_page.get("totalResults")
+
+                if isinstance(value, int):
+                    total_results = value
 
             articles = raw_page.get("articles", [])
+
+            if not isinstance(articles, list):
+                raise RuntimeError(
+                    "NewsAPI response field 'articles' must be a list"
+                )
 
             if not articles:
                 break
@@ -167,32 +170,23 @@ class NewsAPISource(TextSource):
             if len(articles) < self.page_size:
                 break
 
-            if total_results and len(all_articles) >= total_results:
+            if (
+                total_results is not None
+                and len(all_articles) >= total_results
+            ):
                 break
 
         return {
             "status": "ok",
             "totalResults": total_results or len(all_articles),
             "articles": all_articles,
-            "query": self.query,
-            "from": effective_from_date,
-            "to": effective_to_date,
         }
-
-    def _parse_records(
-        self,
-        raw_response: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        """
-        Extract article records from the raw NewsAPI response.
-        """
-        return raw_response.get("articles", [])
 
     def _fetch_page(
         self,
         page: int,
-        from_date: str | None = None,
-        to_date: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> dict[str, Any]:
         """
         Fetch one NewsAPI page.
@@ -206,11 +200,11 @@ class NewsAPISource(TextSource):
             "apiKey": self.api_key,
         }
 
-        if from_date:
-            params["from"] = from_date
+        if from_date is not None:
+            params["from"] = from_date.isoformat()
 
-        if to_date:
-            params["to"] = to_date
+        if to_date is not None:
+            params["to"] = to_date.isoformat()
 
         response = requests.get(
             self.base_url,
@@ -220,4 +214,100 @@ class NewsAPISource(TextSource):
         )
 
         response.raise_for_status()
-        return response.json()
+
+        payload = response.json()
+
+        if not isinstance(payload, dict):
+            raise RuntimeError(
+                "NewsAPI response must be a JSON object"
+            )
+
+        return payload
+
+    # ------------------------------------------------------------------
+    # Bronze construction
+    # ------------------------------------------------------------------
+    
+
+    
+    def _build_bronze_records(
+        self,
+        raw_response: dict[str, Any],
+    ) -> list[BronzeRecord]:
+        """Convert source-native NewsAPI articles into bronze records."""
+        articles = raw_response.get("articles", [])
+
+        if not isinstance(articles, list):
+            raise ValueError(
+                "NewsAPI response field 'articles' must be a list"
+            )
+
+        retrieved_at = utc_now()
+        records: list[BronzeRecord] = []
+        seen_ids: set[str] = set()
+
+        for article in articles:
+            if not isinstance(article, dict):
+                logger.warning(
+                    "Skipping NewsAPI article that is not a dictionary"
+                )
+                continue
+
+            try:
+                record = self._build_bronze_record(
+                    article=article,
+                    retrieved_at=retrieved_at,
+                )
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    "Skipping malformed NewsAPI article | error=%s",
+                    exc,
+                )
+                continue
+
+            if record.record_id in seen_ids:
+                continue
+
+            seen_ids.add(record.record_id)
+            records.append(record)
+
+        return records
+
+
+    def _build_bronze_record(
+        self,
+        article: dict[str, Any],
+        retrieved_at: datetime,
+    ) -> BronzeRecord:
+        """Construct one bronze record from a NewsAPI article."""
+        url = article.get("url")
+        published_at_raw = article.get("publishedAt")
+
+        if not isinstance(url, str) or not url.strip():
+            raise ValueError("NewsAPI article is missing its URL")
+
+        if (
+            not isinstance(published_at_raw, str)
+            or not published_at_raw.strip()
+        ):
+            raise ValueError(
+                f"NewsAPI article {url!r} is missing publishedAt"
+            )
+
+        normalized_url = url.strip()
+        published_at = parse_utc_datetime(published_at_raw)
+
+        fingerprint = stable_hash(
+            {
+                "url": normalized_url,
+            }
+        )
+
+        return BronzeRecord(
+            source=self.name,
+            record_id=f"{self.name}:{fingerprint}",
+            published_at=published_at,
+            retrieved_at=retrieved_at,
+            raw=article,
+        )
+    

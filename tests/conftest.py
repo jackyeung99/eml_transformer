@@ -207,23 +207,6 @@ def miso_source():
 
 
 @pytest.fixture
-def miso_make_raw_record():
-    def _make(**notification_overrides):
-        notification = {
-            "id": "notif-123",
-            "subject": "Market Notice",
-            "publishDate": "2026-01-15T12:00:00Z",
-            "body": "<p>Notification body</p>",
-            "permanentLinkUrl": "/markets/notice/123",
-        }
-        notification.update(notification_overrides)
-        return {
-            "topic": "Market Notice",
-            "notification": notification,
-        }
-    return _make
-
-@pytest.fixture
 def newsapi_source():
     return NewsAPISource(api_key="test-key", query="storm")
 

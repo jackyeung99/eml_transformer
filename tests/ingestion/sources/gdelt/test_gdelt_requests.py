@@ -78,12 +78,12 @@ class FakeResponse:
             raise requests.HTTPError(f"{self.status_code} error")
 
 
-def test_load_gkg_file_reads_zip_and_filters_records(monkeypatch):
+def test_fetch_file_reads_filters_and_adds_metadata(monkeypatch):
     source = GDELTSource(
         target_themes={"POWER", "GRID"},
         target_locations={"US-IN"},
         target_organizations={"MISO"},
-        min_filter_matches=2,
+        min_theme_matches=2,
     )
 
     zip_bytes = make_gkg_zip(
@@ -91,69 +91,86 @@ def test_load_gkg_file_reads_zip_and_filters_records(monkeypatch):
             make_gkg_row(
                 record_id="gdelt-1",
                 themes="POWER;GRID",
-                v2_locations="2#Indiana#US#IN#39#-86#IN",
+                v2_locations=(
+                    "2#Indiana#US#IN#39#-86#IN"
+                ),
             )
         ]
     )
 
     def fake_get(url, timeout):
         assert url == GDELT_URL
-        assert timeout == 60
+        assert timeout == source.timeout
         return FakeResponse(zip_bytes)
 
     monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
+        source._session,
+        "get",
         fake_get,
     )
 
-    result, total_records = source._load_gkg_file("20260101000000")
+    result, total_records = source._fetch_file(
+        "20260101000000"
+    )
 
     assert total_records == 1
     assert len(result) == 1
     assert result.iloc[0]["GKGRECORDID"] == "gdelt-1"
-    assert result.iloc[0]["GDELT_TIMESTAMP"] == "20260101000000"
+    assert (
+        result.iloc[0]["GDELT_TIMESTAMP"]
+        == "20260101000000"
+    )
     assert result.iloc[0]["GDELT_URL"] == GDELT_URL
 
 
-def test_load_gkg_file_counts_all_records_even_if_filtered(monkeypatch):
+def test_fetch_file_counts_rows_before_filtering(monkeypatch):
     source = GDELTSource(
         target_themes={"POWER"},
         target_locations={"US-IN"},
-        min_filter_matches=1,
+        min_theme_matches=1,
     )
 
-    rows = [
-        make_gkg_row(
-            record_id="keep-1",
-            themes="POWER",
-            v2_locations="2#Indiana#US#IN#39#-86#IN",
-        ),
-        make_gkg_row(
-            record_id="drop-1",
-            themes="SPORTS",
-            v2_locations="2#California#US#CA#36#-119#CA",
-        ),
-    ]
-
-    zip_bytes = make_gkg_zip(rows)
+    zip_bytes = make_gkg_zip(
+        [
+            make_gkg_row(
+                record_id="keep-1",
+                themes="POWER",
+                v2_locations=(
+                    "2#Indiana#US#IN#39#-86#IN"
+                ),
+            ),
+            make_gkg_row(
+                record_id="drop-1",
+                themes="SPORTS",
+                v2_locations=(
+                    "2#California#US#CA#36#-119#CA"
+                ),
+            ),
+        ]
+    )
 
     monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
+        source._session,
+        "get",
         lambda url, timeout: FakeResponse(zip_bytes),
     )
 
-    result, total_records = source._load_gkg_file("20260101000000")
+    result, total_records = source._fetch_file(
+        "20260101000000"
+    )
 
     assert total_records == 2
     assert len(result) == 1
     assert result.iloc[0]["GKGRECORDID"] == "keep-1"
 
 
-def test_load_gkg_file_returns_empty_dataframe_when_no_records_match(monkeypatch):
+def test_fetch_file_returns_empty_frame_when_nothing_matches(
+    monkeypatch,
+):
     source = GDELTSource(
         target_themes={"POWER"},
         target_locations={"US-IN"},
-        min_filter_matches=2,
+        min_theme_matches=2,
     )
 
     zip_bytes = make_gkg_zip(
@@ -161,146 +178,216 @@ def test_load_gkg_file_returns_empty_dataframe_when_no_records_match(monkeypatch
             make_gkg_row(
                 record_id="drop-1",
                 themes="SPORTS",
-                v2_locations="2#California#US#CA#36#-119#CA",
+                v2_locations=(
+                    "2#California#US#CA#36#-119#CA"
+                ),
             )
         ]
     )
 
     monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
+        source._session,
+        "get",
         lambda url, timeout: FakeResponse(zip_bytes),
     )
 
-    result, total_records = source._load_gkg_file("20260101000000")
+    result, total_records = source._fetch_file(
+        "20260101000000"
+    )
 
     assert total_records == 1
     assert result.empty
 
 
-def test_load_gkg_file_returns_none_when_download_raises(monkeypatch):
+def test_fetch_file_counts_rows_before_filtering(monkeypatch):
+    source = GDELTSource(
+        target_themes={"POWER"},
+        target_locations={"US-IN"},
+        min_theme_matches=1,
+    )
+
+    zip_bytes = make_gkg_zip(
+        [
+            make_gkg_row(
+                record_id="keep-1",
+                themes="POWER",
+                v2_locations=(
+                    "2#Indiana#US#IN#39#-86#IN"
+                ),
+            ),
+            make_gkg_row(
+                record_id="drop-1",
+                themes="SPORTS",
+                v2_locations=(
+                    "2#California#US#CA#36#-119#CA"
+                ),
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        source._session,
+        "get",
+        lambda url, timeout: FakeResponse(zip_bytes),
+    )
+
+    result, total_records = source._fetch_file(
+        "20260101000000"
+    )
+
+    assert total_records == 2
+    assert len(result) == 1
+    assert result.iloc[0]["GKGRECORDID"] == "keep-1"
+
+
+def test_fetch_file_returns_empty_frame_when_nothing_matches(
+    monkeypatch,
+):
+    source = GDELTSource(
+        target_themes={"POWER"},
+        target_locations={"US-IN"},
+        min_theme_matches=2,
+    )
+
+    zip_bytes = make_gkg_zip(
+        [
+            make_gkg_row(
+                record_id="drop-1",
+                themes="SPORTS",
+                v2_locations=(
+                    "2#California#US#CA#36#-119#CA"
+                ),
+            )
+        ]
+    )
+
+    monkeypatch.setattr(
+        source._session,
+        "get",
+        lambda url, timeout: FakeResponse(zip_bytes),
+    )
+
+    result, total_records = source._fetch_file(
+        "20260101000000"
+    )
+
+    assert total_records == 1
+    assert result.empty
+
+@pytest.mark.parametrize(
+    ("exception", "expected_type"),
+    [
+        (
+            requests.Timeout("request timed out"),
+            requests.Timeout,
+        ),
+        (
+            requests.ConnectionError(
+                "connection failed"
+            ),
+            requests.ConnectionError,
+        ),
+        (
+            RuntimeError("network failed"),
+            RuntimeError,
+        ),
+    ],
+)
+def test_fetch_file_propagates_download_errors(
+    monkeypatch,
+    exception,
+    expected_type,
+):
     source = GDELTSource()
 
     def fake_get(url, timeout):
-        raise RuntimeError("network failed")
+        raise exception
 
     monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
+        source._session,
+        "get",
         fake_get,
     )
 
-    result, total_records = source._load_gkg_file("20260101000000")
+    with pytest.raises(expected_type):
+        source._fetch_file("20260101000000")
 
-    assert result is None
-    assert total_records == 0
-
-
-def test_load_gkg_file_returns_none_on_404(monkeypatch):
-    source = GDELTSource()
-
-    monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
-        lambda url, timeout: FakeResponse(status_code=404),
-    )
-
-    result, total_records = source._load_gkg_file("20260101000000")
-
-    assert result is None
-    assert total_records == 0
+def test_read_gkg_archive_raises_for_corrupt_zip():
+    with pytest.raises(zipfile.BadZipFile):
+        GDELTSource._read_gkg_archive(
+            b"this is not a zip file"
+        )
 
 
-def test_load_gkg_file_returns_none_on_timeout(monkeypatch):
-    source = GDELTSource()
-
-    def fake_get(url, timeout):
-        raise requests.Timeout("request timed out")
-
-    monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
-        fake_get,
-    )
-
-    result, total_records = source._load_gkg_file("20260101000000")
-
-    assert result is None
-    assert total_records == 0
-
-
-def test_load_gkg_file_returns_none_on_connection_error(monkeypatch):
-    source = GDELTSource()
-
-    def fake_get(url, timeout):
-        raise requests.ConnectionError("connection failed")
-
-    monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
-        fake_get,
-    )
-
-    result, total_records = source._load_gkg_file("20260101000000")
-
-    assert result is None
-    assert total_records == 0
-
-
-def test_load_gkg_file_returns_none_on_corrupt_zip(monkeypatch):
-    source = GDELTSource()
-
-    monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
-        lambda url, timeout: FakeResponse(b"this is not a zip file"),
-    )
-
-    result, total_records = source._load_gkg_file("20260101000000")
-
-    assert result is None
-    assert total_records == 0
-
-
-def test_load_gkg_file_handles_empty_zip_file(monkeypatch):
-    source = GDELTSource()
-
+def test_read_gkg_archive_raises_for_empty_zip():
     buffer = BytesIO()
+
     with zipfile.ZipFile(buffer, "w"):
         pass
 
-    monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
-        lambda url, timeout: FakeResponse(buffer.getvalue()),
+    with pytest.raises(
+        ValueError,
+        match="contains no files",
+    ):
+        GDELTSource._read_gkg_archive(
+            buffer.getvalue()
+        )
+
+
+def test_read_gkg_archive_reads_rows():
+    content = make_gkg_zip(
+        [
+            make_gkg_row(record_id="gdelt-1"),
+            make_gkg_row(record_id="gdelt-2"),
+        ]
     )
 
-    result, total_records = source._load_gkg_file("20260101000000")
+    result = GDELTSource._read_gkg_archive(content)
 
-    assert result is None
-    assert total_records == 0
+    assert len(result) == 2
+    assert list(result.columns) == GKG_COLUMNS
+    assert result["GKGRECORDID"].tolist() == [
+        "gdelt-1",
+        "gdelt-2",
+    ]
 
 
-def test_load_gkg_file_handles_empty_gkg_content(monkeypatch):
-    source = GDELTSource()
+def test_read_gkg_archive_rejects_extra_columns():
+    row = make_gkg_row()
+    row.append("unexpected")
 
+    content = make_gkg_zip([row])
+
+    with pytest.raises(
+        ValueError,
+        match="more columns than expected",
+    ):
+        GDELTSource._read_gkg_archive(content)
+
+def test_read_gkg_archive_raises_for_empty_csv():
     buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w") as z:
-        z.writestr("test.gkg.csv", "")
 
-    monkeypatch.setattr(
-        "eml_transformer.ingestion.sources.gdelt.requests.get",
-        lambda url, timeout: FakeResponse(buffer.getvalue()),
-    )
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("test.gkg.csv", "")
 
-    result, total_records = source._load_gkg_file("20260101000000")
+    with pytest.raises(pd.errors.EmptyDataError):
+        GDELTSource._read_gkg_archive(
+            buffer.getvalue()
+        )
 
-    assert result is None or result.empty
-    assert total_records == 0
+def test_fetch_files_collects_successful_frames(
+    monkeypatch,
+):
+    source = GDELTSource(max_workers=2)
 
-
-def test_get_records_combines_loaded_files(monkeypatch):
-    source = GDELTSource()
-
-    def fake_load_gkg_file(timestamp):
+    def fake_fetch_file(timestamp):
         return (
             pd.DataFrame(
                 [
                     {
-                        "GKGRECORDID": f"record-{timestamp}",
+                        "GKGRECORDID": (
+                            f"record-{timestamp}"
+                        ),
                         "GDELT_TIMESTAMP": timestamp,
                     }
                 ]
@@ -308,139 +395,56 @@ def test_get_records_combines_loaded_files(monkeypatch):
             10,
         )
 
-    monkeypatch.setattr(source, "_load_gkg_file", fake_load_gkg_file)
+    monkeypatch.setattr(
+        source,
+        "_fetch_file",
+        fake_fetch_file,
+    )
 
-    result, total_records = source._get_records(
+    frames, total_records = source._fetch_files(
         [
             "20260101000000",
             "20260101001500",
         ]
     )
 
+    result = pd.concat(frames, ignore_index=True)
+
     assert total_records == 20
+    assert len(frames) == 2
     assert len(result) == 2
     assert set(result["GKGRECORDID"]) == {
         "record-20260101000000",
         "record-20260101001500",
     }
 
+def test_fetch_files_omits_empty_frames(
+    monkeypatch,
+):
+    source = GDELTSource(max_workers=2)
 
-def test_get_records_combines_multiple_rows_per_file(monkeypatch):
-    source = GDELTSource()
+    monkeypatch.setattr(
+        source,
+        "_fetch_file",
+        lambda timestamp: (pd.DataFrame(), 100),
+    )
 
-    def fake_load_gkg_file(timestamp):
-        return (
-            pd.DataFrame(
-                [
-                    {
-                        "GKGRECORDID": f"{timestamp}-1",
-                        "GDELT_TIMESTAMP": timestamp,
-                    },
-                    {
-                        "GKGRECORDID": f"{timestamp}-2",
-                        "GDELT_TIMESTAMP": timestamp,
-                    },
-                ]
-            ),
-            20,
-        )
-
-    monkeypatch.setattr(source, "_load_gkg_file", fake_load_gkg_file)
-
-    result, total_records = source._get_records(
+    frames, total_records = source._fetch_files(
         [
             "20260101000000",
             "20260101001500",
         ]
     )
 
-    assert total_records == 40
-    assert len(result) == 4
-    assert set(result["GKG_TIMESTAMP"] if "GKG_TIMESTAMP" in result.columns else result["GDELT_TIMESTAMP"]) == {
-        "20260101000000",
-        "20260101001500",
-    }
-
-
-def test_get_records_returns_empty_dataframe_when_all_files_empty(monkeypatch):
-    source = GDELTSource()
-
-    def fake_load_gkg_file(timestamp):
-        return pd.DataFrame(), 100
-
-    monkeypatch.setattr(source, "_load_gkg_file", fake_load_gkg_file)
-
-    result, total_records = source._get_records(
-        [
-            "20260101000000",
-            "20260101001500",
-        ]
-    )
-
+    assert frames == []
     assert total_records == 200
-    assert result.empty
 
+def test_fetch_files_continues_when_one_file_fails(
+    monkeypatch,
+):
+    source = GDELTSource(max_workers=3)
 
-def test_get_records_skips_none_results(monkeypatch):
-    source = GDELTSource()
-
-    def fake_load_gkg_file(timestamp):
-        return None, 0
-
-    monkeypatch.setattr(source, "_load_gkg_file", fake_load_gkg_file)
-
-    result, total_records = source._get_records(
-        [
-            "20260101000000",
-            "20260101001500",
-        ]
-    )
-
-    assert total_records == 0
-    assert result.empty
-
-
-def test_get_records_combines_successful_and_empty_files(monkeypatch):
-    source = GDELTSource()
-
-    def fake_load_gkg_file(timestamp):
-        if timestamp == "20260101001500":
-            return pd.DataFrame(), 50
-
-        return (
-            pd.DataFrame(
-                [
-                    {
-                        "GKGRECORDID": f"record-{timestamp}",
-                        "GDELT_TIMESTAMP": timestamp,
-                    }
-                ]
-            ),
-            100,
-        )
-
-    monkeypatch.setattr(source, "_load_gkg_file", fake_load_gkg_file)
-
-    result, total_records = source._get_records(
-        [
-            "20260101000000",
-            "20260101001500",
-            "20260101003000",
-        ]
-    )
-
-    assert total_records == 250
-    assert len(result) == 2
-    assert set(result["GKGRECORDID"]) == {
-        "record-20260101000000",
-        "record-20260101003000",
-    }
-
-
-def test_get_records_continues_when_one_file_raises(monkeypatch):
-    source = GDELTSource()
-
-    def fake_load_gkg_file(timestamp):
+    def fake_fetch_file(timestamp):
         if timestamp == "20260101001500":
             raise RuntimeError("download failed")
 
@@ -448,17 +452,22 @@ def test_get_records_continues_when_one_file_raises(monkeypatch):
             pd.DataFrame(
                 [
                     {
-                        "GKGRECORDID": f"record-{timestamp}",
-                        "GDELT_TIMESTAMP": timestamp,
+                        "GKGRECORDID": (
+                            f"record-{timestamp}"
+                        )
                     }
                 ]
             ),
             10,
         )
 
-    monkeypatch.setattr(source, "_load_gkg_file", fake_load_gkg_file)
+    monkeypatch.setattr(
+        source,
+        "_fetch_file",
+        fake_fetch_file,
+    )
 
-    result, total_records = source._get_records(
+    frames, total_records = source._fetch_files(
         [
             "20260101000000",
             "20260101001500",
@@ -466,36 +475,44 @@ def test_get_records_continues_when_one_file_raises(monkeypatch):
         ]
     )
 
+    result = pd.concat(frames, ignore_index=True)
+
     assert total_records == 20
-    assert len(result) == 2
-    assert "record-20260101001500" not in set(result["GKGRECORDID"])
+    assert len(frames) == 2
+    assert set(result["GKGRECORDID"]) == {
+        "record-20260101000000",
+        "record-20260101003000",
+    }
 
+def test_fetch_files_returns_empty_list_when_all_fail(
+    monkeypatch,
+):
+    source = GDELTSource(max_workers=2)
 
-def test_get_records_returns_empty_dataframe_when_all_files_fail(monkeypatch):
-    source = GDELTSource()
-
-    def fake_load_gkg_file(timestamp):
+    def fake_fetch_file(timestamp):
         raise RuntimeError("download failed")
 
-    monkeypatch.setattr(source, "_load_gkg_file", fake_load_gkg_file)
+    monkeypatch.setattr(
+        source,
+        "_fetch_file",
+        fake_fetch_file,
+    )
 
-    result, total_records = source._get_records(
+    frames, total_records = source._fetch_files(
         [
             "20260101000000",
             "20260101001500",
         ]
     )
 
+    assert frames == []
     assert total_records == 0
-    assert result.empty
-    assert list(result.columns) == GKG_COLUMNS
 
 
-def test_get_records_empty_timestamp_list_returns_empty_dataframe():
+def test_fetch_files_returns_early_for_no_timestamps():
     source = GDELTSource()
 
-    result, total_records = source._get_records([])
+    frames, total_records = source._fetch_files([])
 
+    assert frames == []
     assert total_records == 0
-    assert result.empty
-    assert list(result.columns) == GKG_COLUMNS
