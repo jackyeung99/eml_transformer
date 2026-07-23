@@ -120,6 +120,7 @@ class IngestionPipeline:
                 source_config=source_config,
             )
 
+            print(source.api_key)
             result_source_name = source.name
 
             self._validate_source(source)

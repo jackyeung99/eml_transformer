@@ -7,6 +7,8 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 from typing import Any
 
 import requests
@@ -14,11 +16,31 @@ import requests
 from eml_transformer.ingestion.base import TextSource
 from eml_transformer.ingestion.registry import register_source
 from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
-from eml_transformer.utils.dates import parse_issued_at
 from eml_transformer.utils.stamping import stable_hash
 from eml_transformer.utils.dates import utc_now
 
 logger = logging.getLogger(__name__)
+
+_AFOS_TZ_MAP = {
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "MST": "America/Denver",
+    "MDT": "America/Denver",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+}
+
+_AFOS_WEEKDAY_FIXES = {
+    "Fr": "Fri",
+    "Tu": "Tue",
+    "Th": "Thu",
+    "Sa": "Sat",
+    "Su": "Sun",
+    "Mo": "Mon",
+    "We": "Wed",
+}
 
 class AFOSProductParseError(ValueError):
     """Raised when an AFOS product cannot become a bronze record."""
@@ -196,7 +218,7 @@ class IEMAFOSSource(TextSource):
 
     def standardize_record(
         self,
-        record: dict[str, Any],
+        record: BronzeRecord,
     ) -> TextRecord:
         raw = record.raw
 
@@ -414,8 +436,6 @@ class IEMAFOSSource(TextSource):
         )
 
 
-
-
     def _split_products(self, raw: str) -> list[str]:
         text = self._normalize_newlines(raw)
         header_matches = list(self.HEADER_RE.finditer(text))
@@ -456,11 +476,9 @@ class IEMAFOSSource(TextSource):
         self,
         product_text: str,
         pil: str,
-    ) -> tuple[str, str]:
-        """Extract and convert the required product timestamp."""
-        timestamp_text = self._extract_product_timestamp_text(
-            product_text
-        )
+    ) -> tuple[str, datetime]:
+        """Extract and parse the product issuance timestamp."""
+        timestamp_text = self._extract_product_timestamp_text(product_text)
 
         if timestamp_text is None:
             raise AFOSProductParseError(
@@ -468,10 +486,7 @@ class IEMAFOSSource(TextSource):
             )
 
         try:
-            published_at = self._parse_timestamp_to_utc(
-                timestamp_text=timestamp_text,
-                field_name=f"published_at for PIL={pil}",
-            )
+            published_at = self._parse_issued_at(timestamp_text)
         except ValueError as exc:
             raise AFOSProductParseError(
                 f"Invalid product issuance timestamp for PIL={pil}: "
@@ -479,7 +494,6 @@ class IEMAFOSSource(TextSource):
             ) from exc
 
         return timestamp_text, published_at
-
 
     def _extract_product_timestamp_text(
         self,
@@ -493,6 +507,63 @@ class IEMAFOSSource(TextSource):
             return None
 
         return match.group("issued_at").strip()
+
+    def _parse_issued_at(self, text: str) -> datetime:
+        """Parse an AFOS issuance timestamp into a UTC datetime."""
+        cleaned = text.strip()
+
+        if not cleaned:
+            raise ValueError("Timestamp is empty")
+
+        if cleaned.lower().startswith("issued at "):
+            cleaned = cleaned[len("issued at "):].strip()
+
+        if cleaned.lower().startswith("issued by"):
+            raise ValueError("Text contains an issuer, not an issuance timestamp")
+
+        parts = cleaned.split()
+
+        if len(parts) < 5:
+            raise ValueError(f"Incomplete AFOS timestamp: {text!r}")
+
+        time_part = parts[0].zfill(4)
+        has_ampm = parts[1].upper() in {"AM", "PM"}
+
+        if has_ampm:
+            am_pm = parts[1].upper()
+            tz_abbr = parts[2].upper()
+            weekday = _AFOS_WEEKDAY_FIXES.get(parts[3], parts[3])
+            date_parts = parts[4:]
+
+            normalized = (
+                f"{time_part} {am_pm} "
+                f"{weekday} {' '.join(date_parts)}"
+            )
+            timestamp_format = "%I%M %p %a %b %d %Y"
+        else:
+            tz_abbr = parts[1].upper()
+            weekday = _AFOS_WEEKDAY_FIXES.get(parts[2], parts[2])
+            date_parts = parts[3:]
+
+            normalized = (
+                f"{time_part} "
+                f"{weekday} {' '.join(date_parts)}"
+            )
+            timestamp_format = "%H%M %a %b %d %Y"
+
+        timezone_name = _AFOS_TZ_MAP.get(tz_abbr)
+
+        if timezone_name is None:
+            raise ValueError(
+                f"Unsupported AFOS timezone abbreviation: {tz_abbr!r}"
+            )
+
+        parsed = datetime.strptime(normalized, timestamp_format)
+
+        return (
+            parsed.replace(tzinfo=ZoneInfo(timezone_name))
+            .astimezone(timezone.utc)
+        )
     
     def _make_source_record_id(
         self,
@@ -513,24 +584,6 @@ class IEMAFOSSource(TextSource):
 
         return f"iem::{fingerprint}"
 
-    @staticmethod
-    def _deduplicate_records(
-        records: list[BronzeRecord],
-    ) -> list[dict[str, Any]]:
-        """Keep the first record for each source ID."""
-        unique_records: list[dict[str, Any]] = []
-        seen_ids: set[str] = set()
-
-        for record in records:
-            source_id = str(record.record_id)
-
-            if source_id in seen_ids:
-                continue
-
-            seen_ids.add(source_id)
-            unique_records.append(record)
-
-        return unique_records
     
     # ------------------------------------------------------------------
     # Silver parsing
@@ -628,50 +681,7 @@ class IEMAFOSSource(TextSource):
     # Shared Utilities
     # ------------------------------------------------------------------
 
-
-    def _parse_timestamp_to_utc(
-        self,
-        timestamp_text: str,
-        field_name: str,
-    ) -> str:
-        """Convert an NWS timestamp to a UTC ISO string."""
-        try:
-            parsed_value = parse_issued_at(timestamp_text)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"Failed to parse {field_name}: {timestamp_text!r}"
-            ) from exc
-
-        if not isinstance(parsed_value, str) or not parsed_value:
-            raise ValueError(
-                f"Timestamp parser returned no value for {field_name}: "
-                f"{timestamp_text!r}"
-            )
-
-        parsed_datetime = self._parse_iso_datetime(
-            parsed_value,
-            field_name=field_name,
-        )
-
-        return parsed_datetime.isoformat()
-
-
-    @staticmethod
-    def _parse_iso_datetime(value: str, field_name: str) -> datetime:
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise ValueError(
-                f"Malformed ISO datetime for {field_name}: {value!r}"
-            ) from exc
-
-        if parsed.tzinfo is None:
-            raise ValueError(
-                f"Timezone-naive datetime for {field_name}: {value!r}"
-            )
-
-        return parsed.astimezone(timezone.utc)
-
+    
     @staticmethod
     def _normalize_codes(values: list[str]) -> list[str]:
         return [value.strip().upper() for value in values]

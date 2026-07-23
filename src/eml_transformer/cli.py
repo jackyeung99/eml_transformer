@@ -245,8 +245,8 @@ def backfill(
             pipeline.run_source(
                 source_name=source,
                 source_config=source_config,
-                start_date=start_date,
-                end_date=end_date,
+                from_date=from_date_utc,
+                to_date=to_date_utc,
                 window_days=window_days,
                 seed_checkpoint=init_checkpoint,
             )

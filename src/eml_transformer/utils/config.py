@@ -18,38 +18,51 @@ def load_config(
 
     return cfg
 
-
 def build_source_config(
     source: str,
     cfg: dict[str, Any],
 ) -> tuple[str, dict[str, Any]]:
+    """
+    Resolve API keys for each configured source stage.
+
+    Each source may contain separate configuration sections for stages such as
+    ingestion and standardization. A stage requiring an API key should define
+    `api_key_env`, whose value is the name of an environment variable containing
+    the key.
+
+    The resolved key is added to that stage's configuration as `api_key`, and
+    `api_key_env` is removed. The API key itself should never be stored directly
+    in the configuration file.
+    """
     sources_cfg = cfg.get("sources", {})
 
     if source not in sources_cfg:
-        valid = ", ".join(sources_cfg.keys())
-
+        valid = ", ".join(sources_cfg)
         raise ValueError(
             f"Unknown source: {source}. Available sources: {valid}"
         )
 
     source_cfg = dict(sources_cfg[source])
-
     source_cfg.pop("enabled", None)
 
-    api_key_env = source_cfg.pop(
-        "api_key_env",
-        None,
-    )
+    for component_name, component_config in source_cfg.items():
+        if not isinstance(component_config, dict):
+            continue
 
-    if api_key_env:
-        api_key = os.getenv(api_key_env)
+        component_config = dict(component_config)
+        api_key_env = component_config.pop("api_key_env", None)
 
-        if not api_key:
-            raise EnvironmentError(
-                f"Missing required environment variable: {api_key_env}"
-            )
+        if api_key_env:
+            api_key = os.getenv(api_key_env)
 
-        source_cfg["api_key"] = api_key
+            if not api_key:
+                raise EnvironmentError(
+                    f"Missing required environment variable: {api_key_env}"
+                )
+
+            component_config["api_key"] = api_key
+
+        source_cfg[component_name] = component_config
 
     return source, source_cfg
 

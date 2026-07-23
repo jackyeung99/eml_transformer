@@ -32,8 +32,8 @@ class BackfillResult:
         summary = {
             "source": self.source,
             "status": self.status,
-            "start": self.start_date,
-            "end": self.end_date,
+            "from": self.from_date,
+            "to": self.to_date,
             "windows": f"{self.windows_completed}/{self.windows_total}",
             "fetched": self.records_fetched,
             "written": self.records_written,

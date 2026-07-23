@@ -45,42 +45,42 @@ sources:
     embedding_input: articles
 
     ingestion:
-      min_filter_matches: 2
+      min_theme_matches: 2
       target_themes:
-        -NATURAL_DISASTER_EXTREME_WEATHER,
-        -NATURAL_DISASTER_SEVERE_WEATHER,
-        -NATURAL_DISASTER_FLOODING,
-        -NATURAL_DISASTER_HURRICANE,
-        -NATURAL_DISASTER_TORNADO,
-        -NATURAL_DISASTER_WILDFIRE,
-        -POWER_OUTAGE,
-        -MANMADE_DISASTER_POWER_OUTAGE,
-        -MANMADE_DISASTER_POWER_OUTAGES,
-        -MANMADE_DISASTER_WITHOUT_POWER,
-        -MANMADE_DISASTER_WITHOUT_ELECTRICITY,
-        -ECON_ELECTRICALGRID,
-        -ENV_WINDPOWER,
-        -WB_508_POWER_SYSTEMS,
-        -WB_527_HYDROPOWER,
-        -ENV_NUCLEARPOWER,
-        -WB_515_POWER_SECTOR_POLICY_AND_INSTITUTIONS,
-        -MANMADE_DISASTER_POWER_FAILURE,
-        -WB_511_COAL_FIRED_POWER,
-        -WB_1753_GAS_TO_POWER,
-        -WB_513_OIL_FIRED_POWER,
-        -MANMADE_DISASTER_RESTORE_POWER,
-        -NATURAL_DISASTER_POWERFUL_STORM,
-        -MANMADE_DISASTER_DOWNED_POWER_LINES,
-        -MANMADE_DISASTER_KNOCKED_OUT_POWER,
-        -WB_510_POWER_TRANSMISSION,
-        -WB_1703_POWER_DISTRIBUTION,
-        -ECON_NEWPOWERPLANT
-        -MANMADE_DISASTER_POWER_FAILURES,
-        -WB_526_RENEWABLE_ENERGY_POLICY_AND_REGULATION,
-        -WB_1757_ENERGY_FINANCE,
-        -WB_1033_SOLAR_POWER_LAW_AND_REGULATION,
-        -WB_1871_HYDROPOWER_LAW_AND_REGULATION,
-        -WB_1034_WIND_POWER_LAW_AND_REGULATION
+        - NATURAL_DISASTER_EXTREME_WEATHER
+        - NATURAL_DISASTER_SEVERE_WEATHER
+        - NATURAL_DISASTER_FLOODING
+        - NATURAL_DISASTER_HURRICANE
+        - NATURAL_DISASTER_TORNADO
+        - NATURAL_DISASTER_WILDFIRE
+        - POWER_OUTAGE
+        - MANMADE_DISASTER_POWER_OUTAGE
+        - MANMADE_DISASTER_POWER_OUTAGES
+        - MANMADE_DISASTER_WITHOUT_POWER
+        - MANMADE_DISASTER_WITHOUT_ELECTRICITY
+        - ECON_ELECTRICALGRID
+        - ENV_WINDPOWER
+        - WB_508_POWER_SYSTEMS
+        - WB_527_HYDROPOWER
+        - ENV_NUCLEARPOWER
+        - WB_515_POWER_SECTOR_POLICY_AND_INSTITUTIONS
+        - MANMADE_DISASTER_POWER_FAILURE
+        - WB_511_COAL_FIRED_POWER
+        - WB_1753_GAS_TO_POWER
+        - WB_513_OIL_FIRED_POWER
+        - MANMADE_DISASTER_RESTORE_POWER
+        - NATURAL_DISASTER_POWERFUL_STORM
+        - MANMADE_DISASTER_DOWNED_POWER_LINES
+        - MANMADE_DISASTER_KNOCKED_OUT_POWER
+        - WB_510_POWER_TRANSMISSION
+        - WB_1703_POWER_DISTRIBUTION
+        - ECON_NEWPOWERPLANT
+        - MANMADE_DISASTER_POWER_FAILURES
+        - WB_526_RENEWABLE_ENERGY_POLICY_AND_REGULATION
+        - WB_1757_ENERGY_FINANCE
+        - WB_1033_SOLAR_POWER_LAW_AND_REGULATION
+        - WB_1871_HYDROPOWER_LAW_AND_REGULATION
+        - WB_1034_WIND_POWER_LAW_AND_REGULATION
 
       target_organizations:
         - MISO
@@ -130,48 +130,48 @@ sources:
       batch_size: 100
       max_concurrency: 5
 
-  # newsapi:
-  #   enabled: false
-  #   embedding_input: records
+  newsapi:
+    enabled: True
+    embedding_input: records
 
-  #   ingestion:
-  #     api_key_env: NEWSAPI_KEY
-  #     query: >
-  #       (
-  #         "Midcontinent Independent System Operator"
-  #         OR ERCOT
-  #         OR PJM
-  #       )
-  #       AND
-  #       (
-  #         electricity
-  #         OR grid
-  #         OR "power market"
-  #         OR transmission
-  #       )
-  #     language: en
-  #     page_size: 100
+    ingestion:
+      api_key_env: NEWSAPI_KEY
+      query: >
+        (
+          "Midcontinent Independent System Operator"
+          OR ERCOT
+          OR PJM
+        )
+        AND
+        (
+          electricity
+          OR grid
+          OR "power market"
+          OR transmission
+        )
+      language: en
+      page_size: 100
 
-  # weather_alerts:
-  #   enabled: False
-  #   embedding_input: records
+  weather_alerts:
+    enabled: True
+    embedding_input: records
 
-  #   ingestion:
-  #     areas:
-  #       - IN
-  #       - IL
-  #       - MI
-  #       - OH
-  #       - KY
-  #       - WI
-  #       - MN
-  #       - IA
-  #       - MO
-  #       - AR
-  #       - LA
-  #       - MS
-  #       - ND
-  #       - SD
+    ingestion:
+      areas:
+        - IN
+        - IL
+        - MI
+        - OH
+        - KY
+        - WI
+        - MN
+        - IA
+        - MO
+        - AR
+        - LA
+        - MS
+        - ND
+        - SD
 
  
 

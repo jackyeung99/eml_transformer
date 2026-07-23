@@ -6,6 +6,7 @@ import pandas as pd
 from eml_transformer.ingestion.schema import (
     TextRecord,
     TEXT_RECORD_COLUMNS,
+    BronzeRecord
 )
 from eml_transformer.utils.stamping import stable_hash
 
@@ -34,6 +35,24 @@ class TextSource(ABC):
         pass
     
 
+    @staticmethod
+    def _deduplicate_records(
+        records: list[BronzeRecord],
+    ) -> list[BronzeRecord]:
+        """Keep the first record for each source ID."""
+        unique_records: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+
+        for record in records:
+            source_id = str(record.record_id)
+
+            if source_id in seen_ids:
+                continue
+
+            seen_ids.add(source_id)
+            unique_records.append(record)
+
+        return unique_records
 
 
 

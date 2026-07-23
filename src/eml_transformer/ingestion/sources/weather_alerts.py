@@ -306,21 +306,3 @@ class WeatherAlertSource(TextSource):
                 "feature": feature,
             },
         )
-
-    @staticmethod
-    def _deduplicate_records(
-        records: list[BronzeRecord],
-    ) -> list[BronzeRecord]:
-        """Remove alerts returned by multiple state queries."""
-
-        unique_records: list[BronzeRecord] = []
-        seen_ids: set[str] = set()
-
-        for record in records:
-            if record.record_id in seen_ids:
-                continue
-
-            seen_ids.add(record.record_id)
-            unique_records.append(record)
-
-        return unique_records

@@ -430,22 +430,6 @@ class GDELTSource(TextSource):
             for key, value in row.items()
         }
 
-    @staticmethod
-    def _deduplicate_records(
-        records: list[BronzeRecord],
-    ) -> list[BronzeRecord]:
-        unique_records: list[BronzeRecord] = []
-        seen_ids: set[str] = set()
-
-        for record in records:
-            if record.record_id in seen_ids:
-                continue
-
-            seen_ids.add(record.record_id)
-            unique_records.append(record)
-
-        return unique_records
-
     # ------------------------------------------------------------------
     # Filtering
     # ------------------------------------------------------------------
