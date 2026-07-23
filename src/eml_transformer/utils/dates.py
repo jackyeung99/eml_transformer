@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
+from dateutil.parser import isoparse
 
 
 DateLike = str | date | datetime
@@ -20,8 +21,7 @@ def parse_utc_datetime(value: str | date | datetime) -> datetime:
     elif isinstance(value, date):
         parsed = datetime.combine(value, time.min)
     else:
-        normalized = value.strip().replace("Z", "+00:00")
-        parsed = datetime.fromisoformat(normalized)
+        parsed = isoparse(value.strip())
 
     if parsed.tzinfo is None:
         # Existing naive values are interpreted as UTC.
@@ -30,4 +30,3 @@ def parse_utc_datetime(value: str | date | datetime) -> datetime:
         parsed = parsed.astimezone(timezone.utc)
 
     return parsed
-

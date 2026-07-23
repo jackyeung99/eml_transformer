@@ -267,8 +267,16 @@ class TestHeaderParsing:
 
         assert header == iem_source._empty_header()
 
-# Issuance timestamp parsing
-class TestTimestampParsing():
+from datetime import datetime, timezone
+
+import pytest
+
+from eml_transformer.ingestion.sources.iem_afos import (
+    AFOSProductParseError,
+)
+
+
+class TestTimestampParsing:
     @pytest.mark.parametrize(
         (
             "raw_text",
@@ -343,19 +351,25 @@ National Weather Service Chicago IL
         expected_text,
         expected_utc,
     ):
-        issued_at_text, published_at = iem_source._parse_product_timestamp(
-            product_text=raw_text.strip(),
-            pil=pil,
+        issued_at_text, published_at = (
+            iem_source._parse_product_timestamp(
+                product_text=raw_text.strip(),
+                pil=pil,
+            )
         )
 
         assert issued_at_text == expected_text
-        assert datetime.fromisoformat(published_at) == expected_utc
+        assert published_at == expected_utc
+        assert published_at.tzinfo is not None
+        assert published_at.utcoffset() == timezone.utc.utcoffset(
+            published_at
+        )
 
     @pytest.mark.parametrize(
         "newline",
         ["\n", "\r\n", "\r"],
     )
-    def test_parse_published_at_supports_newline_variations(
+    def test_parse_product_timestamp_supports_newline_variations(
         self,
         iem_source,
         newline,
@@ -370,13 +384,15 @@ National Weather Service Chicago IL
         ]
         text = newline.join(lines)
 
-        issued_at_text, published_at = iem_source._parse_product_timestamp(
-            product_text=text,
-            pil="AFDIND",
+        issued_at_text, published_at = (
+            iem_source._parse_product_timestamp(
+                product_text=text,
+                pil="AFDIND",
+            )
         )
 
         assert issued_at_text == "238 PM EDT Thu Jul 9 2026"
-        assert datetime.fromisoformat(published_at) == datetime(
+        assert published_at == datetime(
             2026,
             7,
             9,
@@ -385,48 +401,77 @@ National Weather Service Chicago IL
             tzinfo=timezone.utc,
         )
 
-    def test_extract_issued_text_returns_none_when_missing(
+    def test_extract_product_timestamp_text_returns_none_when_missing(
         self,
         iem_source,
     ):
         text = """
-    Area Forecast Discussion
-    National Weather Service Indianapolis IN
+Area Forecast Discussion
+National Weather Service Indianapolis IN
 
-    Forecast discussion without an issuance timestamp.
-    """.strip()
+Forecast discussion without an issuance timestamp.
+""".strip()
 
-        issued_at_text = iem_source._extract_product_timestamp_text(text)
+        issued_at_text = (
+            iem_source._extract_product_timestamp_text(text)
+        )
 
         assert issued_at_text is None
-
 
     @pytest.mark.parametrize(
         ("issued_at_text", "expected_utc"),
         [
             pytest.param(
                 "238 PM EDT Thu Jul 9 2026",
-                datetime(2026, 7, 9, 18, 38, tzinfo=timezone.utc),
+                datetime(
+                    2026,
+                    7,
+                    9,
+                    18,
+                    38,
+                    tzinfo=timezone.utc,
+                ),
                 id="eastern-daylight",
             ),
             pytest.param(
                 "238 PM EST Thu Jan 9 2025",
-                datetime(2025, 1, 9, 19, 38, tzinfo=timezone.utc),
+                datetime(
+                    2025,
+                    1,
+                    9,
+                    19,
+                    38,
+                    tzinfo=timezone.utc,
+                ),
                 id="eastern-standard",
             ),
             pytest.param(
                 "300 AM CDT Thu Jul 9 2026",
-                datetime(2026, 7, 9, 8, 0, tzinfo=timezone.utc),
+                datetime(
+                    2026,
+                    7,
+                    9,
+                    8,
+                    0,
+                    tzinfo=timezone.utc,
+                ),
                 id="central-daylight",
             ),
             pytest.param(
                 "300 AM CST Thu Jan 9 2025",
-                datetime(2025, 1, 9, 9, 0, tzinfo=timezone.utc),
+                datetime(
+                    2025,
+                    1,
+                    9,
+                    9,
+                    0,
+                    tzinfo=timezone.utc,
+                ),
                 id="central-standard",
             ),
         ],
     )
-    def test_parse_published_at_converts_to_utc(
+    def test_parse_product_timestamp_converts_to_utc(
         self,
         iem_source,
         issued_at_text,
@@ -437,18 +482,18 @@ National Weather Service Chicago IL
             "National Weather Service Test Office\n"
             f"{issued_at_text}\n"
         )
-        
-        extracted_text, published_at = iem_source._parse_product_timestamp(
-            product_text=text,
-            pil="AFDIND",
+
+        extracted_text, published_at = (
+            iem_source._parse_product_timestamp(
+                product_text=text,
+                pil="AFDIND",
+            )
         )
 
-      
         assert extracted_text == issued_at_text
-        assert datetime.fromisoformat(published_at) == expected_utc
+        assert published_at == expected_utc
 
-
-    def test_parse_published_at_raises_when_timestamp_missing(
+    def test_parse_product_timestamp_raises_when_timestamp_missing(
         self,
         iem_source,
     ):
@@ -460,14 +505,13 @@ National Weather Service Chicago IL
         )
 
         with pytest.raises(
-            ValueError,
-            match="Missing product issuance timestamp",
+            AFOSProductParseError,
+            match=r"Missing product issuance timestamp for PIL=AFDIND",
         ):
             iem_source._parse_product_timestamp(
                 product_text=text,
                 pil="AFDIND",
             )
-
 
     @pytest.mark.parametrize(
         "malformed_timestamp",
@@ -494,7 +538,7 @@ National Weather Service Chicago IL
             ),
         ],
     )
-    def test_parse_published_at_raises_when_timestamp_malformed(
+    def test_parse_product_timestamp_raises_when_timestamp_malformed(
         self,
         iem_source,
         malformed_timestamp,
@@ -505,7 +549,11 @@ National Weather Service Chicago IL
             f"{malformed_timestamp}\n"
         )
 
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            AFOSProductParseError,
+            match=r"(Invalid|Missing) product issuance timestamp "
+            r"for PIL=AFDIND",
+        ):
             iem_source._parse_product_timestamp(
                 product_text=text,
                 pil="AFDIND",

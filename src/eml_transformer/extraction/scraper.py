@@ -14,7 +14,7 @@ from playwright.async_api import (
 )
 
 from dateutil.parser import isoparse
-
+from eml_transformer.utils.dates import parse_utc_datetime, utc_now
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class HybridArticleScraper:
         session: aiohttp.ClientSession,
         url: str,
     ) -> dict[str, Any]:
-        retrieved_at = self._utc_now()
+        retrieved_at = utc_now()
 
         fetch_result = await self._fetch_with_aiohttp(session, url)
         fallback_used = False
@@ -209,7 +209,10 @@ class HybridArticleScraper:
                 error_message=str(exc),
             )
 
-    def _extract_published_at_with_bs4(self, html: str) -> str | None:
+    def _extract_published_at_with_bs4(
+        self,
+        html: str,
+    ) -> datetime | None:
         soup = BeautifulSoup(html, "html.parser")
 
         selectors = [
@@ -224,16 +227,33 @@ class HybridArticleScraper:
 
         for tag_name, attrs in selectors:
             tag = soup.find(tag_name, attrs=attrs)
-            if tag:
-                value = tag.get("content") or tag.get("datetime")
-                if self._is_precise_timestamp(value):
-                    return value.strip()
+
+            if not tag:
+                continue
+
+            value = tag.get("content") or tag.get("datetime")
+
+            if not self._is_precise_timestamp(value):
+                continue
+
+            try:
+                return parse_utc_datetime(value)
+            except (TypeError, ValueError, OverflowError):
+                continue
 
         time_tag = soup.find("time")
+
         if time_tag:
-            value = time_tag.get("datetime") or time_tag.get_text(strip=True)
+            value = (
+                time_tag.get("datetime")
+                or time_tag.get_text(strip=True)
+            )
+
             if self._is_precise_timestamp(value):
-                return value.strip()
+                try:
+                    return parse_utc_datetime(value)
+                except (TypeError, ValueError, OverflowError):
+                    pass
 
         return None
     
@@ -241,7 +261,7 @@ class HybridArticleScraper:
     def _build_result(
         self,
         url: str,
-        retrieved_at: str,
+        retrieved_at: datetime,
         fetch_result: dict[str, Any],
         fallback_used: bool,
         extracted: dict[str, Any] | None,
@@ -398,16 +418,12 @@ class HybridArticleScraper:
 
         value = value.strip()
 
-        # Avoid date-only values like "2026-06-24"
         if "T" not in value and ":" not in value:
             return False
 
         try:
-            parsed = isoparse(value)
-        except ValueError:
+            isoparse(value)
+        except (TypeError, ValueError):
             return False
 
-        return parsed.hour != 0 or parsed.minute != 0 or parsed.second != 0
-
-    def _utc_now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return True
