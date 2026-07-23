@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
-from matplotlib.pylab import record
 import pandas as pd
 from tqdm.auto import tqdm
 
