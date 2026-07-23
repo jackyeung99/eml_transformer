@@ -47,11 +47,11 @@ uv sync --extra embeddings
 uv sync --group notebook --extra embeddings
 ```
 
-Install the Playwright browser:
+<!-- Install the Playwright browser:
 
 ```bash
 uv run playwright install chromium
-```
+``` -->
 ---
 
 ## 4. Configure Environment Variables
