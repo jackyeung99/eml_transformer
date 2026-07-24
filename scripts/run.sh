@@ -3,32 +3,26 @@
 #SBATCH -A r01850
 #SBATCH --export=ALL
 #SBATCH --nodes=1
-#SBATCH -o logs/run_%J.txt
-#SBATCH -e logs/run_%J.err
-#SBATCH --gpus 1
+#SBATCH -o=logs/run_%j.txt
+#SBATCH -e=logs/run_%j.err
+#SBATCH --gpus=1
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=120G
-#SBATCH --time=20:00
+#SBATCH --time=20:00:00
 #SBATCH --mail-user=jayeun@iu.edu
 #SBATCH --mail-type=BEGIN,FAIL,END
-#SBATCH -p gpu
+#SBATCH --partition=gpu
 
-#Set up environment
-module load python/gpu/3.10.10
-export OMP_NUM_THREADS=10
+set -euo pipefail
 
-# Check GPUs allocated
-# nvidia-smi
+export OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK"
+export UV_CACHE_DIR=/N/project/eml_ai_forecasting/.uv-cache
 
-#Change directories
 cd /N/project/eml_ai_forecasting/eml_transformer
 
-
-# run
-python -m eml_transformer.cli run_all \
+uv run --frozen python -m eml_transformer.cli run_all \
     --config configs/dev.yaml
 
-mail -s "EML Transformer Job ${SLURM_JOB_ID} Results" ${mail-user} < logs/run_${SLURM_JOB_ID}.out
-
-# repeat every 12 hours
-sbatch --begin=now+12hour /N/project/eml_ai_forecasting/eml_transformer/scripts/run.sh 
+# Schedule the next run only if this run succeeded.
+sbatch --begin=now+12hours \
+    /N/project/eml_ai_forecasting/eml_transformer/scripts/run.sh

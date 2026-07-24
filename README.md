@@ -98,7 +98,7 @@ uv run eml_transformer standardize --source all
 Standardize a single source:
 
 ```bash
-eml_transformer standardize --source newsapi
+uv run eml_transformer standardize --source newsapi
 ```
 
 ---
@@ -118,7 +118,7 @@ uv run eml_transformer embed \
 Some api sources archive historical data. To back fill historical data run 
 
 ```bash
-uv run eml_transformer backfill   --source newsapi   --start-date 2026-04-20   --end-date 2026-05-20   --window-days 7
+uv run eml_transformer backfill   --source iem_afos   --from-date 2026-04-20   --to-date 2026-05-20   --window-days 7
 ```
 
 ** this command is limited to data sources with supports_backfill=True and is also rate limited depending on source 

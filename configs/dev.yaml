@@ -28,7 +28,6 @@ sources:
         - HWO
         - NPW
         - WSW
-        - LSR
         - SPS
       limit: 100
       fmt: text
