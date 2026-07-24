@@ -30,4 +30,5 @@ uv run --frozen python -u -m eml_transformer.cli backfill \
     --source gdelt \
     --from-date 2026-01-01 \
     --to-date 2026-06-20 \
-    --config configs/dev.yaml
+    --window-days 7 \
+    --config configs/dev.yaml 
