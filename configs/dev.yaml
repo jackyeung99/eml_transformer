@@ -131,6 +131,7 @@ sources:
       max_concurrency: 5
 
 
+  # Archived Sources 
   # DISABLED UNTIL INGESTION AND STANDARDICATION ARE SPLIT WITHIN EACH SOURCE
   newsapi:
     enabled: False
@@ -155,7 +156,7 @@ sources:
       page_size: 100
 
   weather_alerts:
-    enabled: True
+    enabled: False
     embedding_input: records
 
     ingestion:
