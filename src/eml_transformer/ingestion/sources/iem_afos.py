@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from typing import Any
+import json 
 
 import requests
 
@@ -129,14 +130,17 @@ class IEMAFOSSource(TextSource):
     )
 
     SECTION_RE = re.compile(
-        r"(?ms)^"
-        r"\.(?P<section>[A-Z0-9 /-]+?)"
-        r"(?:\s*\((?P<section_detail>.*?)\))?"
-        r"\.\.\."
-        r"(?P<content>.*?)"
-        r"(?=\n&&|\n\.[A-Z0-9 /-]+(?:\s*\(.*?\))?\.\.\.|\n\$\$|\Z)"
-    )
-
+            r"(?ms)^"
+            r"\.(?P<section>[A-Z0-9][A-Z0-9/-]*(?: [A-Z0-9][A-Z0-9/-]*)*)"
+            r"(?:\s+(?:"
+                r"\((?P<paren_detail>.*?)\)"
+                r"|"
+                r"/(?P<slash_detail>.*?)/"
+            r"))?"
+            r"\.\.\."
+            r"(?P<content>.*?)"
+            r"(?=\n&&|\n\.[A-Z0-9]|\n\$\$|\Z)"
+        )
     NWS_TIMESTAMP_LINE = (
         r"(?:Issued at\s+)?"
         r"\d{1,4}\s+"
@@ -244,13 +248,19 @@ class IEMAFOSSource(TextSource):
             ),
             text=self._build_text(
                 sections=sections,
-                product_text=product_text,
+                raw_text=product_text,
             ),
             published_at=record.published_at,
             retrieved_at=record.retrieved_at,
             url=self.base_url,
             region=office[-3:],
-            categories=self._build_categories(product_type),
+            categories=[
+                "weather",
+                "nws",
+                "iem",
+                "afos",
+                product_type.lower(),
+            ],
             metadata=self._build_metadata(
                 record=raw,
                 product_type=product_type,
@@ -368,7 +378,36 @@ class IEMAFOSSource(TextSource):
 
         return self._deduplicate_records(records)
 
+    def _build_metadata(
+        self,
+        record: dict[str, Any],
+        product_type: str,
+        office: str,
+        sections: dict[str, str],
+    ) -> dict[str, Any]:
+        """Build source-specific metadata for a standardized AFOS record."""
+        metadata = {
+            "product_type": product_type,
+            "office": office,
+            "pil": record.get("pil"),
+            "wmo": record.get("wmo"),
+            "wmo_header": record.get("wmo_header"),
+            "issued_code": record.get("issued_code"),
+            "raw_id": record.get("raw_id"),
+            "section_names": list(sections),
+            "section_count": len(sections),
+            "sections": [
+                section.to_dict()
+                for section in sections.values()
+            ]
+        }
 
+        return {
+            key: value
+            for key, value in metadata.items()
+            if value is not None
+        }
+    
     def _build_records_from_response(
         self,
         response: dict[str, str],
@@ -588,24 +627,48 @@ class IEMAFOSSource(TextSource):
     # ------------------------------------------------------------------
     # Silver parsing
     # ------------------------------------------------------------------
-        
-
-    def _parse_sections(self, text: str) -> dict[str, ParsedSection]:
+    
+    def _parse_sections(
+        self,
+        text: str,
+    ) -> dict[str, ParsedSection]:
+        """Extract and parse sections from an AFOS product."""
         sections: dict[str, ParsedSection] = {}
 
-        for match in self.SECTION_RE.finditer(self._normalize_newlines(text)):
-            name = self._normalize_section_name(match.group("section"))
-            detail = self._clean_optional_text(match.group("section_detail"))
+        normalized_text = self._normalize_newlines(text)
+
+        for match in self.SECTION_RE.finditer(normalized_text):
+            name = self._normalize_section_name(
+                match.group("section")
+            )
+            detail = self._clean_optional_text(
+                match.group("paren_detail")
+                or match.group("slash_detail")
+            )
             content, issued_at_text = self._clean_section_text(
                 match.group("content")
             )
+
+            published_at = None
+
+            if issued_at_text is not None:
+                try:
+                    published_at = self._parse_issued_at(issued_at_text)
+                except ValueError:
+                    logger.warning(
+                        "Unable to parse AFOS section timestamp",
+                        extra={
+                            "section": name,
+                            "issued_at_text": issued_at_text,
+                        },
+                    )
 
             sections[name] = ParsedSection(
                 name=name,
                 detail=detail,
                 text=content,
                 issued_at_text=issued_at_text,
-                published_at=self._try_parse_issued_at(issued_at_text),
+                published_at=published_at,
             )
 
         return sections
@@ -637,7 +700,7 @@ class IEMAFOSSource(TextSource):
 
         return raw_text.strip()
 
-
+    
 
     def _extract_section_issued_text(
         self,
@@ -665,7 +728,7 @@ class IEMAFOSSource(TextSource):
 
         raise ValueError(f"Could not determine office for PIL={pil}")
 
-    def _make_title(
+    def _build_title(
         self,
         product_type: str,
         office: str | None,
@@ -692,7 +755,13 @@ class IEMAFOSSource(TextSource):
 
     @staticmethod
     def _normalize_section_name(value: str) -> str:
-        return re.sub(r"\s+", " ", value).strip().upper()
+        normalized = re.sub(r"\s+", " ", value).strip().upper()
+
+        return re.sub(
+            r"^[A-Z]{3}\s+(?=WATCHES/WARNINGS/ADVISORIES$)",
+            "",
+            normalized,
+        )
 
     @staticmethod
     def _clean_optional_text(value: str | None) -> str | None:

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import json
 import requests
 
 from eml_transformer.ingestion.base import TextSource
@@ -193,7 +194,11 @@ class WeatherAlertSource(TextSource):
                 "expires_at": properties.get("expires"),
                 "ends_at": properties.get("ends"),
             },
-            raw=feature,
+            raw=json.dumps(
+            feature,
+            default=str,
+            ensure_ascii=False,
+        ),
         )
 
     # ------------------------------------------------------------------

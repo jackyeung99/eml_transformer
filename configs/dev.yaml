@@ -130,8 +130,10 @@ sources:
       batch_size: 100
       max_concurrency: 5
 
+
+  # DISABLED UNTIL INGESTION AND STANDARDICATION ARE SPLIT WITHIN EACH SOURCE
   newsapi:
-    enabled: True
+    enabled: False
     embedding_input: records
 
     ingestion:
