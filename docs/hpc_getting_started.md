@@ -80,3 +80,42 @@ scancel <job-id>
 ```
 
 Do not run compute-intensive work on the login node.
+
+
+# Running the Backfill
+
+Submit the backfill job and save its Slurm job ID:
+
+```bash
+JOB_ID=$(sbatch --parsable \
+    --export=ALL,SOURCE=gdelt,FROM_DATE=2021-01-01,TO_DATE=2026-01-01,WINDOW_DAYS=7 \
+    scripts/backfill.sh)
+
+echo "Submitted job: $JOB_ID"
+```
+
+Check the job status:
+
+```bash
+squeue -j "$JOB_ID"
+```
+
+Monitor the backfill log:
+
+```bash
+tail -F "logs/backfill_${JOB_ID}.log"
+```
+
+Press `Ctrl+C` to stop monitoring the log. This does not cancel the job.
+
+To cancel the job:
+
+```bash
+scancel "$JOB_ID"
+```
+
+Check the final result:
+
+```bash
+sacct -j "$JOB_ID" --format=JobID,State,Elapsed,ExitCode
+```

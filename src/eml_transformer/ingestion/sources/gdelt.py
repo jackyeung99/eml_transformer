@@ -169,7 +169,7 @@ class GDELTSource(TextSource):
             published_at=record.published_at,
             retrieved_at=record.retrieved_at,
             url=raw.get("DocumentIdentifier"),
-            region=locations[0] if locations else None,
+            region=locations,
             categories=themes,
             metadata={
                 "source_common_name": raw.get("SourceCommonName"),

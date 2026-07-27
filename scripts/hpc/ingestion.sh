@@ -19,7 +19,10 @@ export UV_CACHE_DIR=/N/project/eml_ai_forecasting/.uv-cache
 
 cd /N/project/eml_ai_forecasting/eml_transformer
 
-uv run --frozen python -m eml_transformer.cli run_all \
+uv run --frozen python -m eml_transformer.cli ingest \
+    --config configs/dev.yaml
+
+uv run --frozen python -m eml_transformer.cli standardize \
     --config configs/dev.yaml
 
 # Schedule the next run only if this run succeeded.
