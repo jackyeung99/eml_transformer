@@ -194,11 +194,11 @@ class WeatherAlertSource(TextSource):
                 "expires_at": properties.get("expires"),
                 "ends_at": properties.get("ends"),
             },
-            raw=json.dumps(
-            feature,
-            default=str,
-            ensure_ascii=False,
-        ),
+        #     raw=json.dumps(
+        #     feature,
+        #     default=str,
+        #     ensure_ascii=False,
+        # ),
         )
 
     # ------------------------------------------------------------------

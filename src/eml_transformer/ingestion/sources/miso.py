@@ -97,7 +97,7 @@ class MISONotificationSource(TextSource):
                 "notification_id": notification.get("id"),
                 "publish_date": notification.get("publishDate"),
             },
-            raw=raw,
+            # raw=raw,
         )
 
 

@@ -267,7 +267,7 @@ class IEMAFOSSource(TextSource):
                 office=office,
                 sections=sections,
             ),
-            raw=product_text,
+            # raw=product_text,
         )
 
 

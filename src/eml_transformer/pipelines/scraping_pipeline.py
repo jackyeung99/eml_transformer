@@ -10,7 +10,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 import eml_transformer.ingestion.sources  # noqa: F401
-from eml_transformer.extraction.scraper import (
+from eml_transformer.scraping.scraper import (
     ArticleScraperConfig,
     HybridArticleScraper,
 )

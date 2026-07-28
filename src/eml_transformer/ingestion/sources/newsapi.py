@@ -118,7 +118,7 @@ class NewsAPISource(TextSource):
                 "language": self.language,
                 "sort_by": self.sort_by,
             },
-            raw=article,
+            # raw=article,
         )
 
 

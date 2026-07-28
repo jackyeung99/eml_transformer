@@ -39,7 +39,7 @@ sources:
   
 
   gdelt:
-    enabled: False
+    enabled: True
     embedding_input: articles
 
     ingestion:

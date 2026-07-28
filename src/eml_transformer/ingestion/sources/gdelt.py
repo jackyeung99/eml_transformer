@@ -198,7 +198,7 @@ class GDELTSource(TextSource):
                     "match_count": raw.get("filter_match_count"),
                 },
             },
-            raw=raw,
+            # raw=raw,
         )
 
     # ------------------------------------------------------------------

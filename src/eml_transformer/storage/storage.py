@@ -104,13 +104,21 @@ class LocalStorage(Storage):
     # Parquet
     # =====================
     def read_parquet(self, key: str) -> pd.DataFrame:
-        return pd.read_parquet(self._path(key))
+        return pd.read_parquet(
+                self._path(key),
+                dtype_backend="pyarrow"
+                )
 
     def write_parquet(self, df: pd.DataFrame, key: str) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        df.to_parquet(tmp, index=True)
+        df.to_parquet(
+            path,
+            engine="pyarrow",
+            compression="zstd",
+            index=False,
+        )
         tmp.replace(path)
     
 
