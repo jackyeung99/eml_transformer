@@ -25,6 +25,7 @@ uv run --frozen python -m eml_transformer.cli ingest \
 uv run --frozen python -m eml_transformer.cli standardize \
     --config configs/dev.yaml
 
+
 # Schedule the next run only if this run succeeded.
 sbatch --begin=now+12hours \
     /N/project/eml_ai_forecasting/eml_transformer/scripts/run.sh

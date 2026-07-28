@@ -19,7 +19,8 @@ dependencies = [
     "tqdm",
     "trafilatura",
     "typer",
-    "dotenv"
+    "dotenv",
+    "polars>=1.43.1",
 ]
 
 [project.optional-dependencies]

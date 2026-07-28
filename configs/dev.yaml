@@ -12,7 +12,6 @@ sources:
   iem_afos:
     enabled: true
     embedding_input: records
-
     ingestion:
       pil: null
       wfos:
@@ -40,7 +39,7 @@ sources:
   
 
   gdelt:
-    enabled: true
+    enabled: False
     embedding_input: articles
 
     ingestion:

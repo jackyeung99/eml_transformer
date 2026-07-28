@@ -68,7 +68,7 @@ NEWSAPI_KEY=your_key_here
 List all available sources 
 
 ```bash
-eml_transformer sources
+uv run eml_transformer sources
 ```
 
 ## Ingestion
