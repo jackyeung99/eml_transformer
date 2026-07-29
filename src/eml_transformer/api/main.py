@@ -8,7 +8,7 @@ from eml_transformer.runtime import Runtime, build_runtime
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    config_path = Path("configs/dev.yaml")
+    config_path = Path("configs/aws.yaml")
     app.state.runtime = build_runtime(config_path)
     yield
 
