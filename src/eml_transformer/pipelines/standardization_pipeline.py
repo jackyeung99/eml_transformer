@@ -15,6 +15,8 @@ from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
 
 logger = logging.getLogger(__name__)
 
+from eml_transformer.utils.profiling import profile
+
 
 @dataclass
 class StandardizationResult:
@@ -70,6 +72,7 @@ class StandardizationPipeline:
 
         return results
 
+    @profile()
     def run_source(
         self,
         source_name: str,
@@ -110,42 +113,33 @@ class StandardizationPipeline:
                     error=f"No bronze data found for source: {source.name}",
                 )
 
-            bronze_rows = self.storage.read_jsonl(bronze_key)
-
-            bronze_records = [
-                BronzeRecord.from_dict(row)
-                for row in bronze_rows
-            ]
-
-            logger.info(
-                "Loaded bronze records | source=%s | rows=%s",
-                source.name,
-                len(bronze_rows),
-            )
+            
 
             records = []
+            records_read = 0
             failed_records = 0
 
-            for bronze_record in bronze_records:
+
+            for row in self.storage.iter_jsonl(bronze_key):
+                records_read += 1
+
                 try:
-                    text_record = source.standardize_record(
-                        bronze_record,
+                    bronze_record = BronzeRecord.from_dict(row)
+                    result = source.standardize_record(bronze_record)
+
+                    if result is None:
+                        continue
+
+                    standardized_records = (
+                        result if isinstance(result, list) else [result]
                     )
 
-                    text_record = self._clean_record(
-                        text_record,
-                    )
+                    for record in standardized_records:
+                        records.append(self._clean_record(record))
 
-                    records.append(text_record)
-
-                except Exception:
+                except Exception as exc:
                     failed_records += 1
 
-                    logger.exception(
-                        "Failed to standardize record | source=%s | record_id=%s",
-                        source.name,
-                        bronze_record.record_id,
-                    )
 
 
 
@@ -157,7 +151,7 @@ class StandardizationPipeline:
             logger.info(
                 "Standardized records | source=%s | input=%s | output=%s | failed=%s | duplicates_removed=%s",
                 source.name,
-                len(bronze_rows),
+                records_read,
                 len(df),
                 failed_records,
                 before_dedupe - len(df),
@@ -183,7 +177,7 @@ class StandardizationPipeline:
             return StandardizationResult(
                 status="success",
                 source=source.name,
-                records_read=len(bronze_rows),
+                records_read=records_read, 
                 records_out=len(df),
                 records_failed=failed_records,
                 bronze_key=bronze_key,
@@ -210,22 +204,15 @@ class StandardizationPipeline:
 
     def _records_to_dataframe(
         self,
-        records: list[Any],
+        records: list[TextRecord],
     ) -> pd.DataFrame:
         if not records:
             return pd.DataFrame()
 
-        rows = []
-
-        for record in records:
-            if hasattr(record, "model_dump"):
-                rows.append(record.model_dump())
-            elif hasattr(record, "dict"):
-                rows.append(record.dict())
-            else:
-                rows.append(record)
-
-        return pd.DataFrame(rows).sort_values(by=['published_at'])
+        return pd.DataFrame.from_records(
+            record.to_dict()
+            for record in records
+        )
 
     def _clean_record(
         self,

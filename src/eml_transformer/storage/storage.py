@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+from collections.abc import Iterator
+import pandas as pd
+import pyarrow.parquet as pq
+import s3fs
+
 import json
 import pickle
 import uuid
@@ -11,9 +16,6 @@ from eml_transformer.logging import get_logger
 
 logger = get_logger(__name__)
 
-
-import pandas as pd
-import pyarrow.parquet as pq
 
 
 class Storage:
@@ -109,16 +111,23 @@ class LocalStorage(Storage):
                 dtype_backend="pyarrow"
                 )
 
-    def write_parquet(self, df: pd.DataFrame, key: str) -> None:
+    def write_parquet(
+        self,
+        df: pd.DataFrame,
+        key: str,
+    ) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
+
         tmp = path.with_suffix(path.suffix + ".tmp")
+
         df.to_parquet(
-            path,
+            tmp,
             engine="pyarrow",
             compression="zstd",
             index=False,
         )
+
         tmp.replace(path)
     
 
@@ -185,6 +194,21 @@ class LocalStorage(Storage):
             for row in rows:
                 f.write(json.dumps(row, ensure_ascii=False))
                 f.write("\n")
+
+
+    def iter_jsonl(
+        self,
+        key: str,
+    ) -> Iterator[dict[str, Any]]:
+        path = self._path(key)
+
+        if not path.exists():
+            return
+
+        with path.open("rb") as file:
+            for line in file:
+                if line.strip():
+                    yield json.loads(line)
 
     def read_jsonl(
         self,

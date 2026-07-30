@@ -1,4 +1,6 @@
 from datetime import date, datetime, time, timezone
+
+UTC = timezone.utc
 from zoneinfo import ZoneInfo
 from dateutil.parser import isoparse
 
@@ -14,19 +16,23 @@ def format_utc_datetime(value: datetime) -> str:
     """Serialize a datetime as an ISO 8601 UTC string."""
     return parse_utc_datetime(value).isoformat()
 
+
+
 def parse_utc_datetime(value: str | date | datetime) -> datetime:
     """Convert supported input into a timezone-aware UTC datetime."""
     if isinstance(value, datetime):
         parsed = value
+
     elif isinstance(value, date):
-        parsed = datetime.combine(value, time.min)
+        return datetime.combine(value, time.min, tzinfo=UTC)
+
     else:
-        parsed = isoparse(value.strip())
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
 
     if parsed.tzinfo is None:
-        # Existing naive values are interpreted as UTC.
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    else:
-        parsed = parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
 
-    return parsed
+    if parsed.tzinfo is UTC:
+        return parsed
+
+    return parsed.astimezone(UTC)

@@ -57,23 +57,30 @@ class TextRecord:
     record_id: str
     source: str
     source_type: str
-
     title: str | None
     text: str
-
     published_at: datetime | None
     retrieved_at: datetime
-
     url: str | None = None
     region: str | None = None
     categories: list[str] = field(default_factory=list)
-
     metadata: dict[str, Any] = field(default_factory=dict)
-    # raw: dict[str, Any] = field(default_factory=dict)
-
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """Return a shallow dictionary suitable for silver storage."""
+        return {
+            "record_id": self.record_id,
+            "source": self.source,
+            "source_type": self.source_type,
+            "title": self.title,
+            "text": self.text,
+            "published_at": self.published_at,
+            "retrieved_at": self.retrieved_at,
+            "url": self.url,
+            "region": self.region,
+            "categories": self.categories,
+            "metadata": self.metadata,
+        }
 
 
 TEXT_RECORD_COLUMNS = [

@@ -2,18 +2,24 @@
 set of helper functions to clean textual data
 
 '''
-
-
 import re
 import unicodedata
 
 from bs4 import BeautifulSoup
 
 
+WHITESPACE_PATTERN = re.compile(r"\s+")
+HTML_TAG_PATTERN = re.compile(r"<[a-zA-Z!/][^>]*>")
+
+
 def strip_html(text: str) -> str:
-    return BeautifulSoup(text, "html.parser").get_text(
-        separator=" "
-    )
+    if not HTML_TAG_PATTERN.search(text):
+        return text
+
+    return BeautifulSoup(
+        text,
+        "html.parser",
+    ).get_text(separator=" ")
 
 
 def normalize_unicode(text: str) -> str:
@@ -21,13 +27,8 @@ def normalize_unicode(text: str) -> str:
 
 
 def normalize_whitespace(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    return WHITESPACE_PATTERN.sub(" ", text).strip()
 
-def remove_empty_lines(text: str) -> str:
-    lines = [line.strip() for line in text.splitlines()]
-    lines = [line for line in lines if line]
-
-    return "\n".join(lines)
 
 def truncate_text(
     text: str,
@@ -37,9 +38,11 @@ def truncate_text(
 
 
 def clean_text(text: str) -> str:
+    if not text:
+        return ""
+
     text = strip_html(text)
     text = normalize_unicode(text)
     text = normalize_whitespace(text)
-    text = truncate_text(text)
 
-    return text.strip()
+    return truncate_text(text)

@@ -235,7 +235,7 @@ class IEMAFOSSource(TextSource):
             pil=pil,
             header=header,
         )
-        sections = self._parse_sections(product_text)
+        # sections = self._parse_sections(product_text)
 
         return TextRecord(
             record_id=record.record_id,
@@ -247,7 +247,7 @@ class IEMAFOSSource(TextSource):
                 issued_at_text=str(raw["issued_at_text"]),
             ),
             text=self._build_text(
-                sections=sections,
+                # sections=sections,
                 raw_text=product_text,
             ),
             published_at=record.published_at,
@@ -265,7 +265,7 @@ class IEMAFOSSource(TextSource):
                 record=raw,
                 product_type=product_type,
                 office=office,
-                sections=sections,
+                # sections=sections,
             ),
             # raw=product_text,
         )
@@ -383,7 +383,7 @@ class IEMAFOSSource(TextSource):
         record: dict[str, Any],
         product_type: str,
         office: str,
-        sections: dict[str, str],
+        # sections: dict[str, str],
     ) -> dict[str, Any]:
         """Build source-specific metadata for a standardized AFOS record."""
         metadata = {
@@ -394,12 +394,12 @@ class IEMAFOSSource(TextSource):
             "wmo_header": record.get("wmo_header"),
             "issued_code": record.get("issued_code"),
             "raw_id": record.get("raw_id"),
-            "section_names": list(sections),
-            "section_count": len(sections),
-            "sections": [
-                section.to_dict()
-                for section in sections.values()
-            ]
+            # "section_names": list(sections),
+            # "section_count": len(sections),
+            # "sections": [
+            #     section.to_dict()
+            #     for section in sections.values()
+            # ]
         }
 
         return {
@@ -686,17 +686,17 @@ class IEMAFOSSource(TextSource):
 
     def _build_text(
         self,
-        sections: dict[str, ParsedSection],
+        # sections: dict[str, ParsedSection],
         raw_text: str,
     ) -> str:
-        preferred_text = [
-            sections[name].text
-            for name in self.PREFERRED_TEXT_SECTIONS
-            if name in sections and sections[name].text
-        ]
+        # preferred_text = [
+        #     sections[name].text
+        #     for name in self.PREFERRED_TEXT_SECTIONS
+        #     if name in sections and sections[name].text
+        # ]
 
-        if preferred_text:
-            return "\n\n".join(preferred_text)
+        # if preferred_text:
+        #     return "\n\n".join(preferred_text)
 
         return raw_text.strip()
 
