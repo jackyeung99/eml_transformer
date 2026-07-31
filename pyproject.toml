@@ -21,6 +21,8 @@ dependencies = [
     "typer",
     "dotenv",
     "polars>=1.43.1",
+    "fastapi[standard]>=0.140.13",
+    "s3fs>=2026.7.0",
 ]
 
 [project.optional-dependencies]
