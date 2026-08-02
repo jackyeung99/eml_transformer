@@ -1,10 +1,13 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 import json
+import time
 from fastapi import FastAPI, HTTPException, Query, Request
+import logging
 
 from eml_transformer.runtime import Runtime, build_runtime
 
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,27 +46,58 @@ def get_records(
 ):
     runtime = get_runtime(request)
 
+    logger.info(
+        "Records request started | source=%s limit=%s",
+        source,
+        limit,
+    )
+
     if source not in runtime.source_names:
         raise HTTPException(
             status_code=404,
             detail=f"Unknown source: {source}",
         )
 
-    # For your current unpartitioned layout:
-    # data/silver/source=<source>/records.parquet
     key = runtime.paths.silver_records(source=source)
 
+    logger.info(
+        "Reading Parquet | source=%s key=%s",
+        source,
+        key,
+    )
+
+    started_at = time.monotonic()
+
     try:
-        df = runtime.storage.read_parquet(
+        df = runtime.storage.read_parquet(key)
+    except FileNotFoundError:
+        logger.exception(
+            "Silver records not found | source=%s key=%s",
+            source,
             key,
         )
-    except FileNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"No Silver records found for source: {source}",
         )
+    except Exception as error:
+        logger.exception(
+            "Failed to read Silver records | source=%s key=%s",
+            source,
+            key,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read Silver records: {error}",
+        )
 
-    # Convert timestamps into JSON-compatible strings.
+    logger.info(
+        "Parquet read completed | source=%s rows=%s seconds=%.2f",
+        source,
+        len(df),
+        time.monotonic() - started_at,
+    )
+
     if "published_at" in df.columns:
         df["published_at"] = df["published_at"].astype(str)
 

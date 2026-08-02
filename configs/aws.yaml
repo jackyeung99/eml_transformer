@@ -1,7 +1,7 @@
 storage:
   backend: s3
-  bucket: eml_transformer
-  prefix: ""
+  bucket: eml-transformer
+  prefix: "data"
 
 sources:
   gdelt: {}
