@@ -7,12 +7,12 @@ import pandas as pd
 import typer
 from dotenv import load_dotenv
 
-from eml_transformer.ingestion.registry import available_sources
+from eml_transformer.sources.registry import available_sources
 from eml_transformer.logging import setup_logging
-from eml_transformer.pipelines.backfill_pipeline import BackfillPipeline
-from eml_transformer.pipelines.ingestion_pipeline import IngestionPipeline
-from eml_transformer.pipelines.standardization_pipeline import StandardizationPipeline
-from eml_transformer.pipelines.scraping_pipeline import ScrapingPipeline
+from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
+from eml_transformer.ingestion.orchestrator import IngestionPipeline
+from eml_transformer.standardization.orchestrator import StandardizationPipeline
+from eml_transformer.scraping.orchestrator import ScrapingPipeline
 from eml_transformer.runtime import build_runtime
 from eml_transformer.utils.dates import parse_utc_datetime
 
@@ -140,7 +140,7 @@ def embed(
     model_name: str | None = typer.Option(None, "--model", "-m"),
     config: str = typer.Option("configs/dev.yaml"),
 ):
-    from eml_transformer.pipelines.embedding_pipeline import EmbeddingPipeline
+    from eml_transformer.text_processing.embedding_pipeline import EmbeddingPipeline
 
     rt = build_runtime(config)
 
@@ -177,7 +177,7 @@ def embed(
 def run_all(
     config: str = typer.Option("configs/dev.yaml"),
 ):
-    from eml_transformer.pipelines.embedding_pipeline import EmbeddingPipeline
+    from eml_transformer.text_processing.embedding_pipeline import EmbeddingPipeline
 
     rt = build_runtime(config)
 
