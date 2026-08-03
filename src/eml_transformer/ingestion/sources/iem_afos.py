@@ -43,6 +43,22 @@ _AFOS_WEEKDAY_FIXES = {
     "We": "Wed",
 }
 
+# WFO -> the MISO LRZ its county warning area serves. For interior offices
+# this equals the office's own state; for border offices the office may sit
+# outside MISO but its CWA covers MISO load in the mapped zone.
+WFO_TO_LRZ: dict[str, int] = {
+    "MPX": 1, "DLH": 1, "FGF": 1, "ABR": 1, "FSD": 1, "BIS": 1,
+    "MKX": 2, "GRB": 2, "ARX": 2, "MQT": 2,
+    "DMX": 3, "DVN": 3,
+    "ILX": 4,
+    "LSX": 5, "SGF": 5, "EAX": 5,
+    "IND": 6, "IWX": 6, "LMK": 6, "PAH": 6,
+    "DTX": 7, "GRR": 7, "APX": 7,
+    "LZK": 8, "MEG": 8,
+    "LIX": 9, "LCH": 9, "SHV": 9, "JAN": 9,
+    "BMX": 10, "MOB": 10,
+}
+
 class AFOSProductParseError(ValueError):
     """Raised when an AFOS product cannot become a bronze record."""
 
@@ -389,6 +405,7 @@ class IEMAFOSSource(TextSource):
         metadata = {
             "product_type": product_type,
             "office": office,
+            "lrz": self._lrz_for_office(office[-3]),
             "pil": record.get("pil"),
             "wmo": record.get("wmo"),
             "wmo_header": record.get("wmo_header"),
@@ -739,7 +756,11 @@ class IEMAFOSSource(TextSource):
             for part in (product_type, office, issued_at_text)
             if part
         )
-
+    def _lrz_for_office(self, office: str) -> int | None:
+        lrz = WFO_TO_LRZ.get(office)
+        if not lrz:
+            logger.warning("No LRZ mapping for WFO office=%s", office)
+        return lrz
     # ------------------------------------------------------------------
     # Shared Utilities
     # ------------------------------------------------------------------
