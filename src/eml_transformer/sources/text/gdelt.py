@@ -64,7 +64,7 @@ class GDELTSource(DataSource):
     """
 
     name = "gdelt"
-    source_type = "api"
+    source_type = "text"
     update_mode = "incremental"
     supports_backfill = True
     default_lookback_days = 1

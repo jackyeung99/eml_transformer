@@ -1,58 +1,61 @@
-from abc import ABC, abstractmethod
-from typing import Any, Iterable
+from __future__ import annotations
 
-import pandas as pd
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any, Iterable
 
 from eml_transformer.schema.records import (
     StandardizedRecord,
     BronzeRecord
 )
-from eml_transformer.utils.stamping import stable_hash
 
-import hashlib
 
 class DataSource(ABC):
-    """
-    Base class for textual ingestion sources.
-    """
+    """Shared interface for text and numeric data sources."""
+
     name: str
-    source_type: str
-
-
-    @abstractmethod
-    def fetch_records(self) -> Iterable[BronzeRecord]:
-        '''
-        Retrieve raw records with light pre processing and store in bronze/
-        '''
-        pass
+    source_type: str          # "text" or "numeric"
+    # ingestion_method: str     # "api", "file", "scrape"
+    update_mode: str          # "snapshot" or "incremental"
+    supports_backfill: bool
+    default_lookback_days: int
 
     @abstractmethod
-    def standardize_record(self, record: dict[str, Any]) -> StandardizedRecord:
-        '''
-        format raw records into standardized Textrecord data class store in silver/
-        '''
-        pass
-    
+    def fetch_records(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> Iterable[BronzeRecord]:
+        """Retrieve raw records with minimal preprocessing."""
+        ...
+
+    @abstractmethod
+    def standardize_record(
+        self,
+        record: dict[str, Any],
+    ) -> StandardizedRecord:
+        """Convert one bronze raw payload into a silver record."""
+        ...
 
     @staticmethod
     def _deduplicate_records(
-        records: list[BronzeRecord],
+        records: Iterable[BronzeRecord],
     ) -> list[BronzeRecord]:
-        """Keep the first record for each source ID."""
-        unique_records: list[dict[str, Any]] = []
-        seen_ids: set[str] = set()
+        """Keep the first record for each source and record ID."""
+
+        unique_records: list[BronzeRecord] = []
+        seen_keys: set[tuple[str, str]] = set()
 
         for record in records:
-            source_id = str(record.record_id)
+            key = (record.source, str(record.record_id))
 
-            if source_id in seen_ids:
+            if key in seen_keys:
                 continue
 
-            seen_ids.add(source_id)
+            seen_keys.add(key)
             unique_records.append(record)
 
         return unique_records
-
 
 
 

@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from eml_transformer.sources.base import TextSource
 from eml_transformer.sources.registry import register_source
 from eml_transformer.schema.records import TextRecord
-from eml_transformer.sources.text.miso import MISONotificationSource
+from eml_transformer.sources.text.miso_notifications import MISONotificationSource
 from eml_transformer.utils.dates import utc_now
 from eml_transformer.utils.stamping import stable_hash
 

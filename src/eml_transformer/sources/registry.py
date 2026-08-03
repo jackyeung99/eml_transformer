@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Type
 
-from eml_transformer.sources.base import TextSource
+from eml_transformer.sources.base import DataSource
 
 
-_SOURCE_REGISTRY: dict[str, Type[TextSource]] = {}
+_SOURCE_REGISTRY: dict[str, Type[DataSource]] = {}
 
 
 def register_source(name: str):
@@ -26,7 +26,7 @@ def register_source(name: str):
     return decorator
 
 
-def create_source(name: str, **kwargs: Any) -> TextSource:
+def create_source(name: str, **kwargs: Any) -> DataSource:
     """
     Instantiate a registered source by name.
     """

@@ -10,14 +10,14 @@ import eml_transformer.sources  # noqa: F401
 from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
-from eml_transformer.sources.base import TextSource 
+from eml_transformer.sources.base import DataSource 
 from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.utils.dates import utc_now, parse_utc_datetime
 
 logger = logging.getLogger(__name__)
 
 
-SourceFactory = Callable[..., TextSource]
+SourceFactory = Callable[..., DataSource]
 Clock = Callable[[], datetime]
 
 
@@ -254,7 +254,7 @@ class IngestionPipeline:
         self,
         source_name: str,
         source_config: Mapping[str, Any],
-    ) -> TextSource:
+    ) -> DataSource:
         ingestion_config = source_config.get("ingestion", {})
 
         if not isinstance(ingestion_config, Mapping):
@@ -271,7 +271,7 @@ class IngestionPipeline:
 
     def _validate_source(
         self,
-        source: TextSource,
+        source: DataSource,
     ) -> None:
         if not source.name:
             raise ValueError("Source name must not be empty")
@@ -303,7 +303,7 @@ class IngestionPipeline:
     
     def _resolve_to_date(
         self,
-        source: TextSource,
+        source: DataSource,
         requested_to_date: datetime | None,
         run_time: datetime,
     ) -> datetime | None:
@@ -318,7 +318,7 @@ class IngestionPipeline:
 
     def _resolve_from_date(
         self,
-        source: TextSource,
+        source: DataSource,
         requested_from_date: datetime | None,
         run_time: datetime,
     ) -> datetime | None:

@@ -92,7 +92,7 @@ class TextRecord:
 class NumericRecord:
     record_id: str
     source: str
-    source_type: str
+    # source_type: str
     observed_at: datetime
     variable: str
     value: float
@@ -105,7 +105,7 @@ class NumericRecord:
         return {
             "record_id": self.record_id,
             "source": self.source,
-            "source_type": self.source_type,
+            # "source_type": self.source_type,
             "observed_at": self.observed_at,
             "variable": self.variable,
             "value": self.value,

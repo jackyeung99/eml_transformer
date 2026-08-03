@@ -72,7 +72,7 @@ class IEMAFOSSource(DataSource):
     """
 
     name = "iem_afos"
-    source_type = "api"
+    source_type = "text"
     update_mode = "incremental"
     supports_backfill = True
     default_lookback_days = 3

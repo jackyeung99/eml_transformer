@@ -43,7 +43,7 @@ class WeatherAlertSource(DataSource):
     """Ingest active alerts from the National Weather Service API."""
 
     name = "weather_alerts"
-    source_type = "api"
+    source_type = "text"
     update_mode = "snapshot"
     supports_backfill = False
 

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 @register_source("miso_notifications")
 class MISONotificationSource(DataSource):
     name = "miso_notifications"
-    source_type = "api"
+    source_type = "text"
     update_mode = "snapshot"
     supports_backfill = False
 
