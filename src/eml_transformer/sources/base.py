@@ -1,18 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 
-from eml_transformer.ingestion.schema import (
-    TextRecord,
-    TEXT_RECORD_COLUMNS,
+from eml_transformer.schema.records import (
+    StandardizedRecord,
     BronzeRecord
 )
 from eml_transformer.utils.stamping import stable_hash
 
 import hashlib
 
-class TextSource(ABC):
+class DataSource(ABC):
     """
     Base class for textual ingestion sources.
     """
@@ -21,14 +20,14 @@ class TextSource(ABC):
 
 
     @abstractmethod
-    def fetch_records(self) -> Any:
+    def fetch_records(self) -> Iterable[BronzeRecord]:
         '''
         Retrieve raw records with light pre processing and store in bronze/
         '''
         pass
 
     @abstractmethod
-    def standardize_record(self, record: dict[str, Any]) -> TextRecord:
+    def standardize_record(self, record: dict[str, Any]) -> StandardizedRecord:
         '''
         format raw records into standardized Textrecord data class store in silver/
         '''

@@ -6,9 +6,9 @@ from typing import Any
 
 import requests
 
-from eml_transformer.sources.base import TextSource
+from eml_transformer.sources.base import DataSource
 from eml_transformer.sources.registry import register_source
-from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
+from eml_transformer.schema.records import BronzeRecord, TextRecord
 from eml_transformer.utils.dates import parse_utc_datetime, utc_now
 from eml_transformer.utils.stamping import stable_hash
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 @register_source("newsapi")
-class NewsAPISource(TextSource):
+class NewsAPISource(DataSource):
     """
     Ingest news articles from NewsAPI.
 

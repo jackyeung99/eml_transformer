@@ -3,7 +3,7 @@ import pandas as pd
 from eml_transformer.standardization.orchestrator import StandardizationResult
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
+from eml_transformer.schema.records import TextRecord, BronzeRecord
 from eml_transformer.standardization.orchestrator import StandardizationPipeline
 
 

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from time import perf_counter
 from eml_transformer.sources.registry import create_source, available_sources
-from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.schema.records import BronzeRecord
 
 import pandas as pd
 import psutil

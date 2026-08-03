@@ -11,7 +11,7 @@ from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
 from eml_transformer.sources.base import TextSource 
-from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.utils.dates import utc_now, parse_utc_datetime
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class IngestionResult:
 
         return summary
 
-
+# Eventually rename to IngestionOrchestrator 
 class IngestionPipeline:
     SUPPORTED_UPDATE_MODES = {"incremental", "snapshot"}
 

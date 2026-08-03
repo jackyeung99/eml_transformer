@@ -7,7 +7,7 @@ from eml_transformer.sources.text.iem_afos import (
     AFOSProductParseError,
 )
 
-from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.schema.records import BronzeRecord
 
 
 def make_header(

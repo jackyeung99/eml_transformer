@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from typing import Any
-from eml_transformer.utils.dates import format_utc_datetime, parse_utc_datetime
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, TypeAlias
+
+from eml_transformer.utils.dates import (
+    format_utc_datetime,
+    parse_utc_datetime,
+)
 
 
-# bronze schema
-
+# Bronze schema
 @dataclass(slots=True)
 class BronzeRecord:
     source: str
@@ -35,7 +38,7 @@ class BronzeRecord:
     def from_dict(
         cls,
         data: dict[str, Any],
-    ) -> "BronzeRecord":
+    ) -> BronzeRecord:
         published_at = data.get("published_at")
 
         return cls(
@@ -51,8 +54,10 @@ class BronzeRecord:
             ),
             raw=data["raw"],
         )
-# silver schema
-@dataclass
+
+
+# Silver text schema
+@dataclass(slots=True)
 class TextRecord:
     record_id: str
     source: str
@@ -67,7 +72,6 @@ class TextRecord:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a shallow dictionary suitable for silver storage."""
         return {
             "record_id": self.record_id,
             "source": self.source,
@@ -83,6 +87,38 @@ class TextRecord:
         }
 
 
+# Silver numeric schema
+@dataclass(slots=True)
+class NumericRecord:
+    record_id: str
+    source: str
+    source_type: str
+    observed_at: datetime
+    variable: str
+    value: float
+    retrieved_at: datetime
+    region: str | None = None
+    unit: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "record_id": self.record_id,
+            "source": self.source,
+            "source_type": self.source_type,
+            "observed_at": self.observed_at,
+            "variable": self.variable,
+            "value": self.value,
+            "retrieved_at": self.retrieved_at,
+            "region": self.region,
+            "unit": self.unit,
+            "metadata": self.metadata,
+        }
+
+
+StandardizedRecord: TypeAlias = TextRecord | NumericRecord
+
+
 TEXT_RECORD_COLUMNS = [
     "record_id",
     "source",
@@ -95,6 +131,18 @@ TEXT_RECORD_COLUMNS = [
     "region",
     "categories",
     "metadata",
-    "raw",
 ]
 
+
+NUMERIC_RECORD_COLUMNS = [
+    "record_id",
+    "source",
+    "source_type",
+    "observed_at",
+    "variable",
+    "value",
+    "retrieved_at",
+    "region",
+    "unit",
+    "metadata",
+]

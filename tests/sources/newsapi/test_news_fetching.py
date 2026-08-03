@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.utils.stamping import stable_hash
 
 

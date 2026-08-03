@@ -11,7 +11,7 @@ from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
 from eml_transformer.standardization.text_cleaning import clean_text
-from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
+from eml_transformer.schema.records import TextRecord, BronzeRecord
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ class StandardizationResult:
             "error": self.error,
         }
 
+# Eventually rename to StandardizationOrchestrator
 class StandardizationPipeline:
     def __init__(
         self,

@@ -2,7 +2,7 @@ import pytest
 
 from datetime import datetime, timezone
 
-from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.utils.stamping import stable_hash
 
 

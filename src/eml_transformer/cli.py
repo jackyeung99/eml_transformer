@@ -140,7 +140,7 @@ def embed(
     model_name: str | None = typer.Option(None, "--model", "-m"),
     config: str = typer.Option("configs/dev.yaml"),
 ):
-    from eml_transformer.text_processing.embedding_pipeline import EmbeddingPipeline
+    from eml_transformer.embeddings.orchestrator import EmbeddingPipeline
 
     rt = build_runtime(config)
 
@@ -177,7 +177,7 @@ def embed(
 def run_all(
     config: str = typer.Option("configs/dev.yaml"),
 ):
-    from eml_transformer.text_processing.embedding_pipeline import EmbeddingPipeline
+    from eml_transformer.embeddings.orchestrator import EmbeddingPipeline
 
     rt = build_runtime(config)
 

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.schema.records import BronzeRecord
 
 
 

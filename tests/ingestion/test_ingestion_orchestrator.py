@@ -4,7 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import Mock
-from eml_transformer.ingestion.schema import BronzeRecord
+from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.utils.dates import parse_utc_datetime
 
 import pytest

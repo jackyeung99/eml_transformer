@@ -7,9 +7,9 @@ from typing import Any
 import json
 import requests
 
-from eml_transformer.sources.base import TextSource
+from eml_transformer.sources.base import DataSource
 from eml_transformer.sources.registry import register_source
-from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
+from eml_transformer.schema.records import BronzeRecord, TextRecord
 from eml_transformer.utils.dates import parse_utc_datetime, utc_now
 
 
@@ -39,7 +39,7 @@ class WeatherAlertParseError(ValueError):
 
 
 @register_source("weather_alerts")
-class WeatherAlertSource(TextSource):
+class WeatherAlertSource(DataSource):
     """Ingest active alerts from the National Weather Service API."""
 
     name = "weather_alerts"

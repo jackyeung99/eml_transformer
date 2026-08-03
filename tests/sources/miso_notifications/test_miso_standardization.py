@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
+from eml_transformer.schema.records import BronzeRecord, TextRecord
 
 
 PUBLISHED_AT = datetime(

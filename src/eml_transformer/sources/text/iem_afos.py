@@ -14,9 +14,9 @@ import json
 
 import requests
 
-from eml_transformer.sources.base import TextSource
+from eml_transformer.sources.base import DataSource
 from eml_transformer.sources.registry import register_source
-from eml_transformer.ingestion.schema import TextRecord, BronzeRecord
+from eml_transformer.schema.records import TextRecord, BronzeRecord
 from eml_transformer.utils.stamping import stable_hash
 from eml_transformer.utils.dates import utc_now
 
@@ -62,7 +62,7 @@ class ParsedSection:
 
 
 @register_source("iem_afos")
-class IEMAFOSSource(TextSource):
+class IEMAFOSSource(DataSource):
     """Ingest archived NWS products from the IEM AFOS archive.
 
     Ingestion performs only the parsing needed to split, identify, and

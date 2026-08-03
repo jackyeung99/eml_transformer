@@ -45,7 +45,8 @@ class BackfillResult:
             summary["error"] = self.error
 
         return summary
-    
+
+# Eventually rename to BackfillOrchestrator or HistoricalOrchestrator
 class BackfillPipeline:
     def __init__(
         self,

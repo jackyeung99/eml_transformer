@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
+from eml_transformer.schema.records import BronzeRecord, TextRecord
 
 
 @pytest.fixture

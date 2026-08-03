@@ -41,7 +41,7 @@ class EmbeddingResult:
             "error": self.error,
         }
 
-
+# Eventually rename to EmbeddingOrchestrator
 class EmbeddingPipeline:
     def __init__(
         self,

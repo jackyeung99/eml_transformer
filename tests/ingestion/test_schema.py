@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
 from dataclasses import asdict
-from eml_transformer.ingestion.schema import TextRecord, TEXT_RECORD_COLUMNS
+from eml_transformer.schema.records import TextRecord, TEXT_RECORD_COLUMNS
 
 
 class TestTextRecordCreation:

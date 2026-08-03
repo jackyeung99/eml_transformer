@@ -7,7 +7,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from eml_transformer.utils.stamping import stable_hash
-from eml_transformer.ingestion.schema import BronzeRecord, TextRecord
+from eml_transformer.schema.records import BronzeRecord, TextRecord
 
 class FakeStorage:
     def __init__(self):

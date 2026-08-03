@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from eml_transformer.ingestion.schema import (
+from eml_transformer.schema.records import (
     BronzeRecord,
     TextRecord,
 )

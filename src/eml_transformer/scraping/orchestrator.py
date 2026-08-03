@@ -60,7 +60,7 @@ class ScrapingResult:
             "error": self.error,
         }
 
-
+# Eventually rename to ScrapingOrchestrator
 class ScrapingPipeline:
     DEFAULT_INPUT_ARTIFACT = "records"
     DEFAULT_OUTPUT_ARTIFACT = "extracted_articles"
