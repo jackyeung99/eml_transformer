@@ -77,32 +77,21 @@ class StandardizationPipeline:
         self,
         source_name: str,
         source_config: dict[str, Any],
+        batch_size: int = 100_000,
     ) -> StandardizationResult:
         bronze_key: str | None = None
         silver_key: str | None = None
 
-        logger.info(
-            "Starting standardization | source=%s",
-            source_name,
-        )
-
         try:
-            source = create_source(source_name, **source_config.get("standardization", {}),)
-
-            bronze_key = self.paths.bronze_records(
-                source=source.name,
+            source = create_source(
+                source_name,
+                **source_config.get("standardization", {}),
             )
 
-            silver_key = self.paths.silver_records(
-                source=source.name,
-            )
+            bronze_key = self.paths.bronze_records(source=source.name)
+            silver_key = self.paths.silver_records(source=source.name)
 
             if not self.storage.exists(bronze_key):
-                logger.warning(
-                    "No bronze data found | source=%s",
-                    source.name,
-                )
-
                 return StandardizationResult(
                     status="skipped",
                     source=source.name,
@@ -113,12 +102,13 @@ class StandardizationPipeline:
                     error=f"No bronze data found for source: {source.name}",
                 )
 
-            
+            batch: list[dict[str, Any]] = []
+            seen_record_ids: set[str] = set()
 
-            records = []
             records_read = 0
+            records_out = 0
             failed_records = 0
-
+            batch_number = 0
 
             for row in self.storage.iter_jsonl(bronze_key):
                 records_read += 1
@@ -135,57 +125,57 @@ class StandardizationPipeline:
                     )
 
                     for record in standardized_records:
-                        records.append(self._clean_record(record))
+                        record = self._clean_record(record)
+                        record_dict = record.to_dict()
 
-                except Exception as exc:
+                        record_id = record_dict.get("record_id")
+
+                        if record_id and record_id in seen_record_ids:
+                            continue
+
+                        if record_id:
+                            seen_record_ids.add(record_id)
+
+                        batch.append(record_dict)
+
+                        if len(batch) >= batch_size:
+                            self._write_batch(
+                                records=batch,
+                                source_name=source.name,
+                                batch_number=batch_number,
+                            )
+
+                            records_out += len(batch)
+                            batch_number += 1
+                            batch.clear()
+
+                except Exception:
                     failed_records += 1
+                    logger.exception(
+                        "Failed to standardize record | source=%s | row=%s",
+                        source.name,
+                        records_read,
+                    )
 
-
-
-
-            df = self._records_to_dataframe(records)
-            before_dedupe = len(df)
-
-            df = self._deduplicate(df)
-
-            logger.info(
-                "Standardized records | source=%s | input=%s | output=%s | failed=%s | duplicates_removed=%s",
-                source.name,
-                records_read,
-                len(df),
-                failed_records,
-                before_dedupe - len(df),
-            )
-
-            if not df.empty:
-                self.storage.write_parquet(
-                    df,
-                    silver_key,
+            if batch:
+                self._write_batch(
+                    records=batch,
+                    source_name=source.name,
+                    batch_number=batch_number,
                 )
-
-                logger.info(
-                    "Wrote silver records | source=%s | key=%s",
-                    source.name,
-                    silver_key,
-                )
-            else:
-                logger.warning(
-                    "No silver records written | source=%s",
-                    source.name,
-                )
+                records_out += len(batch)
 
             return StandardizationResult(
                 status="success",
                 source=source.name,
-                records_read=records_read, 
-                records_out=len(df),
+                records_read=records_read,
+                records_out=records_out,
                 records_failed=failed_records,
                 bronze_key=bronze_key,
                 silver_key=silver_key,
-                records=df,
             )
 
-        except Exception as e:
+        except Exception as exc:
             logger.exception(
                 "Standardization failed | source=%s",
                 source_name,
@@ -196,11 +186,29 @@ class StandardizationPipeline:
                 source=source_name,
                 records_read=0,
                 records_out=0,
-                error=str(e),
+                error=str(exc),
                 bronze_key=bronze_key,
                 silver_key=silver_key,
             )
+        
 
+
+    def _write_batch(
+        self,
+        records: list[dict[str, Any]],
+        source_name: str,
+        batch_number: int,
+    ) -> None:
+        df = pd.DataFrame.from_records(records)
+
+        df = self._deduplicate(df)
+
+        silver_key = self.paths.silver_part(
+            source=source_name,
+            part=batch_number,
+        )
+
+        self.storage.write_parquet(df, silver_key)
 
     def _records_to_dataframe(
         self,

@@ -1,6 +1,6 @@
 import pytest
 
-from eml_transformer.extraction.scraper import (
+from eml_transformer.scraping.scraper import (
     ArticleScraperConfig,
     HybridArticleScraper,
 )

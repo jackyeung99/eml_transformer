@@ -45,16 +45,29 @@ class StoragePaths:
     def silver_records(
         self,
         source: str,
-        name: str ='records',
+        name: str = "records",
     ) -> str:
         return _p(
             self.root,
             "silver",
             f"source={_clean(source)}",
-            # f"ingest_date={ingest_date}",
-            f"{_clean(name)}.parquet",
+            f"artifact={_clean(name)}",
         )
 
+
+    def silver_part(
+        self,
+        source: str,
+        part: int,
+        name: str = "records",
+    ) -> str:
+        return _p(
+            self.silver_records(
+                source=source,
+                name=name,
+            ),
+            f"part-{part:05d}.parquet",
+        )
     
     # ------------------------------------------------------------------
     # Gold

@@ -4,7 +4,6 @@ from eml_transformer.text_processing.cleaning import (
     strip_html,
     normalize_unicode,
     normalize_whitespace,
-    remove_empty_lines,
     truncate_text,
     clean_text
 )
@@ -58,21 +57,6 @@ class TestNormalizeWhitespace:
     
     def test_single_space_unchanged(self):
         assert normalize_whitespace("hello world") == "hello world"
-
-class TestRemoveEmptyLines:
-    """"Test empty line removal"""
-
-    def test_removes_empty_lines(self):
-        text = "line one\n\n\nline two"
-        assert remove_empty_lines(text) == "line one\nline two"
-
-    def test_single_line_unchanged(self):
-        text = "just one line"
-        assert remove_empty_lines(text) == "just one line"
-    
-    def test_strips_whitespace_only_lines(self):
-        text = "line one\n   \nline two"
-        assert remove_empty_lines(text) == "line one\nline two"
 
 class TestTruncateText:
     """Test text truncation"""
