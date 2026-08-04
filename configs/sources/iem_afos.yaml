@@ -1,0 +1,21 @@
+ 
+embedding_input: records
+ingestion:
+  pil: null
+  wfos:
+    - IND
+    - IWX
+    - LOT
+    - ILX
+    - LSX
+    - DVN
+    - DMX
+  product_types:
+    - AFD
+    - HWO
+    - NPW
+    - WSW
+    - SPS
+  limit: 100
+  fmt: text
+  timeout: 30

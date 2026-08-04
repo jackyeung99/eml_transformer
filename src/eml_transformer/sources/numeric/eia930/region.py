@@ -1,5 +1,3 @@
-# sources/numeric/eia930/region.py
-
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -10,9 +8,19 @@ from eml_transformer.schema.records import (
     BronzeRecord,
     NumericRecord,
 )
+from eml_transformer.utils.dates import ensure_utc
 from eml_transformer.sources.numeric.eia930.client import EIAClient
+from eml_transformer.sources.registry import register_source
+
+from eml_transformer.sources.numeric.eia930.parsing import (
+    parse_period, 
+    parse_value,
+    normalize_unit
+)
 
 
+
+@register_source("eia_region")
 class EIA930RegionSource:
     """
     Hourly balancing-authority operating data from EIA-930.
@@ -45,14 +53,26 @@ class EIA930RegionSource:
 
     def __init__(
         self,
-        client: EIAClient,
+        client: EIAClient | None = None,
+        *,
+        api_key: str | None = None,
         respondent: str = "MISO",
         measurement_types: list[str] | None = None,
     ) -> None:
-        self.client = client
+        if client is not None and api_key is not None:
+            raise ValueError(
+                "Pass either client or api_key, not both"
+            )
+
+        self.client = (
+            client
+            if client is not None
+            else EIAClient(api_key=api_key)
+        )
+
         self.respondent = respondent.upper()
         self.measurement_types = (
-            measurement_types
+            list(measurement_types)
             if measurement_types is not None
             else ["D", "DF", "NG", "TI"]
         )
@@ -78,8 +98,8 @@ class EIA930RegionSource:
 
         Pagination is handled by EIAClient.iter_data().
         """
-        from_date = self._ensure_utc(from_date)
-        to_date = self._ensure_utc(to_date)
+        from_date = ensure_utc(from_date)
+        to_date = ensure_utc(to_date)
 
         if from_date > to_date:
             raise ValueError("from_date must not be after to_date")
@@ -94,15 +114,15 @@ class EIA930RegionSource:
                 "type": self.measurement_types,
             },
             frequency="hourly",
-            start=self._format_api_datetime(from_date),
-            end=self._format_api_datetime(to_date),
+            start=from_date,
+            end=to_date,
             sort_column="period",
             sort_direction="asc",
         )
 
         for row in rows:
             try:
-                observed_at = self._parse_period(row["period"])
+                observed_at = parse_period(row["period"])
                 measurement_code = str(row["type"])
 
                 yield BronzeRecord(
@@ -141,22 +161,18 @@ class EIA930RegionSource:
                 f"{measurement_code!r}"
             )
 
-        observed_at = self._parse_period(raw["period"])
-        value = self._parse_value(raw["value"])
+        observed_at = parse_period(raw["period"])
+        value = parse_value(raw["value"])
         respondent = str(raw["respondent"]).upper()
 
         return NumericRecord(
             source=record.source,
             retrieved_at=record.retrieved_at,
-            record_id=self._standardized_record_id(
-                respondent=respondent,
-                variable=variable,
-                observed_at=observed_at,
-            ),
+            record_id=record.record_id,
             observed_at=observed_at,
             variable=variable,
             value=value,
-            unit=self._normalize_unit(
+            unit=normalize_unit(
                 raw.get("value-units")
             ),
             region=respondent,
@@ -185,86 +201,4 @@ class EIA930RegionSource:
             f"{row['respondent']}:"
             f"{row['type']}:"
             f"{row['period']}"
-        )
-
-    def _standardized_record_id(
-        self,
-        *,
-        respondent: str,
-        variable: str,
-        observed_at: datetime,
-    ) -> str:
-        return (
-            f"{self.name}:"
-            f"{respondent}:"
-            f"{variable}:"
-            f"{observed_at.isoformat()}"
-        )
-
-    @staticmethod
-    def _parse_period(value: Any) -> datetime:
-        """
-        EIA hourly periods use strings such as:
-            2025-01-01T13
-
-        The EIA-930 API period is treated as UTC here.
-        """
-        period = str(value).strip()
-
-        try:
-            parsed = datetime.strptime(
-                period,
-                "%Y-%m-%dT%H",
-            )
-        except ValueError as error:
-            raise ValueError(
-                f"Invalid EIA hourly period: {period!r}"
-            ) from error
-
-        return parsed.replace(tzinfo=timezone.utc)
-
-    @staticmethod
-    def _parse_value(value: Any) -> float:
-        if value is None:
-            raise ValueError("EIA value is missing")
-
-        normalized = str(value).replace(",", "").strip()
-
-        if not normalized:
-            raise ValueError("EIA value is empty")
-
-        parsed = float(normalized)
-
-        return parsed
-
-    @staticmethod
-    def _normalize_unit(value: Any) -> str:
-        if value is None:
-            return "unknown"
-
-        normalized = str(value).strip().lower()
-
-        unit_map = {
-            "megawatthours": "MWh",
-            "megawatt hours": "MWh",
-            "mwh": "MWh",
-            "megawatts": "MW",
-            "mw": "MW",
-        }
-
-        return unit_map.get(normalized, str(value))
-
-    @staticmethod
-    def _ensure_utc(value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError(
-                "EIA query datetimes must be timezone-aware"
-            )
-
-        return value.astimezone(timezone.utc)
-
-    @staticmethod
-    def _format_api_datetime(value: datetime) -> str:
-        return value.astimezone(timezone.utc).strftime(
-            "%Y-%m-%dT%H"
         )

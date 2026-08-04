@@ -1,0 +1,8 @@
+ingestion:
+  api_key_env: EIA_API_KEY
+  respondent: MISO
+  measurement_types:
+    - D
+    - DF
+    - NG
+    - TI

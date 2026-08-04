@@ -1,0 +1,5 @@
+ingestion:
+  api_key_env: EIA_API_KEY
+  balancing_authority: MISO
+  neighbors: null
+  direction: outbound

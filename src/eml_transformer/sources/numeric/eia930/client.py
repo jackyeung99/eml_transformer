@@ -1,10 +1,12 @@
-# sources/numeric/eia930/client.py
+
 
 from __future__ import annotations
 
 import os
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
+
+from datetime import datetime, timezone
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -153,8 +155,8 @@ class EIAClient:
         data: Sequence[str],
         facets: Mapping[str, Sequence[str]] | None = None,
         frequency: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
         sort_column: str = "period",
         sort_direction: str = "asc",
         offset: int = 0,
@@ -162,6 +164,9 @@ class EIAClient:
     ) -> dict[str, Any]:
         """
         Retrieve one page of rows from an EIA data route.
+
+        Start and end must be timezone-aware datetimes. They are converted
+        to UTC and formatted for the EIA API.
         """
         if not data:
             raise ValueError(
@@ -197,10 +202,14 @@ class EIAClient:
             params.append(("frequency", frequency))
 
         if start is not None:
-            params.append(("start", start))
+            params.append(
+                ("start", self._format_api_datetime(start))
+            )
 
         if end is not None:
-            params.append(("end", end))
+            params.append(
+                ("end", self._format_api_datetime(end))
+            )
 
         params.extend(
             [
@@ -216,6 +225,7 @@ class EIAClient:
             params=params,
         )
 
+
     def iter_data(
         self,
         route: str,
@@ -223,8 +233,8 @@ class EIAClient:
         data: Sequence[str],
         facets: Mapping[str, Sequence[str]] | None = None,
         frequency: str | None = None,
-        start: str | None = None,
-        end: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
         sort_column: str = "period",
         sort_direction: str = "asc",
         page_size: int = MAX_PAGE_SIZE,
@@ -272,3 +282,15 @@ class EIAClient:
 
             if rows_received == 0 or offset >= total:
                 break
+
+
+    @staticmethod
+    def _format_api_datetime(value: datetime) -> str:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError(
+                "EIA API datetimes must be timezone-aware"
+            )
+
+        return value.astimezone(timezone.utc).strftime(
+            "%Y-%m-%dT%H"
+        )

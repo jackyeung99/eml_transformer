@@ -1,0 +1,18 @@
+embedding_input: records
+
+ingestion:
+  areas:
+    - IN
+    - IL
+    - MI
+    - OH
+    - KY
+    - WI
+    - MN
+    - IA
+    - MO
+    - AR
+    - LA
+    - MS
+    - ND
+    - SD

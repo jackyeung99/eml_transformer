@@ -92,7 +92,6 @@ class TextRecord:
 class NumericRecord:
     record_id: str
     source: str
-    # source_type: str
     observed_at: datetime
     variable: str
     value: float

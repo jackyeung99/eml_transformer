@@ -66,11 +66,18 @@ def main(
 
 
 @app.command()
-def sources():
-    typer.echo("Available sources:")
+def sources(
+    config: str = typer.Option("configs/dev.yaml"),
+) -> None:
+    runtime = build_runtime(config)
 
-    for source in available_sources():
-        typer.echo(f"- {source}")
+    typer.echo("Configured sources:")
+
+    for source_name in runtime.source_names:
+        enabled = source_name in runtime.enabled_source_names
+        status = "enabled" if enabled else "disabled"
+
+        typer.echo(f"- {source_name} ({status})")
 
 
 @app.command()

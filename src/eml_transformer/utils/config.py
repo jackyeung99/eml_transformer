@@ -21,43 +21,68 @@ def load_config(
 def build_source_config(
     source: str,
     cfg: dict[str, Any],
+    config_dir: str | Path,
 ) -> tuple[str, dict[str, Any]]:
     """
-    Resolve API keys for each configured source stage.
+    Load one source's configuration and resolve its API keys.
 
-    Each source may contain separate configuration sections for stages such as
-    ingestion and standardization. A stage requiring an API key should define
-    `api_key_env`, whose value is the name of an environment variable containing
-    the key.
-
-    The resolved key is added to that stage's configuration as `api_key`, and
-    `api_key_env` is removed. The API key itself should never be stored directly
-    in the configuration file.
+    `config_dir` is the directory containing the main configuration
+    file. Source configuration paths are resolved relative to it.
     """
     sources_cfg = cfg.get("sources", {})
 
     if source not in sources_cfg:
         valid = ", ".join(sources_cfg)
+
         raise ValueError(
-            f"Unknown source: {source}. Available sources: {valid}"
+            f"Unknown source: {source}. "
+            f"Available sources: {valid}"
         )
 
-    source_cfg = dict(sources_cfg[source])
-    source_cfg.pop("enabled", None)
+    source_entry = sources_cfg[source]
+
+    if not isinstance(source_entry, dict):
+        raise TypeError(
+            f"Configuration for source {source!r} must be a mapping"
+        )
+
+    source_config_file = source_entry.get("config")
+
+    if not source_config_file:
+        raise ValueError(
+            f"Source {source!r} does not define a config file"
+        )
+
+    source_config_path = (
+        Path(config_dir) / source_config_file
+    ).resolve()
+
+    if not source_config_path.is_file():
+        raise FileNotFoundError(
+            f"Configuration file for source {source!r} "
+            f"does not exist: {source_config_path}"
+        )
+
+    source_cfg = load_config(source_config_path)
 
     for component_name, component_config in source_cfg.items():
         if not isinstance(component_config, dict):
             continue
 
         component_config = dict(component_config)
-        api_key_env = component_config.pop("api_key_env", None)
+        api_key_env = component_config.pop(
+            "api_key_env",
+            None,
+        )
 
         if api_key_env:
             api_key = os.getenv(api_key_env)
 
             if not api_key:
                 raise EnvironmentError(
-                    f"Missing required environment variable: {api_key_env}"
+                    "Missing required environment variable "
+                    f"{api_key_env!r} for source {source!r}, "
+                    f"component {component_name!r}"
                 )
 
             component_config["api_key"] = api_key
@@ -69,25 +94,17 @@ def build_source_config(
 
 def build_source_configs(
     cfg: dict[str, Any],
+    config_dir: str | Path,
 ) -> dict[str, dict[str, Any]]:
-    configs = {}
+    configs: dict[str, dict[str, Any]] = {}
 
-    for source_name, source_cfg in cfg.get(
-        "sources",
-        {},
-    ).items():
-
-        if not source_cfg.get(
-            "enabled",
-            True,
-        ):
-            continue
-
-        name, kwargs = build_source_config(
-            source_name,
-            cfg,
+    for source_name in cfg.get("sources", {}):
+        name, source_cfg = build_source_config(
+            source=source_name,
+            cfg=cfg,
+            config_dir=config_dir,
         )
 
-        configs[name] = kwargs
+        configs[name] = source_cfg
 
     return configs

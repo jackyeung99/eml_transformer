@@ -1,4 +1,5 @@
 
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,7 +20,20 @@ class Runtime:
 
     @property
     def source_names(self) -> list[str]:
-        return list(self.source_configs.keys())
+        """All configured sources."""
+        return list(self.source_configs)
+
+    @property
+    def enabled_source_names(self) -> list[str]:
+        """Sources included in run-all."""
+        return [
+            name
+            for name, source_cfg in self.cfg.get(
+                "sources",
+                {},
+            ).items()
+            if source_cfg.get("enabled", True)
+        ]
 
     @property
     def ingestion_config(self) -> dict:
@@ -34,16 +48,22 @@ class Runtime:
         return self.cfg.get("embeddings", {})
 
 
-def build_runtime(config_path: str) -> Runtime:
+def build_runtime(
+    config_path: str | Path,
+) -> Runtime:
+    config_path = Path(config_path).resolve()
     cfg = load_config(config_path)
 
     storage = make_storage(cfg["storage"])
 
     paths = StoragePaths(
-        root=cfg.get("paths", {}).get("root", ".")
+        root=cfg.get("paths", {}).get("root", "."),
     )
 
-    source_configs = build_source_configs(cfg)
+    source_configs = build_source_configs(
+        cfg=cfg,
+        config_dir=config_path.parent,
+    )
 
     return Runtime(
         cfg=cfg,
