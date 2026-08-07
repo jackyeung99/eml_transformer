@@ -96,21 +96,23 @@ class NumericRecord:
     variable: str
     value: float
     retrieved_at: datetime
+
     region: str | None = None
     unit: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    dimensions: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "record_id": self.record_id,
             "source": self.source,
-            # "source_type": self.source_type,
             "observed_at": self.observed_at,
             "variable": self.variable,
             "value": self.value,
             "retrieved_at": self.retrieved_at,
             "region": self.region,
             "unit": self.unit,
+            "dimensions": self.dimensions,
             "metadata": self.metadata,
         }
 

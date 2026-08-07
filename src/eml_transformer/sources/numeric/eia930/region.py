@@ -88,11 +88,12 @@ class EIA930RegionSource:
                 f"{sorted(invalid_types)}"
             )
 
+
     def fetch_records(
         self,
         from_date: datetime,
         to_date: datetime,
-    ) -> Iterator[BronzeRecord]:
+    ) -> list[BronzeRecord]:
         """
         Retrieve raw EIA rows for an inclusive UTC date range.
 
@@ -120,28 +121,23 @@ class EIA930RegionSource:
             sort_direction="asc",
         )
 
-        for row in rows:
-            try:
-                observed_at = parse_period(row["period"])
-                measurement_code = str(row["type"])
+        records: list[BronzeRecord] = []
 
-                yield BronzeRecord(
+        for row in rows:
+            observed_at = parse_period(row["period"])
+
+            records.append(
+                BronzeRecord(
                     source=self.name,
-                    record_id=self._bronze_record_id(
-                        row=row,
-                    ),
+                    record_id=self._bronze_record_id(row=row),
                     published_at=observed_at,
                     retrieved_at=retrieved_at,
                     raw=dict(row),
                 )
-            except (
-                KeyError,
-                TypeError,
-                ValueError,
-            ):
-                # Let the ingestion pipeline track failed rows if it
-                # already provides per-record error handling.
-                raise
+            )
+
+        return records
+
 
     def standardize_record(
         self,
@@ -176,6 +172,10 @@ class EIA930RegionSource:
                 raw.get("value-units")
             ),
             region=respondent,
+            dimensions={
+                "respondent": "MISO",
+                "measurement_type": "D",
+            },
             metadata={
                 "provider": "EIA",
                 "dataset": "EIA-930",

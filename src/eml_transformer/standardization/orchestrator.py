@@ -126,7 +126,7 @@ class StandardizationPipeline:
                     )
 
                     for record in standardized_records:
-                        record = self._clean_record(record)
+            
                         record_dict = record.to_dict()
 
                         record_id = record_dict.get("record_id")
@@ -223,19 +223,6 @@ class StandardizationPipeline:
             for record in records
         )
 
-    def _clean_record(
-        self,
-        record: TextRecord,
-    ) -> TextRecord:
-        record.title = clean_text(
-            record.title or "",
-        )
-
-        record.text = clean_text(
-            record.text or "",
-        )
-
-        return record
 
     def _deduplicate(
         self,

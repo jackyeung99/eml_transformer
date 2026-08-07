@@ -39,7 +39,7 @@ class DataSource(ABC):
 
     @staticmethod
     def _deduplicate_records(
-        records: Iterable[BronzeRecord],
+        records: list[BronzeRecord], # move to iterator eventually
     ) -> list[BronzeRecord]:
         """Keep the first record for each source and record ID."""
 

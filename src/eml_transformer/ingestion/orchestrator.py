@@ -495,7 +495,7 @@ class IngestionPipeline:
 
     @staticmethod
     def _validate_source_output(
-        source: TextSource,
+        source: DataSource,
         records: list[BronzeRecord],
     ) -> None:
         if not isinstance(records, list):

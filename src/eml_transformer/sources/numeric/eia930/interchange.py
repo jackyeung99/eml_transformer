@@ -86,7 +86,7 @@ class EIA930InterchangeSource:
         self,
         from_date: datetime,
         to_date: datetime,
-    ) -> Iterator[BronzeRecord]:
+    ) -> list[BronzeRecord]:
         from_date = ensure_utc(from_date)
         to_date = ensure_utc(to_date)
 
@@ -96,6 +96,7 @@ class EIA930InterchangeSource:
             )
 
         retrieved_at = datetime.now(timezone.utc)
+        records: list[BronzeRecord] = []
 
         for facets in self._build_queries():
             rows = self.client.iter_data(
@@ -110,17 +111,20 @@ class EIA930InterchangeSource:
             )
 
             for row in rows:
-                observed_at = parse_period(
-                    row["period"]
+                observed_at = parse_period(row["period"])
+
+                records.append(
+                    BronzeRecord(
+                        source=self.name,
+                        record_id=self._bronze_record_id(row),
+                        published_at=observed_at,
+                        retrieved_at=retrieved_at,
+                        raw=dict(row),
+                    )
                 )
 
-                yield BronzeRecord(
-                    source=self.name,
-                    record_id=self._bronze_record_id(row),
-                    published_at=observed_at,
-                    retrieved_at=retrieved_at,
-                    raw=dict(row),
-                )
+        return records
+
 
     def standardize_record(
         self,
@@ -144,6 +148,10 @@ class EIA930InterchangeSource:
                 raw.get("value-units")
             ),
             region=self.balancing_authority,
+            dimensions={
+                "from_region": raw.get("fromba-name"),
+                "to_region": raw.get("toba-name"),
+            },
             metadata={
                 "provider": "EIA",
                 "dataset": "EIA-930",

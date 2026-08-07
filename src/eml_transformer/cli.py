@@ -9,10 +9,13 @@ from dotenv import load_dotenv
 
 from eml_transformer.sources.registry import available_sources
 from eml_transformer.logging import setup_logging
+
 from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
 from eml_transformer.ingestion.orchestrator import IngestionPipeline
 from eml_transformer.standardization.orchestrator import StandardizationPipeline
 from eml_transformer.scraping.orchestrator import ScrapingPipeline
+from eml_transformer.features.orchestrator import FeatureOrchestrator
+
 from eml_transformer.runtime import build_runtime
 from eml_transformer.utils.dates import parse_utc_datetime
 
@@ -180,37 +183,25 @@ def embed(
     print_result_table("Embedding Results", results)
 
 
-@app.command("run-all")
-def run_all(
+@app.command()
+def ingest(
+    source: str = typer.Option("all"),
     config: str = typer.Option("configs/dev.yaml"),
 ):
-    from eml_transformer.embeddings.orchestrator import EmbeddingPipeline
-
     rt = build_runtime(config)
 
-    ingestion_results = IngestionPipeline(
+    pipeline = FeatureOrchestrator(
         storage=rt.storage,
         paths=rt.paths,
-    ).run_all(rt.source_configs)
-
-    print_result_table("Ingestion Results", ingestion_results)
-
-    standardization_results = StandardizationPipeline(
-        storage=rt.storage,
-        paths=rt.paths,
-    ).run_all(rt.source_configs)
-
-    print_result_table("Standardization Results", standardization_results)
-
-    embedding_results = EmbeddingPipeline(
-        storage=rt.storage,
-        paths=rt.paths,
-    ).run_all(
-        embedding_config=rt.embedding_config,
-        source_configs=rt.source_configs,
     )
 
-    print_result_table("Embedding Results", embedding_results)
+    if source.lower() == "all":
+        results = pipeline.run_all(rt.source_configs)
+    else:
+        source_config = get_source_config(source, rt.source_configs)
+        results = [pipeline.run_source(source, source_config)]
+
+    print_result_table("Ingestion Results", results)
 
 
 @app.command()
