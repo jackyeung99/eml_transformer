@@ -1,5 +1,5 @@
  
-embedding_input: records
+
 ingestion:
   pil: null
   wfos:
@@ -19,3 +19,8 @@ ingestion:
   limit: 100
   fmt: text
   timeout: 30
+
+standardization:
+  output: silver:iem_afos:records
+  batch_size: 100000
+  write_mode: replace

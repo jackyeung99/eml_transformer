@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Optional
-from collections.abc import Iterator
+from pathlib import Path, PurePosixPath
+from typing import Any, Optional, TypeVar
+from collections.abc import Iterable, Iterator
+from itertools import islice
 import pandas as pd
 import pyarrow.parquet as pq
 import s3fs
@@ -13,12 +14,28 @@ import pickle
 import uuid
 
 from eml_transformer.logging import get_logger
+from eml_transformer.storage.paths import DatasetRef, StoragePaths
 
 logger = get_logger(__name__)
+
+T = TypeVar("T")
+
+
+def batched(values: Iterable[T], size: int) -> Iterator[list[T]]:
+    """Lazily collect values into bounded in-memory batches."""
+    if size <= 0:
+        raise ValueError("Batch size must be greater than zero")
+
+    iterator = iter(values)
+
+    while batch := list(islice(iterator, size)):
+        yield batch
 
 
 
 class Storage:
+    paths: StoragePaths
+
     def exists(self, key: str) -> bool:
 
         logger.debug(f"checking file path: {key}")
@@ -30,6 +47,10 @@ class Storage:
 
         Returns keys relative to storage root (same format used in read/write).
         """
+        raise NotImplementedError
+
+    def delete_prefix(self, prefix: str) -> None:
+        """Delete files under one resolved dataset prefix."""
         raise NotImplementedError
 
     def read_parquet(self, key: str) -> pd.DataFrame:
@@ -71,10 +92,98 @@ class Storage:
         logger.info(f"Writing Pickle to {key}")
         raise NotImplementedError
 
+    # =====================
+    # Dataset batching
+    # =====================
+    def read_batches(
+        self,
+        ref: DatasetRef | str,
+    ) -> Iterator[pd.DataFrame]:
+        """Yield one Parquet part at a time without loading the dataset."""
+        prefix = self.paths.dataset(ref)
+
+        for key in self.list(prefix):
+            name = PurePosixPath(key).name
+            if name.startswith("part-") and name.endswith(".parquet"):
+                yield self.read_parquet(key)
+
+    def read_dataset(
+        self,
+        ref: DatasetRef | str,
+    ) -> pd.DataFrame:
+        """Explicitly load a complete dataset for global operations."""
+        batches = self.read_batches(ref)
+
+        try:
+            return pd.concat(batches, ignore_index=True)
+        except ValueError:
+            return pd.DataFrame()
+
+    def write_batches(
+        self,
+        ref: DatasetRef | str,
+        batches: Iterable[pd.DataFrame],
+        *,
+        mode: str = "replace",
+    ) -> int:
+        """Write DataFrames lazily as numbered Parquet parts."""
+        if mode not in {"replace", "append"}:
+            raise ValueError(f"Unsupported write mode: {mode!r}")
+
+        if mode == "replace":
+            self.delete_prefix(self.paths.dataset(ref))
+            part_number = 0
+        else:
+            part_number = self.next_part_number(ref)
+
+        records_written = 0
+
+        for frame in batches:
+            if frame.empty:
+                continue
+
+            key = self.paths.part(ref, part_number)
+            self.write_parquet(frame, key)
+            records_written += len(frame)
+            part_number += 1
+
+        return records_written
+
+    def write_records(
+        self,
+        ref: DatasetRef | str,
+        records: Iterable[dict[str, Any]],
+        *,
+        batch_size: int = 25_000,
+        mode: str = "replace",
+    ) -> int:
+        """Lazily convert records to bounded DataFrames and write them."""
+        frames = (
+            pd.DataFrame.from_records(record_batch)
+            for record_batch in batched(records, batch_size)
+        )
+        return self.write_batches(ref, frames, mode=mode)
+
+    def next_part_number(self, ref: DatasetRef | str) -> int:
+        prefix = self.paths.dataset(ref)
+        numbers: list[int] = []
+
+        for key in self.list(prefix):
+            stem = PurePosixPath(key).stem
+            if not stem.startswith("part-"):
+                continue
+            try:
+                numbers.append(int(stem.removeprefix("part-")))
+            except ValueError:
+                continue
+
+        return max(numbers, default=-1) + 1
+
 
 
 @dataclass(frozen=True)
 class LocalStorage(Storage):
+    paths: StoragePaths
     base_dir: Path
 
     def _path(self, key: str) -> Path:
@@ -101,6 +210,30 @@ class LocalStorage(Storage):
                 out.append(str(rel).replace("\\", "/"))
 
         return sorted(out)
+
+    def delete_prefix(self, prefix: str) -> None:
+        base = self.base_dir.resolve()
+        path = (base / prefix).resolve()
+
+        if path == base:
+            raise ValueError("Refusing to delete the storage root")
+
+        if base not in path.parents:
+            raise ValueError(f"Dataset prefix escapes storage root: {prefix!r}")
+
+        if not path.exists():
+            return
+
+        if path.is_file():
+            path.unlink()
+            return
+
+        for child in sorted(path.rglob("*"), reverse=True):
+            if child.is_file():
+                child.unlink()
+            elif child.is_dir():
+                child.rmdir()
+        path.rmdir()
 
     # =====================
     # Parquet
@@ -261,6 +394,7 @@ class S3Storage(Storage):
         write to temp key -> copy to final -> delete temp
       (S3 doesn't support true atomic rename)
     """
+    paths: StoragePaths
     bucket: str
     prefix: str = ""
 
@@ -330,9 +464,19 @@ class S3Storage(Storage):
             out.append(k)
 
         return sorted(out)
+
+    def delete_prefix(self, prefix: str) -> None:
+        self._init_fs()
+        normalized = prefix.strip("/")
+        if not normalized:
+            raise ValueError("Refusing to delete an empty storage prefix")
+
+        target = f"{self.bucket}/{self._key(normalized)}"
+        if self._fs.exists(target):
+            self._fs.rm(target, recursive=True)
     
     def read_parquet(self, key: str) -> pd.DataFrame:
-        # pandas will use s3fs via fsspec if installed
+        self._init_fs()
         return pd.read_parquet(
                 self._uri(key),
                 engine="pyarrow",
@@ -345,7 +489,13 @@ class S3Storage(Storage):
         tmp_key = f"{self._key(key)}.__tmp__{uuid.uuid4().hex}"
         tmp_uri = f"s3://{self.bucket}/{tmp_key}"
 
-        df.to_parquet(tmp_uri, index=True, engine="pyarrow", filesystem=self._fs)
+        df.to_parquet(
+            tmp_uri,
+            index=False,
+            engine="pyarrow",
+            compression="zstd",
+            filesystem=self._fs,
+        )
 
         src = f"{self.bucket}/{tmp_key}"
         dst = f"{self.bucket}/{self._key(key)}"
@@ -465,12 +615,18 @@ class S3Storage(Storage):
             pass
 
 
-def make_storage(cfg: dict) -> Storage:
+def make_storage(
+    cfg: dict,
+    paths: StoragePaths,
+) -> Storage:
     s = cfg
     backend = s["backend"].lower()
 
     if backend == "local":
-        return LocalStorage(base_dir=Path(s["base_dir"]))
+        return LocalStorage(
+            paths=paths,
+            base_dir=Path(s["base_dir"]),
+        )
 
     if backend == "s3":
         bucket = s["bucket"]
@@ -489,6 +645,7 @@ def make_storage(cfg: dict) -> Storage:
         )
 
         return S3Storage(
+            paths=paths,
             bucket=bucket,
             prefix=prefix,
             region=region,

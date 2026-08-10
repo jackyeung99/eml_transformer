@@ -1,5 +1,3 @@
-embedding_input: articles
-
 ingestion:
   min_theme_matches: 2
   target_themes:
@@ -77,10 +75,15 @@ ingestion:
     - USND
     - USSD
 
+standardization:
+  output: silver:gdelt:records
+  batch_size: 100000
+  write_mode: replace
+
 scraping:
   enabled: true
-  input: records
-  output: articles
+  input: silver:gdelt:records
+  output: silver:gdelt:articles
   url_column: url
   timeout: 30
   batch_size: 100

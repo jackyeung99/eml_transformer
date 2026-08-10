@@ -184,27 +184,6 @@ def embed(
 
 
 @app.command()
-def ingest(
-    source: str = typer.Option("all"),
-    config: str = typer.Option("configs/dev.yaml"),
-):
-    rt = build_runtime(config)
-
-    pipeline = FeatureOrchestrator(
-        storage=rt.storage,
-        paths=rt.paths,
-    )
-
-    if source.lower() == "all":
-        results = pipeline.run_all(rt.source_configs)
-    else:
-        source_config = get_source_config(source, rt.source_configs)
-        results = [pipeline.run_source(source, source_config)]
-
-    print_result_table("Ingestion Results", results)
-
-
-@app.command()
 def backfill(
     source: str = typer.Option(..., "--source", "-s"),
     from_date: str = typer.Option(..., "--from-date"),
@@ -251,6 +230,27 @@ def backfill(
         ]
 
     print_result_table("Backfill Results", results)
+
+
+@app.command()
+def build_features(
+    source: str = typer.Option("all"),
+    config: str = typer.Option("configs/dev.yaml"),
+):
+    rt = build_runtime(config)
+
+    pipeline = FeatureOrchestrator(
+        storage=rt.storage,
+        paths=rt.paths,
+    )
+
+    if source.lower() == "all":
+        results = pipeline.run_all(rt.source_configs)
+    else:
+        source_config = get_source_config(source, rt.source_configs)
+        results = [pipeline.run_source(source, source_config)]
+
+    print_result_table("Ingestion Results", results)
 
 
 if __name__ == "__main__":

@@ -3,3 +3,8 @@ ingestion:
   balancing_authority: MISO
   neighbors: null
   direction: outbound
+
+standardization:
+  output: silver:eia930_interchange:records
+  batch_size: 100000
+  write_mode: replace

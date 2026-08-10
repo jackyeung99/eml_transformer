@@ -6,3 +6,8 @@ ingestion:
     - DF
     - NG
     - TI
+
+standardization:
+  output: silver:eia930_region:records
+  batch_size: 100000
+  write_mode: replace

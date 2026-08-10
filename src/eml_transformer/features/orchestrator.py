@@ -4,8 +4,11 @@ import logging
 
 import pandas as pd
 
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, asdict
+
 from eml_transformer.features.registry import (
-    FEATURES,
+
     get_feature_function,
 )
 from eml_transformer.storage.paths import StoragePaths
@@ -15,6 +18,34 @@ from eml_transformer.storage.storage import Storage
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class FeatureResult:
+    status: str
+    source: str
+    run_id: str
+    records_fetched: int
+    records_written: int
+    records_skipped: int = 0
+    bronze_key: str | None = None
+    dedupe_key: str | None = None
+    error: str | None = None
+
+    def to_summary(self) -> dict[str, object]:
+        summary: dict[str, object] = {
+            "source": self.source,
+            "status": self.status,
+            "run_id": self.run_id,
+            "fetched": self.records_fetched,
+            "written": self.records_written,
+            "skipped": self.records_skipped,
+        }
+
+        if self.error:
+            summary["error"] = self.error
+
+        return summary
+
+    
 class FeatureOrchestrator:
     def __init__(
         self,
@@ -24,6 +55,25 @@ class FeatureOrchestrator:
         self.storage = storage
         self.paths = paths
 
+    def run_all(
+        self,
+        source_configs: Mapping[str, Mapping[str, Any]],
+    ) -> list[FeatureResult]:
+        """
+        Run ingestion once for every configured source.
+
+        Failures are isolated because run_source returns a failed result rather
+        than raising an exception.
+        """
+        return [
+            self.run_source(
+                source_name=source_name,
+                source_config=source_config,
+            )
+            for source_name, source_config in source_configs.items()
+        ]
+    
+    
     def run_source(
         self,
         source: str,
@@ -49,26 +99,3 @@ class FeatureOrchestrator:
         )
 
         return features
-
-    def run_all(
-        self,
-        sources: list[str] | None = None,
-    ) -> dict[str, pd.DataFrame]:
-        selected_sources = (
-            sources
-            if sources is not None
-            else list(FEATURES)
-        )
-
-        results: dict[str, pd.DataFrame] = []
-
-        for source in selected_sources:
-            try:
-                results.append(self.run_source(source))
-            except Exception:
-                logger.exception(
-                    "Feature construction failed for source=%s",
-                    source,
-                )
-
-        return results

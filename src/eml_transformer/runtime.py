@@ -54,12 +54,13 @@ def build_runtime(
     config_path = Path(config_path).resolve()
     cfg = load_config(config_path)
 
-    storage = make_storage(cfg["storage"])
 
     paths = StoragePaths(
         root=cfg.get("paths", {}).get("root", "."),
     )
 
+    storage = make_storage(cfg["storage"], paths=paths)
+    
     source_configs = build_source_configs(
         cfg=cfg,
         config_dir=config_path.parent,

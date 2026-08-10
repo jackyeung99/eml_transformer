@@ -9,7 +9,6 @@ from eml_transformer.features.transformations.reshape import (
 )
 
 
-
 def build_eia_region_features(
     records: pd.DataFrame,
 ) -> pd.DataFrame:

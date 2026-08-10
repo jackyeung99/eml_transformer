@@ -1,24 +1,21 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-import pandas as pd
-
 import eml_transformer.sources  # noqa: F401
+from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
-from eml_transformer.standardization.text_cleaning import clean_text
-from eml_transformer.schema.records import TextRecord, BronzeRecord
+from eml_transformer.utils.profiling import profile
 
 logger = logging.getLogger(__name__)
 
-from eml_transformer.utils.profiling import profile
 
-
-@dataclass
+@dataclass(slots=True)
 class StandardizationResult:
     status: str
     source: str
@@ -31,8 +28,6 @@ class StandardizationResult:
     silver_key: str | None = None
 
     error: str | None = None
-    records: pd.DataFrame | None = None
-
 
     def to_summary(self) -> dict[str, object]:
         return {
@@ -41,23 +36,24 @@ class StandardizationResult:
             "read": self.records_read,
             "out": self.records_out,
             "failed": self.records_failed,
+            "bronze": self.bronze_key,
             "silver": self.silver_key,
             "error": self.error,
         }
 
-# Eventually rename to StandardizationOrchestrator
+
 class StandardizationPipeline:
     def __init__(
         self,
         storage: Storage,
         paths: StoragePaths,
-    ):
+    ) -> None:
         self.storage = storage
         self.paths = paths
 
     def run_all(
         self,
-        source_configs: dict[str, dict],
+        source_configs: dict[str, dict[str, Any]],
     ) -> list[StandardizationResult]:
         logger.info(
             "Starting standardization for %s sources",
@@ -78,19 +74,48 @@ class StandardizationPipeline:
         self,
         source_name: str,
         source_config: dict[str, Any],
-        batch_size: int = 100_000,
     ) -> StandardizationResult:
         bronze_key: str | None = None
         silver_key: str | None = None
 
+        counters = {
+            "read": 0,
+            "failed": 0,
+        }
+
         try:
-            source = create_source(
-                source_name,
-                **source_config.get("standardization", {}),
+            stage_config = source_config.get(
+                "standardization",
+                {},
             )
 
-            bronze_key = self.paths.bronze_records(source=source.name)
-            silver_key = self.paths.silver_records(source=source.name)
+            source_options = self._source_options(stage_config)
+
+            source = create_source(
+                source_name,
+                **source_options,
+            )
+
+            output_ref = stage_config.get(
+                "output",
+                f"silver:{source.name}:records",
+            )
+
+            batch_size = stage_config.get(
+                "batch_size",
+                25_000,
+            )
+
+            write_mode = stage_config.get(
+                "write_mode",
+                "replace",
+            )
+
+            bronze_key = self.paths.bronze_records(
+                source=source.name,
+            )
+
+            silver_key = self.paths.dataset(output_ref)
 
             if not self.storage.exists(bronze_key):
                 return StandardizationResult(
@@ -100,78 +125,31 @@ class StandardizationPipeline:
                     records_out=0,
                     bronze_key=bronze_key,
                     silver_key=silver_key,
-                    error=f"No bronze data found for source: {source.name}",
+                    error=(
+                        "No bronze data found for source: "
+                        f"{source.name}"
+                    ),
                 )
 
-            batch: list[dict[str, Any]] = []
-            seen_record_ids: set[str] = set()
+            records = self._iter_standardized_records(
+                source=source,
+                bronze_key=bronze_key,
+                counters=counters,
+            )
 
-            records_read = 0
-            records_out = 0
-            failed_records = 0
-            batch_number = 0
-
-            for row in self.storage.iter_jsonl(bronze_key):
-                records_read += 1
-
-                try:
-                    bronze_record = BronzeRecord.from_dict(row)
-                    result = source.standardize_record(bronze_record)
-
-                    if result is None:
-                        continue
-
-                    standardized_records = (
-                        result if isinstance(result, list) else [result]
-                    )
-
-                    for record in standardized_records:
-            
-                        record_dict = record.to_dict()
-
-                        record_id = record_dict.get("record_id")
-
-                        if record_id and record_id in seen_record_ids:
-                            continue
-
-                        if record_id:
-                            seen_record_ids.add(record_id)
-
-                        batch.append(record_dict)
-
-                        if len(batch) >= batch_size:
-                            self._write_batch(
-                                records=batch,
-                                source_name=source.name,
-                                batch_number=batch_number,
-                            )
-
-                            records_out += len(batch)
-                            batch_number += 1
-                            batch.clear()
-
-                except Exception:
-                    failed_records += 1
-                    logger.exception(
-                        "Failed to standardize record | source=%s | row=%s",
-                        source.name,
-                        records_read,
-                    )
-
-            if batch:
-                self._write_batch(
-                    records=batch,
-                    source_name=source.name,
-                    batch_number=batch_number,
-                )
-                records_out += len(batch)
+            records_out = self.storage.write_records(
+                ref=output_ref,
+                records=records,
+                batch_size=batch_size,
+                mode=write_mode,
+            )
 
             return StandardizationResult(
                 status="success",
                 source=source.name,
-                records_read=records_read,
+                records_read=counters["read"],
                 records_out=records_out,
-                records_failed=failed_records,
+                records_failed=counters["failed"],
                 bronze_key=bronze_key,
                 silver_key=silver_key,
             )
@@ -185,59 +163,78 @@ class StandardizationPipeline:
             return StandardizationResult(
                 status="failed",
                 source=source_name,
-                records_read=0,
+                records_read=counters["read"],
                 records_out=0,
-                error=str(exc),
+                records_failed=counters["failed"],
                 bronze_key=bronze_key,
                 silver_key=silver_key,
+                error=str(exc),
             )
-        
 
-
-    def _write_batch(
+    def _iter_standardized_records(
         self,
-        records: list[dict[str, Any]],
-        source_name: str,
-        batch_number: int,
-    ) -> None:
-        df = pd.DataFrame.from_records(records)
+        source: Any,
+        bronze_key: str,
+        counters: dict[str, int],
+    ) -> Iterator[dict[str, Any]]:
+        for row_number, row in enumerate(
+            self.storage.iter_jsonl(bronze_key),
+            start=1,
+        ):
+            counters["read"] += 1
 
-        df = self._deduplicate(df)
+            try:
+                bronze_record = BronzeRecord.from_dict(row)
 
-        silver_key = self.paths.silver_part(
-            source=source_name,
-            part=batch_number,
-        )
+                result = source.standardize_record(
+                    bronze_record,
+                )
 
-        self.storage.write_parquet(df, silver_key)
+                if result is None:
+                    continue
 
-    def _records_to_dataframe(
-        self,
-        records: list[TextRecord],
-    ) -> pd.DataFrame:
-        if not records:
-            return pd.DataFrame()
+                standardized_records = (
+                    result
+                    if isinstance(result, (list, tuple))
+                    else (result,)
+                )
 
-        return pd.DataFrame.from_records(
-            record.to_dict()
-            for record in records
-        )
+                for record in standardized_records:
+                    yield record.to_dict()
 
+            except Exception:
+                counters["failed"] += 1
 
-    def _deduplicate(
-        self,
-        df: pd.DataFrame,
-    ) -> pd.DataFrame:
-        if df.empty:
-            return df
+                logger.exception(
+                    "Failed to standardize record "
+                    "| source=%s | row=%s",
+                    source.name,
+                    row_number,
+                )
 
-        if "record_id" not in df.columns:
-            return df.drop_duplicates()
+    @staticmethod
+    def _source_options(
+        stage_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Remove orchestration settings before passing configuration
+        to the source constructor.
 
-        return (
-            df.drop_duplicates(
-                subset=["record_id"],
-                keep="last",
-            )
-            .reset_index(drop=True)
-        )
+        A nested `options` mapping is preferred, but the older flat
+        configuration format remains supported.
+        """
+        if "options" in stage_config:
+            return dict(stage_config["options"])
+
+        orchestration_keys = {
+            "input",
+            "output",
+            "batch_size",
+            "write_mode",
+        }
+
+        return {
+            key: value
+            for key, value in stage_config.items()
+            if key not in orchestration_keys
+        }
