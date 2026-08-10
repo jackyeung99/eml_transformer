@@ -8,3 +8,8 @@ standardization:
   output: silver:eia930_interchange:records
   batch_size: 100000
   write_mode: replace
+
+features: 
+  input: silver:eia930_interchange:records
+  output: gold:eia930_interchange:features
+  builder: eia_interchange

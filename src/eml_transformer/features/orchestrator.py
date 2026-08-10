@@ -1,51 +1,51 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
+from uuid import uuid4
 
 import pandas as pd
 
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, asdict
-
-from eml_transformer.features.registry import (
-
-    get_feature_function,
-)
+from eml_transformer.features.registry import get_feature_function
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
-
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
 class FeatureResult:
     status: str
     source: str
-    run_id: str
-    records_fetched: int
+    records_read: int
     records_written: int
-    records_skipped: int = 0
-    bronze_key: str | None = None
-    dedupe_key: str | None = None
+    input_ref: str | None = None
+    output_ref: str | None = None
     error: str | None = None
 
     def to_summary(self) -> dict[str, object]:
         summary: dict[str, object] = {
             "source": self.source,
             "status": self.status,
-            "run_id": self.run_id,
-            "fetched": self.records_fetched,
+            "read": self.records_read,
             "written": self.records_written,
-            "skipped": self.records_skipped,
         }
 
-        if self.error:
+        if self.input_ref is not None:
+            summary["input"] = self.input_ref
+
+        if self.output_ref is not None:
+            summary["output"] = self.output_ref
+
+        if self.error is not None:
             summary["error"] = self.error
 
         return summary
 
-    
+
+
 class FeatureOrchestrator:
     def __init__(
         self,
@@ -60,42 +60,154 @@ class FeatureOrchestrator:
         source_configs: Mapping[str, Mapping[str, Any]],
     ) -> list[FeatureResult]:
         """
-        Run ingestion once for every configured source.
+        Build features for every source with a configured feature stage.
 
-        Failures are isolated because run_source returns a failed result rather
-        than raising an exception.
+        All sources in this invocation share one run ID.
+        Individual failures are isolated by run_source().
         """
-        return [
-            self.run_source(
+        run_id = uuid4().hex
+
+        results: list[FeatureResult] = []
+
+        for source_name, source_config in source_configs.items():
+            if "features" not in source_config:
+                continue
+
+            result = self.run_source(
                 source_name=source_name,
                 source_config=source_config,
+                run_id=run_id,
             )
-            for source_name, source_config in source_configs.items()
-        ]
-    
-    
+            results.append(result)
+
+        return results
+
     def run_source(
         self,
-        source: str,
-    ) -> pd.DataFrame:
-        logger.info("Building features for source=%s", source)
+        source_name: str,
+        source_config: Mapping[str, Any],
+    ) -> FeatureResult:
 
-        records = self.storage.read_parquet(
-            self.paths.silver_records(source)
-        )
-
-        build_features = get_feature_function(source)
-        features = build_features(records)
-
-        self.storage.write_parquet(
-            features,
-            self.paths.gold_features(source),
-        )
+        input_ref: str | None = None
+        output_ref: str | None = None
+        records_read = 0
 
         logger.info(
-            "Built %s feature rows for source=%s",
-            len(features),
-            source,
+            "Building features | source=%s ",
+            source_name,
+
         )
 
-        return features
+        try:
+            stage_config = source_config.get("features", {})
+
+            if not isinstance(stage_config, Mapping):
+                raise TypeError(
+                    f"Feature configuration for {source_name!r} "
+                    "must be a mapping"
+                )
+
+            input_ref = str(
+                stage_config.get(
+                    "input",
+                    f"silver:{source_name}:records",
+                )
+            )
+            output_ref = str(
+                stage_config.get(
+                    "output",
+                    f"gold:{source_name}:features",
+                )
+            )
+
+            builder_name = str(
+                stage_config.get("builder", source_name)
+            )
+            write_mode = str(
+                stage_config.get("write_mode", "replace")
+            )
+
+            options = stage_config.get("options", {})
+
+            if not isinstance(options, Mapping):
+                raise TypeError(
+                    f"Feature options for {source_name!r} "
+                    "must be a mapping"
+                )
+
+            # This intentionally loads the complete dataset because the
+            # builder may require global context for sorting, pivots,
+            # rolling windows, or lag construction.
+            records = self.storage.read_dataset(input_ref)
+            records_read = len(records)
+
+            if records.empty:
+                message = f"No feature input found: {input_ref}"
+
+                logger.warning(
+                    "%s | source=%s ",
+                    message,
+                    source_name,
+          
+                )
+
+                return FeatureResult(
+                    status="skipped",
+                    source=source_name,
+                    records_read=0,
+                    records_written=0,
+                    input_ref=input_ref,
+                    output_ref=output_ref,
+                    error=message,
+                )
+
+            build_features = get_feature_function(builder_name)
+
+            features = build_features(
+                records,
+                **dict(options),
+            )
+
+            if not isinstance(features, pd.DataFrame):
+                raise TypeError(
+                    f"Feature builder {builder_name!r} returned "
+                    f"{type(features).__name__}, expected DataFrame"
+                )
+
+            records_written = self.storage.write_batches(
+                ref=output_ref,
+                batches=(features,),
+                mode=write_mode,
+            )
+
+            logger.info(
+                "Feature building completed | source=%s | read=%s | written=%s",
+                source_name,
+                records_read,
+                records_written,
+            )
+
+            return FeatureResult(
+                status="success",
+                source=source_name,
+                records_read=records_read,
+                records_written=records_written,
+                input_ref=input_ref,
+                output_ref=output_ref,
+            )
+
+        except Exception as error:
+            logger.exception(
+                "Feature building failed | source=%s",
+                source_name,
+            )
+
+            return FeatureResult(
+                status="failed",
+                source=source_name,
+                records_read=records_read,
+                records_written=0,
+                input_ref=input_ref,
+                output_ref=output_ref,
+                error=str(error),
+            )

@@ -69,7 +69,6 @@ class StandardizationPipeline:
 
         return results
 
-    @profile()
     def run_source(
         self,
         source_name: str,
