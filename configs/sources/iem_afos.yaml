@@ -24,3 +24,13 @@ standardization:
   output: silver:iem_afos:records
   batch_size: 100000
   write_mode: replace
+
+embedding:
+  enabled: true
+  input: silver:iem_afos:records
+  output: gold:iem_afos:embeddings
+  write_mode: append
+  embedding_batch_size: 32
+  text_columns:
+    - title
+    - text

@@ -9,7 +9,7 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-from eml_transformer.sources.base import TextSource
+from eml_transformer.sources.base import DataSource
 from eml_transformer.sources.registry import register_source
 from eml_transformer.schema.records import TextRecord
 from eml_transformer.sources.text.miso_notifications import MISONotificationSource

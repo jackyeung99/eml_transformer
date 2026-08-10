@@ -103,7 +103,7 @@ class StandardizationPipeline:
 
             batch_size = stage_config.get(
                 "batch_size",
-                25_000,
+                100_000,
             )
 
             write_mode = stage_config.get(
