@@ -44,7 +44,8 @@ class DatasetRef:
 
 @dataclass(frozen=True, slots=True)
 class StoragePaths:
-    root: str = "data"
+    datasets_root: str = "data"
+    artifacts_root: str = "artifacts"
 
     def dataset(
         self,
@@ -53,24 +54,17 @@ class StoragePaths:
         if isinstance(ref, str):
             ref = DatasetRef.parse(ref)
 
-        if ref.layer == "gold":
-            if ref.artifact == "dataset":
-                return _p(
-                    self.root,
-                    "gold",
-                    "datasets",
-                    f"name={_clean(ref.source)}",
-                )
 
+        if ref.layer == "gold":
             return _p(
-                self.root,
+                self.datasets_root,
                 "gold",
-                _clean(ref.artifact),
-                f"source={_clean(ref.source)}",
+                ref.artifact,
+                f"dataset={_clean(ref.source)}",
             )
 
         return _p(
-            self.root,
+            self.datasets_root,
             ref.layer,
             f"source={_clean(ref.source)}",
             f"artifact={_clean(ref.artifact)}",
@@ -92,7 +86,7 @@ class StoragePaths:
         source: str,
     ) -> str:
         return _p(
-            self.root,
+            self.datasets_root,
             "bronze",
             f"source={_clean(source)}",
             # f"ingest_date={ingest_date}",
@@ -101,15 +95,15 @@ class StoragePaths:
 
     def dedupe_state(self, source: str) -> str:
         return _p(
-            self.root,
+            self.datasets_root,
             "metadata",
             "dedupe",
             f"source={_clean(source)}.json",
         )
 
-    def checkpoint(self, source: str) -> str:
+    def checkpoint_key(self, source: str) -> str:
         return _p(
-            self.root,
+            self.datasets_root,
             "metadata",
             "checkpoints",
             f"source={_clean(source)}.json",

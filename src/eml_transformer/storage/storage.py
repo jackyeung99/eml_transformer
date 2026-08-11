@@ -15,6 +15,7 @@ import uuid
 
 from eml_transformer.logging import get_logger
 from eml_transformer.storage.paths import DatasetRef, StoragePaths
+from eml_transformer.utils.config import StorageConfig
 
 logger = get_logger(__name__)
 
@@ -616,41 +617,28 @@ class S3Storage(Storage):
 
 
 def make_storage(
-    cfg: dict,
+    config: StorageConfig,
+    *,
     paths: StoragePaths,
 ) -> Storage:
-    s = cfg
-    backend = s["backend"].lower()
+    backend = config.backend.strip().lower()
 
     if backend == "local":
         return LocalStorage(
             paths=paths,
-            base_dir=Path(s["base_dir"]),
+            base_dir=Path(config.root),
         )
 
     if backend == "s3":
-        bucket = s["bucket"]
-        prefix = s.get("prefix", "")
-        region = s.get("region")
-        profile = s.get("profile")
-        endpoint_url = s.get("endpoint_url")
-
-        logger.info(
-            "Initializing S3Storage | bucket=%s prefix=%r region=%s profile=%s endpoint=%s",
-            bucket,
-            prefix,
-            region,
-            profile,
-            endpoint_url,
-        )
-
         return S3Storage(
             paths=paths,
-            bucket=bucket,
-            prefix=prefix,
-            region=region,
-            profile=profile,
-            endpoint_url=endpoint_url,
+            bucket=config.bucket,
+            prefix=config.prefix,
+            region=config.region,
+            profile=config.profile,
+            endpoint_url=config.endpoint_url,
         )
 
-    raise ValueError(f"Unknown storage.backend={backend!r}")
+    raise ValueError(
+        f"Unsupported storage backend: {config.backend!r}"
+    )

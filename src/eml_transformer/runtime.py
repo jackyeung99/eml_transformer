@@ -1,92 +1,174 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage, make_storage
 from eml_transformer.utils.config import (
-    build_source_configs,
+    AppConfig,
+    SourceDefinition,
+    FeatureDefinition,
     load_config,
 )
+from eml_transformer.storage.paths import StoragePaths
+from eml_transformer.storage.storage import Storage, make_storage
 
 
-Config = dict[str, Any]
-ConfigMap = dict[str, Config]
+logger = logging.getLogger(__name__)
+
+SOURCE_STAGES = frozenset(
+    {
+        "ingest",
+        "backfill",
+        "standardize",
+        "scrape",
+        "embed",
+    }
+)
 
 
 @dataclass(slots=True)
 class Runtime:
+    config: AppConfig
     storage: Storage
     paths: StoragePaths
 
-    source_configs: ConfigMap
-    enabled_source_names: tuple[str, ...]
-
-    feature_configs: ConfigMap
-    embedding_config: Config
+    @property
+    def source_names(self) -> tuple[str, ...]:
+        return tuple(self.config.sources)
 
     @property
-    def source_names(self) -> list[str]:
-        return list(self.source_configs)
+    def enabled_source_names(self) -> tuple[str, ...]:
+        return tuple(
+            source.name
+            for source in self.config.sources.values()
+            if source.enabled
+        )
 
     @property
-    def enabled_source_configs(self) -> ConfigMap:
-        return {
-            name: self.source_configs[name]
-            for name in self.enabled_source_names
+    def embedding_config(self) -> dict[str, object]:
+        return dict(self.config.embeddings)
+
+    def get_source(self, name: str) -> SourceDefinition:
+        try:
+            return self.config.sources[name]
+        except KeyError as exc:
+            available = ", ".join(sorted(self.config.sources))
+
+            raise ValueError(
+                f"Unknown source {name!r}. "
+                f"Available sources: {available}"
+            ) from exc
+
+    def sources_for_stage(
+        self,
+        stage: str,
+        *,
+        requested: str = "all",
+    ) -> list[SourceDefinition]:
+        """
+        Resolve the sources that a CLI command should execute.
+
+        `all` returns enabled sources that support the stage.
+
+        An explicitly named source may be disabled, but it must support
+        the requested stage.
+        """
+        if stage not in SOURCE_STAGES:
+            available = ", ".join(sorted(SOURCE_STAGES))
+
+            raise ValueError(
+                f"Unknown stage {stage!r}. "
+                f"Available stages: {available}"
+            )
+
+        if requested.lower() == "all":
+            return [
+                source
+                for source in self.config.sources.values()
+                if source.enabled and stage in source.stages
+            ]
+
+        source = self.get_source(requested)
+
+        if stage not in source.stages:
+            supported = ", ".join(sorted(source.stages)) or "none"
+
+            raise ValueError(
+                f"Source {source.name!r} does not support "
+                f"stage {stage!r}. Supported stages: {supported}"
+            )
+
+        if not source.enabled:
+            logger.warning(
+                "Running disabled source=%s because it was "
+                "explicitly requested",
+                source.name,
+            )
+
+        return [source]
+
+    def effective_embedding_config(
+        self,
+        source: SourceDefinition,
+        *,
+        model_name: str | None = None,
+    ) -> dict[str, object]:
+        """
+        Merge global embedding settings with source-level overrides.
+        """
+        config = {
+            **self.config.embeddings,
+            **source.settings.get("embedding", {}),
         }
 
-    @property
-    def feature_names(self) -> list[str]:
-        return list(self.feature_configs)
+        if model_name is not None:
+            config["model"] = model_name
 
-    @property
-    def enabled_feature_names(self) -> list[str]:
-        return [
-            name
-            for name, config in self.feature_configs.items()
-            if config.get("enabled", True)
-        ]
+        return config
 
-    @property
-    def enabled_feature_configs(self) -> ConfigMap:
-        return {
-            name: self.feature_configs[name]
-            for name in self.enabled_feature_names
-        }
+    def features(
+        self,
+        requested: str = "all",
+    ) -> list[FeatureDefinition]:
+        if requested.lower() == "all":
+            return [
+                feature
+                for feature in self.config.features.values()
+                if feature.enabled
+            ]
 
+        try:
+            feature = self.config.features[requested]
+        except KeyError as exc:
+            available = ", ".join(sorted(self.config.features))
+
+            raise ValueError(
+                f"Unknown feature {requested!r}. "
+                f"Available features: {available}"
+            ) from exc
+
+        if not feature.enabled:
+            logger.warning(
+                "Running disabled feature=%s because it was "
+                "explicitly requested",
+                feature.name,
+            )
+
+        return [feature]
 
 def build_runtime(config_path: str | Path) -> Runtime:
-    config_path = Path(config_path).resolve()
-    cfg = load_config(config_path)
+    config = load_config(config_path)
 
-    paths = StoragePaths(
-        root=cfg.get("paths", {}).get("root", "."),
-    )
+    paths = StoragePaths()
 
     storage = make_storage(
-        cfg["storage"],
+        config.storage,
         paths=paths,
-    )
-
-    source_configs = build_source_configs(
-        cfg=cfg,
-        config_dir=config_path.parent,
-    )
-
-    enabled_source_names = tuple(
-        name
-        for name, source_entry in cfg.get("sources", {}).items()
-        if source_entry.get("enabled", True)
     )
 
     return Runtime(
-        storage=storage,
+        config=config,
         paths=paths,
-        source_configs=source_configs,
-        enabled_source_names=enabled_source_names,
-        feature_configs=cfg.get("features", {}),
-        embedding_config=cfg.get("embeddings", {}),
+        storage=storage,
     )

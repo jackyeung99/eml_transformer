@@ -44,25 +44,6 @@ def print_result_table(
     typer.echo("=" * 100 + "\n")
 
 
-def resolve_configs(
-    requested: str,
-    all_configs: dict[str, Any],
-    enabled_configs: dict[str, Any],
-    *,
-    kind: str,
-) -> dict[str, Any]:
-    if requested.lower() == "all":
-        return enabled_configs
-
-    if requested not in all_configs:
-        available = ", ".join(sorted(all_configs))
-        raise typer.BadParameter(
-            f"Unknown {kind}: {requested}. "
-            f"Available {kind}s: {available}"
-        )
-
-    return {requested: all_configs[requested]}
-
 
 @app.callback()
 def main(
@@ -87,25 +68,51 @@ def main(
 
 @app.command()
 def sources(
-    config: str = typer.Option("configs/dev.yaml"),
+    stage: str | None = typer.Option(
+        None,
+        "--stage",
+        "-s",
+        help="Filter sources by stage.",
+    ),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
 ) -> None:
     runtime = build_runtime(config)
 
+    if stage is not None:
+        definitions = runtime.sources_for_stage(
+            stage=stage,
+            requested="all",
+        )
+
+        typer.echo(f"Enabled sources for {stage!r}:")
+
+        if not definitions:
+            typer.echo("  None")
+            return
+
+        for definition in definitions:
+            typer.echo(f"- {definition.name}")
+
+        return
+
     typer.echo("Configured sources:")
 
-    for source_name in runtime.source_names:
-        enabled = source_name in runtime.enabled_source_names
-        status = "enabled" if enabled else "disabled"
+    for definition in runtime.config.sources.values():
+        status = "enabled" if definition.enabled else "disabled"
+        stages = ", ".join(sorted(definition.stages)) or "none"
 
-        typer.echo(f"- {source_name} ({status})")
+        typer.echo(
+            f"- {definition.name} "
+            f"({status}; stages: {stages})"
+        )
 
 @app.command()
 def ingest(
-    source: str = typer.Option(
-        "all",
-        "--source",
-        "-s",
-    ),
+    source: str = typer.Option("all", "--source", "-s"),
     config: str = typer.Option(
         "configs/dev.yaml",
         "--config",
@@ -119,19 +126,17 @@ def ingest(
         paths=rt.paths,
     )
 
-    selected_sources = resolve_configs(
+    sources = rt.sources_for_stage(
+        "ingest",
         requested=source,
-        all_configs=rt.source_configs,
-        enabled_configs=rt.enabled_source_configs,
-        kind="source",
     )
 
     results = [
         pipeline.run_source(
-            source_name=source_name,
-            source_config=source_config,
+            source_name=definition.name,
+            source_config=definition.settings,
         )
-        for source_name, source_config in selected_sources.items()
+        for definition in sources
     ]
 
     print_result_table("Ingestion Results", results)
@@ -139,11 +144,7 @@ def ingest(
 
 @app.command()
 def standardize(
-    source: str = typer.Option(
-        "all",
-        "--source",
-        "-s",
-    ),
+    source: str = typer.Option("all", "--source", "-s"),
     config: str = typer.Option(
         "configs/dev.yaml",
         "--config",
@@ -157,31 +158,24 @@ def standardize(
         paths=rt.paths,
     )
 
-    selected_sources = resolve_configs(
+    sources = rt.sources_for_stage(
+        "standardize",
         requested=source,
-        all_configs=rt.source_configs,
-        enabled_configs=rt.enabled_source_configs,
-        kind="source",
     )
 
     results = [
         pipeline.run_source(
-            source_name=source_name,
-            source_config=source_config,
+            source_name=definition.name,
+            source_config=definition.settings,
         )
-        for source_name, source_config in selected_sources.items()
+        for definition in sources
     ]
 
     print_result_table("Standardization Results", results)
 
-
 @app.command()
 def scrape(
-    source: str = typer.Option(
-        "all",
-        "--source",
-        "-s",
-    ),
+    source: str = typer.Option("all", "--source", "-s"),
     config: str = typer.Option(
         "configs/dev.yaml",
         "--config",
@@ -195,19 +189,17 @@ def scrape(
         paths=rt.paths,
     )
 
-    selected_sources = resolve_configs(
+    sources = rt.sources_for_stage(
+        "scrape",
         requested=source,
-        all_configs=rt.source_configs,
-        enabled_configs=rt.enabled_source_configs,
-        kind="source",
     )
 
     results = [
         pipeline.run_source(
-            source_name=source_name,
-            source_config=source_config,
+            source_name=definition.name,
+            source_config=definition.settings,
         )
-        for source_name, source_config in selected_sources.items()
+        for definition in sources
     ]
 
     print_result_table("Scraping Results", results)
@@ -231,58 +223,62 @@ def embed(
         "-c",
     ),
 ) -> None:
-    # Imported here so commands that do not use embeddings do not load
-    # embedding dependencies.
     from eml_transformer.embeddings.orchestrator import (
         EmbeddingPipeline,
     )
 
     rt = build_runtime(config)
 
-    embedding_config = dict(rt.embedding_config)
-
-    if model_name is not None:
-        embedding_config["model"] = model_name
-
     pipeline = EmbeddingPipeline(
         storage=rt.storage,
         paths=rt.paths,
     )
 
-    selected_sources = resolve_configs(
+    definitions = rt.sources_for_stage(
+        stage="embed",
         requested=source,
-        all_configs=rt.source_configs,
-        enabled_configs=rt.enabled_source_configs,
-        kind="source",
     )
 
-    results = [
-        pipeline.run_source(
-            source=source_name,
-            source_config=source_config,
-            embedding_config=embedding_config,
-        )
-        for source_name, source_config in selected_sources.items()
-    ]
+    results = []
 
-    print_result_table("Embedding Results", results)
+
+    for definition in definitions:
+        # combine root level embedding with source specific 
+        embedding_config = rt.effective_embedding_config(
+            definition,
+            model_name=model_name,
+        )
+
+        results.append(
+            pipeline.run_source(
+                source_name=definition.name,
+                embedding_config=embedding_config,
+            )
+        )
+
+    print_result_table(
+        "Embedding Results",
+        results,
+    )
+
+@app.command()
+def test(
+    config: str = typer.Option(
+            "configs/dev.yaml",
+            "--config",
+            "-c",
+        ),
+):
+    rt = build_runtime(config)
+    print(rt.storage)
+    print(rt.paths)
 
 
 @app.command()
 def backfill(
-    source: str = typer.Option(
-        ...,
-        "--source",
-        "-s",
-    ),
-    from_date: str = typer.Option(
-        ...,
-        "--from-date",
-    ),
-    to_date: str = typer.Option(
-        ...,
-        "--to-date",
-    ),
+    source: str = typer.Option(..., "--source", "-s"),
+    from_date: str = typer.Option(..., "--from-date"),
+    to_date: str = typer.Option(..., "--to-date"),
     window_days: int = typer.Option(
         30,
         "--window-days",
@@ -317,35 +313,30 @@ def backfill(
         ingestion_pipeline=ingestion_pipeline,
     )
 
-    selected_sources = resolve_configs(
+    sources = rt.sources_for_stage(
+        "backfill",
         requested=source,
-        all_configs=rt.source_configs,
-        enabled_configs=rt.enabled_source_configs,
-        kind="source",
     )
 
     results = [
         pipeline.run_source(
-            source_name=source_name,
-            source_config=source_config,
+            source_name=definition.name,
+            source_config=definition.settings,
             from_date=from_date_utc,
             to_date=to_date_utc,
             window_days=window_days,
             seed_checkpoint=init_checkpoint,
         )
-        for source_name, source_config in selected_sources.items()
+        for definition in sources
     ]
 
     print_result_table("Backfill Results", results)
 
 
+
 @app.command("features")
 def build_features(
-    feature: str = typer.Option(
-        "all",
-        "--feature",
-        "-f",
-    ),
+    feature: str = typer.Option("all", "--feature", "-f"),
     config: str = typer.Option(
         "configs/dev.yaml",
         "--config",
@@ -359,19 +350,13 @@ def build_features(
         paths=rt.paths,
     )
 
-    selected_features = resolve_configs(
-        requested=feature,
-        all_configs=rt.feature_configs,
-        enabled_configs=rt.enabled_feature_configs,
-        kind="feature",
-    )
+    features = rt.features(feature)
 
     results = [
         orchestrator.build_feature_set(
-            feature_name=feature_name,
-            feature_config=feature_config,
+            definition=definition,
         )
-        for feature_name, feature_config in selected_features.items()
+        for definition in features
     ]
 
     print_result_table("Feature Results", results)

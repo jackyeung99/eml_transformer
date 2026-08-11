@@ -58,76 +58,64 @@ class FeatureOrchestrator:
 
     def build_feature_set(
         self,
-        source_name: str,
-        source_config: Mapping[str, Any],
+        definition: FeatureDefinition,
     ) -> FeatureResult:
-
-        input_ref: str | None = None
-        output_ref: str | None = None
+        input_ref = definition.input
+        output_ref = definition.output
         records_read = 0
 
         logger.info(
-            "Building features | source=%s ",
-            source_name,
-
+            "Building feature set | feature=%s | builder=%s | input=%s",
+            definition.name,
+            definition.builder,
+            input_ref,
         )
 
         try:
-            stage_config = source_config.get("features", {})
-
-            if not isinstance(stage_config, Mapping):
-                raise TypeError(
-                    f"Feature configuration for {source_name!r} "
-                    "must be a mapping"
+            if not definition.enabled:
+                return FeatureResult(
+                    status="skipped",
+                    source=definition.name,
+                    records_read=0,
+                    records_written=0,
+                    input_ref=input_ref,
+                    output_ref=output_ref,
+                    error="Feature set is disabled",
                 )
 
-            input_ref = str(
-                stage_config.get(
-                    "input",
-                    f"silver:{source_name}:records",
-                )
-            )
-            output_ref = str(
-                stage_config.get(
-                    "output",
-                    f"gold:{source_name}:features",
-                )
-            )
-
-            builder_name = str(
-                stage_config.get("builder", source_name)
-            )
             write_mode = str(
-                stage_config.get("write_mode", "replace")
+                definition.settings.get("write_mode", "replace")
             )
-
-            options = stage_config.get("options", {})
+            options = definition.settings.get("options", {})
 
             if not isinstance(options, Mapping):
                 raise TypeError(
-                    f"Feature options for {source_name!r} "
+                    f"Options for feature set {definition.name!r} "
                     "must be a mapping"
                 )
 
-            # This intentionally loads the complete dataset because the
-            # builder may require global context for sorting, pivots,
-            # rolling windows, or lag construction.
             records = self.storage.read_dataset(input_ref)
+
+            if not isinstance(records, pd.DataFrame):
+                raise TypeError(
+                    f"Input {input_ref!r} returned "
+                    f"{type(records).__name__}, expected DataFrame"
+                )
+
             records_read = len(records)
 
             if records.empty:
                 message = f"No feature input found: {input_ref}"
 
                 logger.warning(
-                    "%s | source=%s ",
+                    "%s | feature=%s",
                     message,
-                    source_name,
-          
+                    definition.name,
                 )
 
                 return FeatureResult(
                     status="skipped",
-                    source=source_name,
+                    source=definition.name,
                     records_read=0,
                     records_written=0,
                     input_ref=input_ref,
@@ -135,7 +123,9 @@ class FeatureOrchestrator:
                     error=message,
                 )
 
-            build_features = get_feature_function(builder_name)
+            build_features = get_feature_function(
+                definition.builder
+            )
 
             features = build_features(
                 records,
@@ -144,8 +134,18 @@ class FeatureOrchestrator:
 
             if not isinstance(features, pd.DataFrame):
                 raise TypeError(
-                    f"Feature builder {builder_name!r} returned "
+                    f"Feature builder {definition.builder!r} returned "
                     f"{type(features).__name__}, expected DataFrame"
+                )
+
+            if features.empty:
+                return FeatureResult(
+                    status="empty",
+                    source=definition.name,
+                    records_read=records_read,
+                    records_written=0,
+                    input_ref=input_ref,
+                    output_ref=output_ref,
                 )
 
             records_written = self.storage.write_batches(
@@ -155,15 +155,16 @@ class FeatureOrchestrator:
             )
 
             logger.info(
-                "Feature building completed | source=%s | read=%s | written=%s",
-                source_name,
+                "Feature building completed | feature=%s "
+                "| read=%s | written=%s",
+                definition.name,
                 records_read,
                 records_written,
             )
 
             return FeatureResult(
                 status="success",
-                source=source_name,
+                source=definition.name,
                 records_read=records_read,
                 records_written=records_written,
                 input_ref=input_ref,
@@ -172,13 +173,13 @@ class FeatureOrchestrator:
 
         except Exception as error:
             logger.exception(
-                "Feature building failed | source=%s",
-                source_name,
+                "Feature building failed | feature=%s",
+                definition.name,
             )
 
             return FeatureResult(
                 status="failed",
-                source=source_name,
+                source=definition.name,
                 records_read=records_read,
                 records_written=0,
                 input_ref=input_ref,

@@ -81,7 +81,6 @@ standardization:
   write_mode: replace
 
 scraping:
-  enabled: true
   input: silver:gdelt:records
   output: silver:gdelt:articles
   url_column: url
@@ -90,7 +89,6 @@ scraping:
   max_concurrency: 5
 
 embedding:
-  enabled: true
   input: silver:gdelt:articles
   output: gold:gdelt:embeddings
   write_mode: append

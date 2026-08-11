@@ -58,40 +58,40 @@ class EmbeddingPipeline:
 
     def run_source(
         self,
-        source: str,
+        source_name: str,
         embedding_config: dict[str, Any],
-        source_config: dict[str, Any],
     ) -> EmbeddingResult:
-        stage_config = source_config.get("embedding", {})
-
-        model_name = stage_config.get(
-            "model",
+        model_name = str(
             embedding_config.get(
                 "model",
                 "nvidia/llama-nemotron-embed-vl-1b-v2",
-            ),
+            )
         )
-        input_type = stage_config.get(
-            "input_type",
-            embedding_config.get("input_type", "passage"),
+        input_type = str(
+            embedding_config.get("input_type", "passage")
         )
-        embedding_batch_size = stage_config.get(
-            "embedding_batch_size",
-            embedding_config.get("embedding_batch_size", 32),
+        embedding_batch_size = int(
+            embedding_config.get("embedding_batch_size", 32)
         )
-        text_columns = stage_config.get(
-            "text_columns",
-            embedding_config.get("text_columns", ["title", "text"]),
+        text_columns = list(
+            embedding_config.get("text_columns", ["title", "text"])
         )
-        write_mode = stage_config.get("write_mode", "append")
+        write_mode = str(
+            embedding_config.get("write_mode", "append")
+        )
+        device = embedding_config.get("device")
 
-        input_ref = stage_config.get(
-            "input",
-            f"silver:{source}:records",
+        input_ref = str(
+            embedding_config.get(
+                "input",
+                f"silver:{source_name}:records",
+            )
         )
-        output_ref = stage_config.get(
-            "output",
-            f"gold:{source}:embeddings",
+        output_ref = str(
+            embedding_config.get(
+                "output",
+                f"gold:{source_name}:embeddings",
+            )
         )
 
         input_key = self.paths.dataset(input_ref)
@@ -108,11 +108,12 @@ class EmbeddingPipeline:
             if not self.storage.exists(input_key):
                 return EmbeddingResult(
                     status="skipped",
-                    source=source,
+                    source=source_name,
                     model_name=model_name,
                     records_read=0,
                     embeddings_created=0,
                     embeddings_skipped=0,
+                    records_failed=0,
                     input_key=input_key,
                     output_key=output_key,
                     error=f"No embedding input found: {input_key}",
@@ -126,14 +127,11 @@ class EmbeddingPipeline:
 
             client = self.embedder or SentenceTransformerEmbedder(
                 model_name=model_name,
-                device=stage_config.get(
-                    "device",
-                    embedding_config.get("device"),
-                ),
+                device=device,
             )
 
             output_batches = self._iter_embedding_batches(
-                source=source,
+                source=source_name,
                 input_ref=input_ref,
                 client=client,
                 model_name=model_name,
@@ -159,7 +157,7 @@ class EmbeddingPipeline:
 
             return EmbeddingResult(
                 status=status,
-                source=source,
+                source=source_name,
                 model_name=model_name,
                 records_read=counters["read"],
                 embeddings_created=counters["created"],
@@ -170,11 +168,14 @@ class EmbeddingPipeline:
             )
 
         except Exception as exc:
-            logger.exception("Embedding pipeline failed | source=%s", source)
+            logger.exception(
+                "Embedding pipeline failed | source=%s",
+                source_name,
+            )
 
             return EmbeddingResult(
                 status="failed",
-                source=source,
+                source=source_name,
                 model_name=model_name,
                 records_read=counters["read"],
                 embeddings_created=counters["created"],
@@ -184,7 +185,7 @@ class EmbeddingPipeline:
                 output_key=output_key,
                 error=str(exc),
             )
-
+        
     def _iter_embedding_batches(
         self,
         *,

@@ -26,7 +26,6 @@ standardization:
   write_mode: replace
 
 embedding:
-  enabled: true
   input: silver:iem_afos:records
   output: gold:iem_afos:embeddings
   write_mode: append

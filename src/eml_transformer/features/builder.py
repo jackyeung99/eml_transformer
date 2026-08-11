@@ -69,7 +69,6 @@ def build_eia_region_daily(df: pd.DataFrame) -> pd.DataFrame:
     return (
         wide
         .set_index("observed_at")
-        .groupby("region")
         .resample("1D")
         .agg(
             load_mean=("actual_load", "mean"),

@@ -4,7 +4,6 @@ standardization:
   write_mode: replace
 
 embedding:
-  enabled: true
   input: silver:miso_notifications:records
   output: gold:miso_notifications:embeddings
   write_mode: append

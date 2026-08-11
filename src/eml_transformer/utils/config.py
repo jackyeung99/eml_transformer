@@ -1,103 +1,315 @@
+from __future__ import annotations
+
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 
-def load_config(
-    path: str | Path = "configs/dev.yaml",
-) -> dict[str, Any]:
+Config = dict[str, Any]
+
+SOURCE_STAGES = frozenset(
+    {
+        "ingest",
+        "backfill",
+        "standardize",
+        "scrape",
+        "embed",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class StorageConfig:
+    backend: str = "local"
+    root: str = "."
+
+    bucket: str | None = None
+    prefix: str = ""
+    region: str | None = None
+
+@dataclass(frozen=True, slots=True)
+class SourceDefinition:
+    name: str
+    enabled: bool
+    stages: frozenset[str]
+    settings: Config
+
+
+@dataclass(frozen=True, slots=True)
+class FeatureDefinition:
+    name: str
+    enabled: bool
+    builder: str
+    input: str # one silver input 
+    output: str
+    settings: Config = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class AppConfig:
+    storage: StorageConfig
+    sources: dict[str, SourceDefinition]
+    embeddings: Config
+    features: dict[str, FeatureDefinition]
+
+
+def load_yaml(path: str | Path) -> Config:
     path = Path(path)
 
-    with path.open("r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-
-    if cfg is None:
-        raise ValueError(f"Config file is empty: {path}")
-
-    return cfg
-
-def build_source_config(
-    source: str,
-    cfg: dict[str, Any],
-    config_dir: str | Path,
-) -> tuple[str, dict[str, Any]]:
-    sources_cfg = cfg.get("sources", {})
-
-    if source not in sources_cfg:
-        valid = ", ".join(sorted(sources_cfg))
-        raise ValueError(
-            f"Unknown source: {source}. "
-            f"Available sources: {valid}"
-        )
-
-    source_entry = sources_cfg[source]
-
-    if not isinstance(source_entry, dict):
-        raise TypeError(
-            f"Configuration for source {source!r} must be a mapping"
-        )
-
-    source_config_file = source_entry.get("config")
-
-    if not source_config_file:
-        raise ValueError(
-            f"Source {source!r} does not define a config file"
-        )
-
-    source_config_path = (
-        Path(config_dir) / source_config_file
-    ).resolve()
-
-    if not source_config_path.is_file():
+    if not path.is_file():
         raise FileNotFoundError(
-            f"Configuration file for source {source!r} "
-            f"does not exist: {source_config_path}"
+            f"Configuration file does not exist: {path}"
         )
 
-    source_cfg = load_config(source_config_path)
+    with path.open(encoding="utf-8") as file:
+        data = yaml.safe_load(file) or {}
 
-    for component_name, component_config in source_cfg.items():
-        if not isinstance(component_config, dict):
-            continue
+    if not isinstance(data, dict):
+        raise TypeError(
+            f"Configuration must contain a mapping: {path}"
+        )
 
-        component_config = dict(component_config)
-        api_key_env = component_config.pop("api_key_env", None)
+    return data
 
-        if api_key_env:
+
+def resolve_api_keys(
+    value: Any,
+    *,
+    source_name: str,
+) -> Any:
+    if isinstance(value, dict):
+        resolved = {
+            key: resolve_api_keys(
+                item,
+                source_name=source_name,
+            )
+            for key, item in value.items()
+            if key != "api_key_env"
+        }
+
+        api_key_env = value.get("api_key_env")
+
+        if api_key_env is not None:
+            if not isinstance(api_key_env, str) or not api_key_env:
+                raise ValueError(
+                    f"Source {source_name!r} has an invalid "
+                    "'api_key_env'"
+                )
+
             api_key = os.getenv(api_key_env)
 
             if not api_key:
                 raise EnvironmentError(
-                    "Missing required environment variable "
-                    f"{api_key_env!r} for source {source!r}, "
-                    f"component {component_name!r}"
+                    f"Source {source_name!r} requires environment "
+                    f"variable {api_key_env!r}"
                 )
 
-            component_config["api_key"] = api_key
+            resolved["api_key"] = api_key
 
-        source_cfg[component_name] = component_config
+        return resolved
 
-    # Preserve metadata from the main configuration.
-    source_cfg["enabled"] = source_entry.get("enabled", True)
+    if isinstance(value, list):
+        return [
+            resolve_api_keys(
+                item,
+                source_name=source_name,
+            )
+            for item in value
+        ]
 
-    return source, source_cfg
+    return value
 
 
-def build_source_configs(
-    cfg: dict[str, Any],
-    config_dir: str | Path,
-) -> dict[str, dict[str, Any]]:
-    configs: dict[str, dict[str, Any]] = {}
-
-    for source_name in cfg.get("sources", {}):
-        name, source_cfg = build_source_config(
-            source=source_name,
-            cfg=cfg,
-            config_dir=config_dir,
+def build_source_definition(
+    *,
+    name: str,
+    entry: Any,
+    config_dir: Path,
+) -> SourceDefinition:
+    if not isinstance(entry, dict):
+        raise TypeError(
+            f"Source {name!r} must be a mapping"
         )
 
-        configs[name] = source_cfg
+    config_file = entry.get("config")
 
-    return configs
+    if not isinstance(config_file, str) or not config_file:
+        raise ValueError(
+            f"Source {name!r} must define a config file"
+        )
+
+    source_config_path = (
+        config_dir / config_file
+    ).resolve()
+
+    settings = load_yaml(source_config_path)
+    settings = resolve_api_keys(
+        settings,
+        source_name=name,
+    )
+
+    raw_stages = entry.get("stages", [])
+
+    if not isinstance(raw_stages, list):
+        raise TypeError(
+            f"Stages for source {name!r} must be a list"
+        )
+
+    if not all(isinstance(stage, str) for stage in raw_stages):
+        raise TypeError(
+            f"Every stage for source {name!r} must be a string"
+        )
+
+    stages = frozenset(raw_stages)
+    unknown_stages = stages - SOURCE_STAGES
+
+    if unknown_stages:
+        unknown = ", ".join(sorted(unknown_stages))
+        valid = ", ".join(sorted(SOURCE_STAGES))
+
+        raise ValueError(
+            f"Source {name!r} contains unknown stages: {unknown}. "
+            f"Valid stages: {valid}"
+        )
+
+    enabled = entry.get("enabled", True)
+
+    if not isinstance(enabled, bool):
+        raise TypeError(
+            f"'enabled' for source {name!r} must be a boolean"
+        )
+
+    return SourceDefinition(
+        name=name,
+        enabled=enabled,
+        stages=stages,
+        settings=settings,
+    )
+
+def build_source_definitions(
+    cfg: Config,
+    *,
+    config_dir: Path,
+) -> dict[str, SourceDefinition]:
+    sources_cfg = cfg.get("sources", {})
+
+    if not isinstance(sources_cfg, dict):
+        raise TypeError("'sources' must be a mapping")
+
+    return {
+        name: build_source_definition(
+            name=name,
+            entry=entry,
+            config_dir=config_dir,
+        )
+        for name, entry in sources_cfg.items()
+    }
+
+def build_feature_definition(
+    *,
+    name: str,
+    entry: Any,
+) -> FeatureDefinition:
+    if not isinstance(entry, dict):
+        raise TypeError(
+            f"Feature {name!r} must be a mapping"
+        )
+
+    builder = entry.get("builder")
+
+    if not isinstance(builder, str) or not builder:
+        raise ValueError(
+            f"Feature {name!r} must define a builder"
+        )
+
+    raw_inputs = entry.get("input",)
+
+    if not isinstance(raw_inputs, str):
+        raise TypeError(
+            f"Inputs for feature {name!r} must be a string"
+        )
+
+    output = entry.get("output")
+
+    if not isinstance(output, str) or not output:
+        raise ValueError(
+            f"Feature {name!r} must define an output"
+        )
+
+    enabled = entry.get("enabled", True)
+
+    if not isinstance(enabled, bool):
+        raise TypeError(
+            f"'enabled' for feature {name!r} must be a boolean"
+        )
+
+    settings = entry.get("settings", {})
+
+    if not isinstance(settings, dict):
+        raise TypeError(
+            f"Settings for feature {name!r} must be a mapping"
+        )
+
+    return FeatureDefinition(
+        name=name,
+        enabled=enabled,
+        builder=builder,
+        input=raw_inputs,
+        output=output,
+        settings=dict(settings),
+    )
+
+def build_feature_definitions(
+    cfg: Config,
+) -> dict[str, FeatureDefinition]:
+    features_cfg = cfg.get("features", {})
+
+    if not isinstance(features_cfg, dict):
+        raise TypeError("'features' must be a mapping")
+
+    return {
+        name: build_feature_definition(
+            name=name,
+            entry=entry,
+        )
+        for name, entry in features_cfg.items()
+    }
+
+def load_config(path: str | Path) -> AppConfig:
+    config_path = Path(path).resolve()
+    cfg = load_yaml(config_path)
+
+    storage_cfg = cfg.get("storage", {})
+
+    if not isinstance(storage_cfg, dict):
+        raise TypeError("'storage' must be a mapping")
+
+    backend = storage_cfg.get("backend", "local")
+    root = storage_cfg.get("root", "data")
+
+    if not isinstance(backend, str) or not backend:
+        raise TypeError("'storage.backend' must be a nonempty string")
+
+    if not isinstance(root, str) or not root:
+        raise TypeError("'storage.base_dir' must be a nonempty string")
+
+    embeddings = cfg.get("embeddings", {})
+
+    if not isinstance(embeddings, dict):
+        raise TypeError("'embeddings' must be a mapping")
+
+    return AppConfig(
+        storage=StorageConfig(
+            backend=backend,
+            root=root,
+        ),
+        sources=build_source_definitions(
+            cfg,
+            config_dir=config_path.parent,
+        ),
+        embeddings=dict(embeddings),
+        features=build_feature_definitions(cfg),
+    )

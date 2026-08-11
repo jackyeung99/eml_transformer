@@ -1,9 +1,6 @@
 storage:
   backend: local
-  base_dir: data
-
-paths:
-  root: .
+  root: test
 
 defaults:
   embedding_input: records
@@ -12,30 +9,62 @@ sources:
   iem_afos:
     enabled: true
     config: sources/iem_afos.yaml
+    stages:
+      - ingest
+      - backfill
+      - standardize
+      - embed
 
   miso_notifications:
     enabled: true
     config: sources/miso_notifications.yaml
+    stages: 
+      - ingest
+      - standardize
+      - embed
 
   gdelt:
     enabled: true
     config: sources/gdelt.yaml
-
-  newsapi:
-    enabled: false
-    config: sources/news_api.yaml
-
-  weather_alerts:
-    enabled: false
-    config: sources/weather_alerts.yaml
+    stages:
+      - ingest
+      - backfill
+      - standardize
+      - scrape
+      - embed
 
   eia_region:
     enabled: true
     config: sources/eia_region.yaml
+    stages:
+      - ingest
+      - backfill
+      - standardize
 
   eia_interchange:
     enabled: true
     config: sources/eia_interchange.yaml
+    stages:
+      - ingest
+      - backfill
+      - standardize
+
+  newsapi:
+    enabled: false
+    config: sources/news_api.yaml
+    stages:
+      - ingest
+      - standardize
+      - embed
+
+  weather_alerts:
+    enabled: false
+    config: sources/weather_alerts.yaml
+    stages:
+      - ingest
+      - standardize
+      - embed
+
 
 embeddings:
   provider: sentence_transformer
@@ -51,15 +80,25 @@ embeddings:
 features:
   eia_region_hourly:
     input: silver:eia930_region:records
-    output: gold:eia930_region:hourly
+    output: gold:eia930_region_hourly:features
     builder: eia_region_hourly
 
   eia_region_daily:
     input: silver:eia930_region:records
-    output: gold:eia930_region:daily
+    output: gold:eia930_region:features
     builder: eia_region_daily
 
   eia_interchange_hourly:
     input: silver:eia930_interchange:records
-    output: gold:eia930_interchange:features
+    output: gold:eia930_interchange_hourly:features
     builder: eia_interchange
+
+# datasets:
+#   load_forecasting:
+#     enabled: true
+#     builder: load_forecasting
+#     inputs:
+#       - gold:eia930_region:hourly
+#       - gold:eia930_interchange:features
+#       - gold:text:hourly
+#     output: gold:datasets:load_forecasting
