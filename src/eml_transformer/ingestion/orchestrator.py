@@ -64,25 +64,7 @@ class IngestionPipeline:
         self.source_factory = source_factory
         self.clock = clock or utc_now
 
-    
 
-    def run_all(
-        self,
-        source_configs: Mapping[str, Mapping[str, Any]],
-    ) -> list[IngestionResult]:
-        """
-        Run ingestion once for every configured source.
-
-        Failures are isolated because run_source returns a failed result rather
-        than raising an exception.
-        """
-        return [
-            self.run_source(
-                source_name=source_name,
-                source_config=source_config,
-            )
-            for source_name, source_config in source_configs.items()
-        ]
 
     def run_source(
         self,

@@ -17,7 +17,7 @@ from eml_transformer.features.transformations.temporal import (
 )
 
 
-def build_eia_region_features(
+def build_eia_region_hourly(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     features = expand_dimensions(df)
@@ -63,6 +63,23 @@ def build_eia_region_features(
     return features
 
 
+def build_eia_region_daily(df: pd.DataFrame) -> pd.DataFrame:
+    wide = build_eia_region_hourly(df)
+
+    return (
+        wide
+        .set_index("observed_at")
+        .groupby("region")
+        .resample("1D")
+        .agg(
+            load_mean=("actual_load", "mean"),
+            load_min=("actual_load", "min"),
+            load_max=("actual_load", "max"),
+            generation_total=("net_generation", "sum"),
+        )
+        .reset_index()
+    )
+
 def build_eia_interchange_features(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
@@ -72,19 +89,19 @@ def build_eia_interchange_features(
 
 
 
-def build_iem_afos_features(df: pd.DataFrame) -> pd.DataFrame:
-    scored = add_iem_severity(df)
+# def build_iem_afos_features(df: pd.DataFrame) -> pd.DataFrame:
+#     scored = add_iem_severity(df)
 
-    return aggregate_hourly_severity(
-        scored,
-        group_columns=("source", "region"),
-    )
+#     return aggregate_hourly_severity(
+#         scored,
+#         group_columns=("source", "region"),
+#     )
 
 
-def build_gdelt_features(df: pd.DataFrame) -> pd.DataFrame:
-    scored = add_gdelt_severity(df)
+# def build_gdelt_features(df: pd.DataFrame) -> pd.DataFrame:
+#     scored = add_gdelt_severity(df)
 
-    return aggregate_hourly_severity(
-        scored,
-        group_columns=("source", "region"),
-    )
+#     return aggregate_hourly_severity(
+#         scored,
+#         group_columns=("source", "region"),
+#     )

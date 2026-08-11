@@ -54,37 +54,6 @@ class BackfillPipeline:
     ):
         self.ingestion_pipeline = ingestion_pipeline
 
-    def run_all(
-        self,
-        source_configs: dict[str, dict[str, Any]],
-        from_date: datetime,
-        to_date: datetime,
-        window_days: int = 30,
-        seed_checkpoint: bool = False,
-    ) -> list[BackfillResult]:
-        results = []
-
-        for source_name, source_config in source_configs.items():
-            source = create_source(
-                source_name,
-                **source_config.get("ingestion", {}),
-            )
-
-            if not source.supports_backfill:
-                continue
-
-            results.append(
-                self.run_source(
-                    source_name=source_name,
-                    source_config=source_config,
-                    from_date=from_date,
-                    to_date=to_date,
-                    window_days=window_days,
-                    seed_checkpoint=seed_checkpoint,
-                )
-            )
-
-        return results
 
     def run_source(
         self,

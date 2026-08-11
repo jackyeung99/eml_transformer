@@ -6,8 +6,9 @@ from typing import Any
 import pandas as pd
 
 from eml_transformer.features.builder import (
-    build_eia_interchange_features,
-    build_eia_region_features,
+    build_eia_region_hourly,
+    build_eia_region_daily,
+    build_eia_interchange_features
 )
 
 
@@ -15,7 +16,8 @@ FeatureFunction = Callable[[pd.DataFrame], pd.DataFrame]
 
 
 FEATURE_BUILDERS: dict[str, FeatureFunction] = {
-    "eia_region": build_eia_region_features,
+    "eia_region_hourly": build_eia_region_hourly,
+    "eia_region_daily": build_eia_region_daily,
     "eia_interchange": build_eia_interchange_features,
 }
 

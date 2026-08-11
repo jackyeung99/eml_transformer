@@ -75,34 +75,6 @@ class ScrapingPipeline:
         self.paths = paths
         self.scraper = scraper
 
-    def run_all(
-        self,
-        source_configs: dict[str, dict],
-    ) -> list[ScrapingResult]:
-        logger.info("Starting scraping for %s sources", len(source_configs))
-
-        results: list[ScrapingResult] = []
-
-        for source_name, source_kwargs in source_configs.items():
-            if not source_kwargs.get("enabled", True):
-                continue
-
-            scraping_config = source_kwargs.get("scraping", {})
-
-            if not scraping_config.get("enabled", False):
-                continue
-
-            results.append(
-                self.run_source(
-                    source_name=source_name,
-                    source_config=source_kwargs,
-                )
-            )
-
-        logger.info("Scraping complete")
-
-        return results
-
     def run_source(
         self,
         source_name: str,

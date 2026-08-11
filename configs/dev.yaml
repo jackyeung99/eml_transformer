@@ -37,9 +37,6 @@ sources:
     enabled: true
     config: sources/eia_interchange.yaml
 
-
- 
-
 embeddings:
   provider: sentence_transformer
   model: nvidia/llama-nemotron-embed-vl-1b-v2
@@ -50,3 +47,19 @@ embeddings:
   text_columns:
     - title
     - text
+
+features:
+  eia_region_hourly:
+    input: silver:eia930_region:records
+    output: gold:eia930_region:hourly
+    builder: eia_region_hourly
+
+  eia_region_daily:
+    input: silver:eia930_region:records
+    output: gold:eia930_region:daily
+    builder: eia_region_daily
+
+  eia_interchange_hourly:
+    input: silver:eia930_interchange:records
+    output: gold:eia930_interchange:features
+    builder: eia_interchange

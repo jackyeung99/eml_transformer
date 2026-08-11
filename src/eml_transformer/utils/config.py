@@ -23,17 +23,10 @@ def build_source_config(
     cfg: dict[str, Any],
     config_dir: str | Path,
 ) -> tuple[str, dict[str, Any]]:
-    """
-    Load one source's configuration and resolve its API keys.
-
-    `config_dir` is the directory containing the main configuration
-    file. Source configuration paths are resolved relative to it.
-    """
     sources_cfg = cfg.get("sources", {})
 
     if source not in sources_cfg:
-        valid = ", ".join(sources_cfg)
-
+        valid = ", ".join(sorted(sources_cfg))
         raise ValueError(
             f"Unknown source: {source}. "
             f"Available sources: {valid}"
@@ -70,10 +63,7 @@ def build_source_config(
             continue
 
         component_config = dict(component_config)
-        api_key_env = component_config.pop(
-            "api_key_env",
-            None,
-        )
+        api_key_env = component_config.pop("api_key_env", None)
 
         if api_key_env:
             api_key = os.getenv(api_key_env)
@@ -88,6 +78,9 @@ def build_source_config(
             component_config["api_key"] = api_key
 
         source_cfg[component_name] = component_config
+
+    # Preserve metadata from the main configuration.
+    source_cfg["enabled"] = source_entry.get("enabled", True)
 
     return source, source_cfg
 

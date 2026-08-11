@@ -7,17 +7,17 @@ import pandas as pd
 import typer
 from dotenv import load_dotenv
 
-from eml_transformer.sources.registry import available_sources
-from eml_transformer.logging import setup_logging
-
+from eml_transformer.features.orchestrator import FeatureOrchestrator
 from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
 from eml_transformer.ingestion.orchestrator import IngestionPipeline
-from eml_transformer.standardization.orchestrator import StandardizationPipeline
-from eml_transformer.scraping.orchestrator import ScrapingPipeline
-from eml_transformer.features.orchestrator import FeatureOrchestrator
-
+from eml_transformer.logging import setup_logging
 from eml_transformer.runtime import build_runtime
+from eml_transformer.scraping.orchestrator import ScrapingPipeline
+from eml_transformer.standardization.orchestrator import (
+    StandardizationPipeline,
+)
 from eml_transformer.utils.dates import parse_utc_datetime
+
 
 load_dotenv()
 
@@ -25,11 +25,11 @@ app = typer.Typer()
 logger = logging.getLogger(__name__)
 
 
-def print_result_table(title: str, results: list[Any]) -> None:
-    rows = [
-        result.to_summary()
-        for result in results
-    ]
+def print_result_table(
+    title: str,
+    results: list[Any],
+) -> None:
+    rows = [result.to_summary() for result in results]
 
     if not rows:
         typer.echo(f"\n{title}: no results")
@@ -41,28 +41,45 @@ def print_result_table(title: str, results: list[Any]) -> None:
     typer.echo(title.upper())
     typer.echo("=" * 100)
     typer.echo(df.to_string(index=False, max_colwidth=40))
-    typer.echo("=" * 100 + '\n')
+    typer.echo("=" * 100 + "\n")
 
 
-def get_source_config(
-    source: str,
-    source_configs: dict[str, dict[str, Any]],
+def resolve_configs(
+    requested: str,
+    all_configs: dict[str, Any],
+    enabled_configs: dict[str, Any],
+    *,
+    kind: str,
 ) -> dict[str, Any]:
-    if source not in source_configs:
-        available = ", ".join(sorted(source_configs))
+    if requested.lower() == "all":
+        return enabled_configs
+
+    if requested not in all_configs:
+        available = ", ".join(sorted(all_configs))
         raise typer.BadParameter(
-            f"Unknown source: {source}. Available sources: {available}"
+            f"Unknown {kind}: {requested}. "
+            f"Available {kind}s: {available}"
         )
 
-    return source_configs[source]
+    return {requested: all_configs[requested]}
 
 
 @app.callback()
 def main(
-    log_level: str = typer.Option("INFO"),
-):
+    log_level: str = typer.Option(
+        "INFO",
+        "--log-level",
+    ),
+) -> None:
+    level = getattr(logging, log_level.upper(), None)
+
+    if not isinstance(level, int):
+        raise typer.BadParameter(
+            f"Invalid log level: {log_level}"
+        )
+
     setup_logging(
-        level=getattr(logging, log_level.upper()),
+        level=level,
         log_file=None,
         force=False,
     )
@@ -82,12 +99,19 @@ def sources(
 
         typer.echo(f"- {source_name} ({status})")
 
-
 @app.command()
 def ingest(
-    source: str = typer.Option("all"),
-    config: str = typer.Option("configs/dev.yaml"),
-):
+    source: str = typer.Option(
+        "all",
+        "--source",
+        "-s",
+    ),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
+) -> None:
     rt = build_runtime(config)
 
     pipeline = IngestionPipeline(
@@ -95,20 +119,37 @@ def ingest(
         paths=rt.paths,
     )
 
-    if source.lower() == "all":
-        results = pipeline.run_all(rt.source_configs)
-    else:
-        source_config = get_source_config(source, rt.source_configs)
-        results = [pipeline.run_source(source, source_config)]
+    selected_sources = resolve_configs(
+        requested=source,
+        all_configs=rt.source_configs,
+        enabled_configs=rt.enabled_source_configs,
+        kind="source",
+    )
+
+    results = [
+        pipeline.run_source(
+            source_name=source_name,
+            source_config=source_config,
+        )
+        for source_name, source_config in selected_sources.items()
+    ]
 
     print_result_table("Ingestion Results", results)
 
 
-@app.command("standardize")
+@app.command()
 def standardize(
-    source: str = typer.Option("all"),
-    config: str = typer.Option("configs/dev.yaml"),
-):
+    source: str = typer.Option(
+        "all",
+        "--source",
+        "-s",
+    ),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
+) -> None:
     rt = build_runtime(config)
 
     pipeline = StandardizationPipeline(
@@ -116,19 +157,37 @@ def standardize(
         paths=rt.paths,
     )
 
-    if source.lower() == "all":
-        results = pipeline.run_all(rt.source_configs)
-    else:
-        source_config = get_source_config(source, rt.source_configs)
-        results = [pipeline.run_source(source, source_config)]
+    selected_sources = resolve_configs(
+        requested=source,
+        all_configs=rt.source_configs,
+        enabled_configs=rt.enabled_source_configs,
+        kind="source",
+    )
+
+    results = [
+        pipeline.run_source(
+            source_name=source_name,
+            source_config=source_config,
+        )
+        for source_name, source_config in selected_sources.items()
+    ]
 
     print_result_table("Standardization Results", results)
 
-@app.command("scrape")
+
+@app.command()
 def scrape(
-    source: str = typer.Option("all"),
-    config: str = typer.Option("configs/dev.yaml"),
-):
+    source: str = typer.Option(
+        "all",
+        "--source",
+        "-s",
+    ),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
+) -> None:
     rt = build_runtime(config)
 
     pipeline = ScrapingPipeline(
@@ -136,21 +195,47 @@ def scrape(
         paths=rt.paths,
     )
 
-    if source.lower() == "all":
-        results = pipeline.run_all(rt.source_configs)
-    else:
-        source_config = get_source_config(source, rt.source_configs)
-        results = [pipeline.run_source(source, source_config)]
+    selected_sources = resolve_configs(
+        requested=source,
+        all_configs=rt.source_configs,
+        enabled_configs=rt.enabled_source_configs,
+        kind="source",
+    )
+
+    results = [
+        pipeline.run_source(
+            source_name=source_name,
+            source_config=source_config,
+        )
+        for source_name, source_config in selected_sources.items()
+    ]
 
     print_result_table("Scraping Results", results)
 
+
 @app.command()
 def embed(
-    source: str = typer.Option("all"),
-    model_name: str | None = typer.Option(None, "--model", "-m"),
-    config: str = typer.Option("configs/dev.yaml"),
-):
-    from eml_transformer.embeddings.orchestrator import EmbeddingPipeline
+    source: str = typer.Option(
+        "all",
+        "--source",
+        "-s",
+    ),
+    model_name: str | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+    ),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
+) -> None:
+    # Imported here so commands that do not use embeddings do not load
+    # embedding dependencies.
+    from eml_transformer.embeddings.orchestrator import (
+        EmbeddingPipeline,
+    )
 
     rt = build_runtime(config)
 
@@ -164,39 +249,64 @@ def embed(
         paths=rt.paths,
     )
 
-    if source.lower() == "all":
-        results = pipeline.run_all(
-            embedding_config=embedding_config,
-            source_configs=rt.source_configs,
-        )
-    else:
-        source_config = get_source_config(source, rt.source_configs)
+    selected_sources = resolve_configs(
+        requested=source,
+        all_configs=rt.source_configs,
+        enabled_configs=rt.enabled_source_configs,
+        kind="source",
+    )
 
-        results = [
-            pipeline.run_source(
-                source=source,
-                embedding_config=embedding_config,
-                source_config=source_config
-            )
-        ]
+    results = [
+        pipeline.run_source(
+            source=source_name,
+            source_config=source_config,
+            embedding_config=embedding_config,
+        )
+        for source_name, source_config in selected_sources.items()
+    ]
 
     print_result_table("Embedding Results", results)
 
 
 @app.command()
 def backfill(
-    source: str = typer.Option(..., "--source", "-s"),
-    from_date: str = typer.Option(..., "--from-date"),
-    to_date: str = typer.Option(..., "--to-date"),
-    window_days: int = typer.Option(30, "--window-days"),
-    config: str = typer.Option("configs/dev.yaml", "--config", "-c"),
-    init_checkpoint: bool = typer.Option(False, "--init-checkpoint"),
-):
+    source: str = typer.Option(
+        ...,
+        "--source",
+        "-s",
+    ),
+    from_date: str = typer.Option(
+        ...,
+        "--from-date",
+    ),
+    to_date: str = typer.Option(
+        ...,
+        "--to-date",
+    ),
+    window_days: int = typer.Option(
+        30,
+        "--window-days",
+        min=1,
+    ),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
+    init_checkpoint: bool = typer.Option(
+        False,
+        "--init-checkpoint",
+    ),
+) -> None:
     rt = build_runtime(config)
 
-    # convert iso to utc timezone aware
     from_date_utc = parse_utc_datetime(from_date)
     to_date_utc = parse_utc_datetime(to_date)
+
+    if from_date_utc >= to_date_utc:
+        raise typer.BadParameter(
+            "--from-date must be earlier than --to-date"
+        )
 
     ingestion_pipeline = IngestionPipeline(
         storage=rt.storage,
@@ -207,50 +317,64 @@ def backfill(
         ingestion_pipeline=ingestion_pipeline,
     )
 
-    if source.lower() == "all":
-        results = pipeline.run_all(
-            source_configs=rt.source_configs,
+    selected_sources = resolve_configs(
+        requested=source,
+        all_configs=rt.source_configs,
+        enabled_configs=rt.enabled_source_configs,
+        kind="source",
+    )
+
+    results = [
+        pipeline.run_source(
+            source_name=source_name,
+            source_config=source_config,
             from_date=from_date_utc,
             to_date=to_date_utc,
             window_days=window_days,
             seed_checkpoint=init_checkpoint,
         )
-    else:
-        source_config = get_source_config(source, rt.source_configs)
-    
-        results = [
-            pipeline.run_source(
-                source_name=source,
-                source_config=source_config,
-                from_date=from_date_utc,
-                to_date=to_date_utc,
-                window_days=window_days,
-                seed_checkpoint=init_checkpoint,
-            )
-        ]
+        for source_name, source_config in selected_sources.items()
+    ]
 
     print_result_table("Backfill Results", results)
 
 
-@app.command()
+@app.command("features")
 def build_features(
-    source: str = typer.Option("all"),
-    config: str = typer.Option("configs/dev.yaml"),
-):
+    feature: str = typer.Option(
+        "all",
+        "--feature",
+        "-f",
+    ),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
+) -> None:
     rt = build_runtime(config)
 
-    pipeline = FeatureOrchestrator(
+    orchestrator = FeatureOrchestrator(
         storage=rt.storage,
         paths=rt.paths,
     )
 
-    if source.lower() == "all":
-        results = pipeline.run_all(rt.source_configs)
-    else:
-        source_config = get_source_config(source, rt.source_configs)
-        results = [pipeline.run_source(source, source_config)]
+    selected_features = resolve_configs(
+        requested=feature,
+        all_configs=rt.feature_configs,
+        enabled_configs=rt.enabled_feature_configs,
+        kind="feature",
+    )
 
-    print_result_table("Ingestion Results", results)
+    results = [
+        orchestrator.build_feature_set(
+            feature_name=feature_name,
+            feature_config=feature_config,
+        )
+        for feature_name, feature_config in selected_features.items()
+    ]
+
+    print_result_table("Feature Results", results)
 
 
 if __name__ == "__main__":

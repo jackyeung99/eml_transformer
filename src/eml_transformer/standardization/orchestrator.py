@@ -51,24 +51,6 @@ class StandardizationPipeline:
         self.storage = storage
         self.paths = paths
 
-    def run_all(
-        self,
-        source_configs: dict[str, dict[str, Any]],
-    ) -> list[StandardizationResult]:
-        logger.info(
-            "Starting standardization for %s sources",
-            len(source_configs),
-        )
-
-        results = [
-            self.run_source(source_name, source_config)
-            for source_name, source_config in source_configs.items()
-        ]
-
-        logger.info("Standardization complete")
-
-        return results
-
     def run_source(
         self,
         source_name: str,

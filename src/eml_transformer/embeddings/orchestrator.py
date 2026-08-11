@@ -56,21 +56,6 @@ class EmbeddingPipeline:
         self.paths = paths
         self.embedder = embedder
 
-    def run_all(
-        self,
-        embedding_config: dict[str, Any],
-        source_configs: dict[str, dict[str, Any]],
-    ) -> list[EmbeddingResult]:
-        return [
-            self.run_source(
-                source=source,
-                embedding_config=embedding_config,
-                source_config=source_config,
-            )
-            for source, source_config in source_configs.items()
-            if source_config.get("embedding", {}).get("enabled", True)
-        ]
-
     def run_source(
         self,
         source: str,

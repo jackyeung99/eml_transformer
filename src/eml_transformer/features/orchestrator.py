@@ -55,34 +55,8 @@ class FeatureOrchestrator:
         self.storage = storage
         self.paths = paths
 
-    def run_all(
-        self,
-        source_configs: Mapping[str, Mapping[str, Any]],
-    ) -> list[FeatureResult]:
-        """
-        Build features for every source with a configured feature stage.
 
-        All sources in this invocation share one run ID.
-        Individual failures are isolated by run_source().
-        """
-        run_id = uuid4().hex
-
-        results: list[FeatureResult] = []
-
-        for source_name, source_config in source_configs.items():
-            if "features" not in source_config:
-                continue
-
-            result = self.run_source(
-                source_name=source_name,
-                source_config=source_config,
-                run_id=run_id,
-            )
-            results.append(result)
-
-        return results
-
-    def run_source(
+    def build_feature_set(
         self,
         source_name: str,
         source_config: Mapping[str, Any],

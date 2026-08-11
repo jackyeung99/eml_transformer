@@ -46,9 +46,28 @@ class DatasetRef:
 class StoragePaths:
     root: str = "data"
 
-    def dataset(self, ref: DatasetRef | str) -> str:
+    def dataset(
+        self,
+        ref: DatasetRef | str,
+    ) -> str:
         if isinstance(ref, str):
             ref = DatasetRef.parse(ref)
+
+        if ref.layer == "gold":
+            if ref.artifact == "dataset":
+                return _p(
+                    self.root,
+                    "gold",
+                    "datasets",
+                    f"name={_clean(ref.source)}",
+                )
+
+            return _p(
+                self.root,
+                "gold",
+                _clean(ref.artifact),
+                f"source={_clean(ref.source)}",
+            )
 
         return _p(
             self.root,
