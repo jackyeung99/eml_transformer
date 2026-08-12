@@ -79,14 +79,62 @@ def build_eia_region_daily(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
 
+
+MISO_REGION = "Midcontinent Independent System Operator, Inc."
+
+
 def build_eia_interchange_features(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
+    expanded = expand_dimensions(df)
+    index_columns = ["observed_at", "region"]
 
-    features = expand_dimensions(df)
-    return features
+    imports = (
+        expanded.loc[
+            expanded["to_region"].eq(MISO_REGION),
+            index_columns + ["value"],
+        ]
+        .groupby(index_columns, as_index=False)["value"]
+        .sum()
+        .rename(columns={"value": "total_imports"})
+    )
 
+    exports = (
+        expanded.loc[
+            expanded["from_region"].eq(MISO_REGION),
+            index_columns + ["value"],
+        ]
+        .groupby(index_columns, as_index=False)["value"]
+        .sum()
+        .rename(columns={"value": "total_exports"})
+    )
 
+    features = (
+        imports.merge(
+            exports,
+            on=index_columns,
+            how="outer",
+        )
+        .sort_values(["region", "observed_at"])
+        .reset_index(drop=True)
+    )
+
+    features["total_imports_lag_24"] = (
+        features.groupby("region")["total_imports"].shift(24)
+    )
+
+    features["total_exports_lag_24"] = (
+        features.groupby("region")["total_exports"].shift(24)
+    )
+
+    return features[
+        [
+            "observed_at",
+            "region",
+            "total_imports_lag_24",
+            "total_exports_lag_24",
+        ]
+    ]
 
 # def build_iem_afos_features(df: pd.DataFrame) -> pd.DataFrame:
 #     scored = add_iem_severity(df)

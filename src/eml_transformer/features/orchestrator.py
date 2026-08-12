@@ -11,6 +11,7 @@ import pandas as pd
 from eml_transformer.features.registry import get_feature_function
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
+from eml_transformer.utils.config import FeatureDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -148,10 +149,10 @@ class FeatureOrchestrator:
                     output_ref=output_ref,
                 )
 
-            records_written = self.storage.write_batches(
-                ref=output_ref,
-                batches=(features,),
-                mode=write_mode,
+
+            records_written = self.storage.write_dataframe(
+                ref = definition.output,
+                frame=features,
             )
 
             logger.info(

@@ -8,6 +8,7 @@ from eml_transformer.utils.config import (
     AppConfig,
     SourceDefinition,
     FeatureDefinition,
+    DatasetDefinition,
     load_config,
 )
 from eml_transformer.storage.paths import StoragePaths
@@ -156,6 +157,36 @@ class Runtime:
             )
 
         return [feature]
+
+    def datasets(
+        self,
+        requested: str = "all",
+    ) -> list[DatasetDefinition]:
+        if requested.lower() == "all":
+            return [
+                dataset
+                for dataset in self.config.datasets.values()
+                if dataset.enabled
+            ]
+
+        try:
+            dataset = self.config.datasets[requested]
+        except KeyError as exc:
+            available = ", ".join(sorted(self.config.datasets))
+
+            raise ValueError(
+                f"Unknown dataset {requested!r}. "
+                f"Available datasets: {available}"
+            ) from exc
+
+        if not dataset.enabled:
+            logger.warning(
+                "Running disabled dataset=%s because it was "
+                "explicitly requested",
+                dataset.name,
+            )
+
+        return [dataset]
 
 def build_runtime(config_path: str | Path) -> Runtime:
     config = load_config(config_path)

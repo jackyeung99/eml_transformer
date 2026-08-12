@@ -1,9 +1,6 @@
 storage:
   backend: local
-  root: test
-
-defaults:
-  embedding_input: records
+  root: .
 
 sources:
   iem_afos:
@@ -93,12 +90,10 @@ features:
     output: gold:eia930_interchange_hourly:features
     builder: eia_interchange
 
-# datasets:
-#   load_forecasting:
-#     enabled: true
-#     builder: load_forecasting
-#     inputs:
-#       - gold:eia930_region:hourly
-#       - gold:eia930_interchange:features
-#       - gold:text:hourly
-#     output: gold:datasets:load_forecasting
+datasets:
+  load_forecasting:
+    builder: load_forecasting
+    inputs:
+      - gold:eia930_interchange_hourly:features
+      - gold:eia930_region_hourly:features
+    output: gold:load_forecasting:datasets

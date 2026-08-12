@@ -47,6 +47,14 @@ class FeatureDefinition:
     output: str
     settings: Config = field(default_factory=dict)
 
+@dataclass(frozen=True, slots=True)
+class DatasetDefinition:
+    name: str
+    enabled: bool
+    builder: str
+    inputs: str
+    output: str
+    settings: Config = field(default_factory=dict)
 
 @dataclass(frozen=True, slots=True)
 class AppConfig:
@@ -54,6 +62,7 @@ class AppConfig:
     sources: dict[str, SourceDefinition]
     embeddings: Config
     features: dict[str, FeatureDefinition]
+    datasets: dict[str, DatasetDefinition]
 
 
 def load_yaml(path: str | Path) -> Config:
@@ -262,6 +271,7 @@ def build_feature_definition(
         settings=dict(settings),
     )
 
+
 def build_feature_definitions(
     cfg: Config,
 ) -> dict[str, FeatureDefinition]:
@@ -276,6 +286,86 @@ def build_feature_definitions(
             entry=entry,
         )
         for name, entry in features_cfg.items()
+    }
+
+def build_dataset_definition(
+    *,
+    name: str,
+    entry: Any,
+) -> DatasetDefinition:
+    if not isinstance(entry, dict):
+        raise TypeError(
+            f"Dataset {name!r} must be a mapping"
+        )
+
+    builder = entry.get("builder")
+
+    if not isinstance(builder, str) or not builder:
+        raise ValueError(
+            f"Dataset {name!r} must define a builder"
+        )
+
+    raw_inputs = entry.get("inputs")
+
+    if not isinstance(raw_inputs, list) or not raw_inputs:
+        raise TypeError(
+            f"Inputs for dataset {name!r} must be a non-empty list"
+        )
+
+    if not all(
+        isinstance(input_ref, str) and input_ref
+        for input_ref in raw_inputs
+    ):
+        raise TypeError(
+            f"Every input for dataset {name!r} "
+            "must be a non-empty string"
+        )
+
+    output = entry.get("output")
+
+    if not isinstance(output, str) or not output:
+        raise ValueError(
+            f"Dataset {name!r} must define an output"
+        )
+
+    enabled = entry.get("enabled", True)
+
+    if not isinstance(enabled, bool):
+        raise TypeError(
+            f"'enabled' for dataset {name!r} must be a boolean"
+        )
+
+    settings = entry.get("settings", {})
+
+    if not isinstance(settings, dict):
+        raise TypeError(
+            f"Settings for dataset {name!r} must be a mapping"
+        )
+
+    return DatasetDefinition(
+        name=name,
+        enabled=enabled,
+        builder=builder,
+        inputs=tuple(raw_inputs),
+        output=output,
+        settings=dict(settings),
+    )
+
+
+def build_dataset_definitions(
+    cfg: Config,
+) -> dict[str, DatasetDefinition]:
+    datasets_cfg = cfg.get("datasets", {})
+
+    if not isinstance(datasets_cfg, dict):
+        raise TypeError("'datasets' must be a mapping")
+
+    return {
+        name: build_dataset_definition(
+            name=name,
+            entry=entry,
+        )
+        for name, entry in datasets_cfg.items()
     }
 
 def load_config(path: str | Path) -> AppConfig:
@@ -312,4 +402,5 @@ def load_config(path: str | Path) -> AppConfig:
         ),
         embeddings=dict(embeddings),
         features=build_feature_definitions(cfg),
+        datasets=build_dataset_definitions(cfg)
     )

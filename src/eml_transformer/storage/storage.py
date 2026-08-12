@@ -155,13 +155,27 @@ class Storage:
         ref: DatasetRef | str,
         records: Iterable[dict[str, Any]],
         *,
-        batch_size: int = 25_000,
+        batch_size: int = 100_000,
         mode: str = "replace",
     ) -> int:
         """Lazily convert records to bounded DataFrames and write them."""
         frames = (
             pd.DataFrame.from_records(record_batch)
             for record_batch in batched(records, batch_size)
+        )
+        return self.write_batches(ref, frames, mode=mode)
+
+    def write_dataframe(
+        self,
+        ref: DatasetRef | str,
+        frame: pd.DataFrame,
+        *,
+        batch_size: int = 100_000,
+        mode: str = "replace",
+    ) -> int:
+        frames = (
+            frame.iloc[start : start + batch_size]
+            for start in range(0, len(frame), batch_size)
         )
         return self.write_batches(ref, frames, mode=mode)
 

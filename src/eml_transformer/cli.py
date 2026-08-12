@@ -7,15 +7,16 @@ import pandas as pd
 import typer
 from dotenv import load_dotenv
 
-from eml_transformer.features.orchestrator import FeatureOrchestrator
-from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
-from eml_transformer.ingestion.orchestrator import IngestionPipeline
 from eml_transformer.logging import setup_logging
 from eml_transformer.runtime import build_runtime
+
+from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
+from eml_transformer.ingestion.orchestrator import IngestionPipeline
+from eml_transformer.standardization.orchestrator import StandardizationPipeline
 from eml_transformer.scraping.orchestrator import ScrapingPipeline
-from eml_transformer.standardization.orchestrator import (
-    StandardizationPipeline,
-)
+from eml_transformer.features.orchestrator import FeatureOrchestrator
+from eml_transformer.dataset.orchestrator import DatasetOrchestrator
+
 from eml_transformer.utils.dates import parse_utc_datetime
 
 
@@ -243,7 +244,7 @@ def embed(
 
 
     for definition in definitions:
-        # combine root level embedding with source specific 
+        # combine global embedding settings with source  specific 
         embedding_config = rt.effective_embedding_config(
             definition,
             model_name=model_name,
@@ -260,18 +261,6 @@ def embed(
         "Embedding Results",
         results,
     )
-
-@app.command()
-def test(
-    config: str = typer.Option(
-            "configs/dev.yaml",
-            "--config",
-            "-c",
-        ),
-):
-    rt = build_runtime(config)
-    print(rt.storage)
-    print(rt.paths)
 
 
 @app.command()
@@ -357,6 +346,33 @@ def build_features(
             definition=definition,
         )
         for definition in features
+    ]
+
+    print_result_table("Feature Results", results)
+
+@app.command("dataset")
+def build_dataset(
+    feature: str = typer.Option("all", "--feature", "-f"),
+    config: str = typer.Option(
+        "configs/dev.yaml",
+        "--config",
+        "-c",
+    ),
+) -> None:
+    rt = build_runtime(config)
+
+    orchestrator = DatasetOrchestrator(
+        storage=rt.storage,
+        paths=rt.paths,
+    )
+
+    datasets = rt.datasets(feature)
+
+    results = [
+        orchestrator.build_dataset(
+            definition=definition,
+        )
+        for definition in datasets
     ]
 
     print_result_table("Feature Results", results)
