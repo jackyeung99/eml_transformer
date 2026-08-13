@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from eml_transformer.utils.config import (
+from eml_transformer.config.loader import (
     AppConfig,
     SourceDefinition,
     FeatureDefinition,

@@ -60,4 +60,4 @@ testpaths = ["tests"]
 where = ["src"]
 
 [project.scripts]
-eml_transformer = "eml_transformer.cli:app"
+eml_transformer = "eml_transformer.cli.main:app"

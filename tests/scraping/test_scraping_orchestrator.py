@@ -1,6 +1,6 @@
 import pandas as pd
 
-from eml_transformer.scraping.orchestrator import ScrapingPipeline
+from eml_transformer.scraping.pipeline import ScrapingPipeline
 
 
 def test_select_records_skips_success_forbidden_not_found(storage, paths):

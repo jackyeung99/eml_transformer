@@ -11,7 +11,7 @@ import pandas as pd
 from eml_transformer.features.registry import get_feature_function
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
-from eml_transformer.utils.config import FeatureDefinition
+from eml_transformer.config.loader import FeatureDefinition
 
 logger = logging.getLogger(__name__)
 

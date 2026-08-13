@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from eml_transformer.utils.config import DatasetDefinition
+from eml_transformer.config.loader import DatasetDefinition
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage
 
@@ -64,31 +64,29 @@ class DatasetOrchestrator:
                 definition.builder,
             )
 
-            inputs = [
-                self.storage.read_dataset(input_ref)
-                for input_ref in definition.inputs
-            ]
+            inputs = {
+                name: self.storage.read_dataset(ref)
+                for name, ref in definition.inputs.items()
+            } # dict of feature inputs
 
-            builder = get_dataset_function(
-                definition.builder
-            )
+            builder = get_dataset_function(definition.builder)
 
             output = builder(
                 inputs,
                 **definition.settings,
             )
-    
+
             self.storage.write_dataframe(
-                ref = definition.output,
+                ref=definition.output,
                 frame=output,
             )
 
             return DatasetResult(
                 status="success",
                 name=definition.name,
-                records_read=sum(len(frame) for frame in inputs),
+                records_read=sum(len(frame) for frame in inputs.values()),
                 records_written=len(output),
-                input_refs=definition.inputs,
+                input_refs=tuple(definition.inputs.values()),
                 output_ref=definition.output,
             )
 
@@ -101,7 +99,7 @@ class DatasetOrchestrator:
             return DatasetResult(
                 status="failed",
                 name=definition.name,
-                input_refs=definition.inputs,
+                input_refs=tuple(definition.inputs.values()),
                 output_ref=definition.output,
                 error=str(exc),
             )

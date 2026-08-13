@@ -10,12 +10,15 @@ import pyarrow.parquet as pq
 import s3fs
 
 import json
+import joblib
 import pickle
 import uuid
 
 from eml_transformer.logging import get_logger
 from eml_transformer.storage.paths import DatasetRef, StoragePaths
-from eml_transformer.utils.config import StorageConfig
+from eml_transformer.config.loader import StorageConfig
+from eml_transformer.modeling.artifacts import ModelMetadata
+from eml_transformer.modeling.base import ForecastModel
 
 logger = get_logger(__name__)
 
@@ -194,7 +197,108 @@ class Storage:
 
         return max(numbers, default=-1) + 1
 
+    # =====================
+    # Model Archiving
+    # =====================
 
+    def read_model_metadata(
+        self,
+        path: str,
+    ) -> ModelMetadata | None:
+        artifact_path = Path(path)
+        model_path = artifact_path / "model.joblib"
+        metadata_path = artifact_path / "metadata.json"
+
+        # Only report a model as available when the complete artifact exists.
+        if not model_path.exists() or not metadata_path.exists():
+            return None
+
+        with metadata_path.open(
+            "r",
+            encoding="utf-8",
+        ) as file:
+            values = json.load(file)
+
+        return ModelMetadata.from_dict(values)
+
+
+    def read_model(
+        self,
+        path: str,
+    ) -> tuple[ForecastModel, ModelMetadata]:
+        artifact_path = Path(path)
+        model_path = artifact_path / "model.joblib"
+        metadata_path = artifact_path / "metadata.json"
+
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Model file does not exist: {model_path}"
+            )
+
+        if not metadata_path.exists():
+            raise FileNotFoundError(
+                f"Model metadata does not exist: {metadata_path}"
+            )
+
+        with metadata_path.open(
+            "r",
+            encoding="utf-8",
+        ) as file:
+            metadata = ModelMetadata.from_dict(
+                json.load(file)
+            )
+
+        model = joblib.load(model_path)
+
+        if not callable(getattr(model, "predict", None)):
+            raise TypeError(
+                f"Loaded object from {model_path} does not implement predict()"
+            )
+
+        return model, metadata
+
+    def write_model(
+        self,
+        path: str,
+        model: ForecastModel,
+        metadata: ModelMetadata,
+    ) -> None:
+        artifact_path = Path(path)
+        artifact_path.mkdir(parents=True, exist_ok=True)
+
+        model_path = artifact_path / "model.joblib"
+        metadata_path = artifact_path / "metadata.json"
+
+        token = uuid.uuid4().hex
+
+        temporary_model_path = (
+            artifact_path / f".model-{token}.joblib"
+        )
+        temporary_metadata_path = (
+            artifact_path / f".metadata-{token}.json"
+        )
+
+        try:
+            joblib.dump(
+                model,
+                temporary_model_path,
+            )
+
+            temporary_metadata_path.write_text(
+                json.dumps(
+                    metadata.to_dict(),
+                    indent=2,
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+
+            temporary_model_path.replace(model_path)
+            temporary_metadata_path.replace(metadata_path)
+
+        finally:
+            temporary_model_path.unlink(missing_ok=True)
+            temporary_metadata_path.unlink(missing_ok=True)
 
 @dataclass(frozen=True)
 class LocalStorage(Storage):

@@ -8,6 +8,16 @@ from typing import Any
 import yaml
 
 
+from eml_transformer.config.definitions import (
+    AppConfig,
+    Config,
+    DatasetDefinition,
+    FeatureDefinition,
+    ModelingDefinition,
+    SourceDefinition,
+    StorageConfig,
+)
+
 Config = dict[str, Any]
 
 SOURCE_STAGES = frozenset(
@@ -19,50 +29,6 @@ SOURCE_STAGES = frozenset(
         "embed",
     }
 )
-
-
-@dataclass(frozen=True, slots=True)
-class StorageConfig:
-    backend: str = "local"
-    root: str = "."
-
-    bucket: str | None = None
-    prefix: str = ""
-    region: str | None = None
-
-@dataclass(frozen=True, slots=True)
-class SourceDefinition:
-    name: str
-    enabled: bool
-    stages: frozenset[str]
-    settings: Config
-
-
-@dataclass(frozen=True, slots=True)
-class FeatureDefinition:
-    name: str
-    enabled: bool
-    builder: str
-    input: str # one silver input 
-    output: str
-    settings: Config = field(default_factory=dict)
-
-@dataclass(frozen=True, slots=True)
-class DatasetDefinition:
-    name: str
-    enabled: bool
-    builder: str
-    inputs: str
-    output: str
-    settings: Config = field(default_factory=dict)
-
-@dataclass(frozen=True, slots=True)
-class AppConfig:
-    storage: StorageConfig
-    sources: dict[str, SourceDefinition]
-    embeddings: Config
-    features: dict[str, FeatureDefinition]
-    datasets: dict[str, DatasetDefinition]
 
 
 def load_yaml(path: str | Path) -> Config:
@@ -307,7 +273,7 @@ def build_dataset_definition(
 
     raw_inputs = entry.get("inputs")
 
-    if not isinstance(raw_inputs, list) or not raw_inputs:
+    if not isinstance(raw_inputs, dict) or not raw_inputs:
         raise TypeError(
             f"Inputs for dataset {name!r} must be a non-empty list"
         )
@@ -346,7 +312,7 @@ def build_dataset_definition(
         name=name,
         enabled=enabled,
         builder=builder,
-        inputs=tuple(raw_inputs),
+        inputs=dict(raw_inputs),
         output=output,
         settings=dict(settings),
     )
@@ -402,5 +368,6 @@ def load_config(path: str | Path) -> AppConfig:
         ),
         embeddings=dict(embeddings),
         features=build_feature_definitions(cfg),
-        datasets=build_dataset_definitions(cfg)
+        datasets=build_dataset_definitions(cfg), 
+        models = None
     )

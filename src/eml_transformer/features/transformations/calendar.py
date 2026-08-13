@@ -31,7 +31,7 @@ def add_calendar_features(
     result["day_name"] = timestamps.dt.day_name()
     result["day_type"] = result["day_of_week"].map(DAY_TYPE_MAP)
     result["month"] = timestamps.dt.month
-    result["is_weekend"] = result["day_type"].eq("weekend")
+    result["is_weekend"] = result["day_type"].eq("weekend").astype(int)
 
     return result
 
@@ -66,7 +66,7 @@ def add_holiday_feature(
         end=local_dates.max(),
     )
 
-    result["is_holiday"] = local_dates.isin(holidays)
+    result["is_holiday"] = local_dates.isin(holidays).astype(int)
 
     return result
 

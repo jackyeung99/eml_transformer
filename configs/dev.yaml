@@ -94,6 +94,6 @@ datasets:
   load_forecasting:
     builder: load_forecasting
     inputs:
-      - gold:eia930_interchange_hourly:features
-      - gold:eia930_region_hourly:features
+      region_features: gold:eia930_region_hourly:features
+      interchange_features: gold:eia930_interchange_hourly:features
     output: gold:load_forecasting:datasets
