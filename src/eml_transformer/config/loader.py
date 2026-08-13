@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from collections.abc import Mapping
 
 import yaml
 
@@ -13,7 +14,7 @@ from eml_transformer.config.definitions import (
     Config,
     DatasetDefinition,
     FeatureDefinition,
-    ModelingDefinition,
+    ModelDefinition,
     SourceDefinition,
     StorageConfig,
 )
@@ -334,6 +335,140 @@ def build_dataset_definitions(
         for name, entry in datasets_cfg.items()
     }
 
+
+def build_modeling_definition(
+    name: str,
+    entry: Mapping[str, Any],
+) -> ModelDefinition:
+    enabled = entry.get("enabled", True)
+    model_type = entry.get("model_type")
+    training_input = entry.get("training_input")
+    forecast_input = entry.get("forecast_input")
+    model_output = entry.get("model_output")
+    forecast_output = entry.get("forecast_output")
+    target = entry.get("target")
+    features = entry.get("features")
+    retrain_after_hours = entry.get("retrain_after_hours")
+
+    hyper_parameters = entry.get("hyper_parameters", {})
+    training_settings = entry.get("training", {})
+    forecast_settings = entry.get("forecasting", {})
+
+    if not isinstance(enabled, bool):
+        raise ValueError(
+            f"Model definition {name!r} "
+            "'enabled' must be a boolean"
+        )
+
+    required_strings = {
+        "model_type": model_type,
+        "training_input": training_input,
+        "forecast_input": forecast_input,
+        "model_output": model_output,
+        "forecast_output": forecast_output,
+        "target": target,
+    }
+
+    for field_name, value in required_strings.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"Model definition {name!r} requires "
+                f"a non-empty {field_name!r}"
+            )
+
+    if not isinstance(features, (list, tuple)) or not features:
+        raise ValueError(
+            f"Model definition {name!r} requires "
+            "a non-empty 'features' list"
+        )
+
+    if not all(
+        isinstance(feature, str) and feature.strip()
+        for feature in features
+    ):
+        raise ValueError(
+            f"Model definition {name!r} contains "
+            "an invalid feature name"
+        )
+
+    normalized_features = tuple(
+        feature.strip()
+        for feature in features
+    )
+
+    if len(normalized_features) != len(set(normalized_features)):
+        raise ValueError(
+            f"Model definition {name!r} contains "
+            "duplicate feature names"
+        )
+
+    mappings = {
+        "hyper_parameters": hyper_parameters,
+        "training": training_settings,
+        "forecasting": forecast_settings,
+    }
+
+    for field_name, value in mappings.items():
+        if not isinstance(value, Mapping):
+            raise ValueError(
+                f"Model definition {name!r} "
+                f"{field_name!r} must be a mapping"
+            )
+
+    if (
+        retrain_after_hours is not None
+        and (
+            not isinstance(retrain_after_hours, int)
+            or isinstance(retrain_after_hours, bool)
+            or retrain_after_hours <= 0
+        )
+    ):
+        raise ValueError(
+            f"Model definition {name!r} "
+            "'retrain_after_hours' must be a positive integer"
+        )
+
+    return ModelDefinition(
+        name=name,
+        enabled=enabled,
+        model_type=model_type.strip(),
+        training_input=training_input.strip(),
+        forecast_input=forecast_input.strip(),
+        model_output=model_output.strip(),
+        forecast_output=forecast_output.strip(),
+        target=target.strip(),
+        features=normalized_features,
+        retrain_after_hours=retrain_after_hours,
+        hyper_parameters=dict(hyper_parameters),
+        training_settings=dict(training_settings),
+        forecast_settings=dict(forecast_settings),
+    )
+
+
+def build_modeling_definitions(
+    config: Mapping[str, Any],
+) -> dict[str, ModelDefinition]:
+    modeling_config = config.get("modeling", {})
+
+    if not isinstance(modeling_config, Mapping):
+        raise ValueError("'modeling' must be a mapping")
+
+    definitions: dict[str, ModelDefinition] = {}
+
+    for name, entry in modeling_config.items():
+        if not isinstance(entry, Mapping):
+            raise ValueError(
+                f"Modeling definition {name!r} must be a mapping"
+            )
+
+        definitions[name] = build_modeling_definition(
+            name,
+            entry,
+        )
+
+    return definitions
+
+
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path).resolve()
     cfg = load_yaml(config_path)
@@ -369,5 +504,5 @@ def load_config(path: str | Path) -> AppConfig:
         embeddings=dict(embeddings),
         features=build_feature_definitions(cfg),
         datasets=build_dataset_definitions(cfg), 
-        models = None
+        modeling=build_modeling_definitions(cfg)
     )

@@ -2,22 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-
 import typer
 
 from eml_transformer.dataset.pipeline import DatasetOrchestrator
 from eml_transformer.features.pipeline import FeatureOrchestrator
-from eml_transformer.ingestion.historical_orchestrator import (
-    BackfillPipeline,
-)
-from eml_transformer.ingestion.orchestrator import (
-    IngestionPipeline,
-)
-from eml_transformer.runtime import Runtime, build_runtime
+from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
+from eml_transformer.ingestion.orchestrator import IngestionPipeline
 from eml_transformer.scraping.pipeline import ScrapingPipeline
-from eml_transformer.standardization.pipeline import (
-    StandardizationPipeline,
-)
+from eml_transformer.standardization.pipeline import StandardizationPipeline
+from eml_transformer.modeling.pipeline import ModelingPipeline
+
+
+from eml_transformer.runtime import Runtime, build_runtime
 from eml_transformer.utils.dates import parse_utc_datetime
 
 
@@ -195,7 +191,6 @@ def run_backfill(
     ]
 
 
-
 # Typer Commands
 def ingest(
     source: str = typer.Option("all", "--source", "-s"),
@@ -312,7 +307,46 @@ def build_dataset(
     )
     print_result_table("Dataset Results", results)
 
+def train_models(
+    names: list[str] | None = typer.Argument(
+        None,
+        help="Models to train. Defaults to all enabled models.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Train even when the existing model is current.",
+    ),
+    config: str = typer.Option(
+            "configs/dev.yaml",
+            "--config",
+            "-c",
+        ),
+) -> None:
+    from eml_transformer.cli.main import print_result_table
 
+    rt = build_runtime(config)
+
+    pipeline = ModelingPipeline(
+        storage=rt.storage,
+        paths=rt.paths,
+    )
+
+    results = [
+        pipeline.train(
+            definition,
+            force=force,
+        )
+        for definition in rt.models(
+            tuple(names or ())
+        )
+    ]
+
+    print_result_table("Training", results)
+
+    if any(result.status == "failure" for result in results):
+        raise typer.Exit(1)
+    
 def backfill(
     source: str = typer.Option(..., "--source", "-s"),
     from_date: str = typer.Option(..., "--from-date"),

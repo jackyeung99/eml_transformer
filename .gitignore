@@ -12,6 +12,7 @@ dist/
 
 
 data/*
+artifacts/*
 *.parquet
 *.csv
 

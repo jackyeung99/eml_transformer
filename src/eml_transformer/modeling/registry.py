@@ -12,16 +12,20 @@ ModelFactory = Callable[..., BaseEstimator]
 MODEL_FACTORIES: dict[str, ModelFactory] = {
     "ridge": Ridge,
     "random_forest": RandomForestRegressor,
+    # "custom_load": CustomLoadModel,
 }
 
 
 def create_model(
     name: str,
-    settings: dict[str, Any],
+    settings: dict[str, Any] | None = None,
 ) -> BaseEstimator:
     try:
         factory = MODEL_FACTORIES[name]
     except KeyError:
-        raise ValueError(f"Unknown model: {name!r}") from None
+        available = ", ".join(sorted(MODEL_FACTORIES))
+        raise ValueError(
+            f"Unknown model {name!r}. Available models: {available}"
+        ) from None
 
-    return factory(**settings)
+    return factory(**(settings or {}))

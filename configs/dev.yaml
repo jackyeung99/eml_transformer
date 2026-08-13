@@ -97,3 +97,37 @@ datasets:
       region_features: gold:eia930_region_hourly:features
       interchange_features: gold:eia930_interchange_hourly:features
     output: gold:load_forecasting:datasets
+
+modeling:
+   miso_hourly_load:
+      enabled: true
+      model_type: ridge
+
+      training_input: gold:load_forecasting:datasets
+      forecast_input: gold:load_forecasting:datasets
+
+      model_output: miso_hourly_load
+      forecast_output: gold:miso_hourly_load:forecasts
+
+      target: actual_load
+
+      features:
+        - hour
+        - month
+        - is_weekend
+        - is_holiday
+        - actual_load_lag_24
+        - actual_load_lag_168
+        - total_exports_lag_24
+        - total_imports_lag_24
+
+      retrain_after_hours: 168
+
+      hyper_parameters:
+        alpha: 1.0
+        fit_intercept: true
+
+      training_settings:
+          timestamp_column: observed_at
+          lookback_days: 730
+          validation_days: 14

@@ -108,3 +108,23 @@ class StoragePaths:
             "checkpoints",
             f"source={_clean(source)}.json",
         )
+
+    def model(
+        self,
+        name: str,
+    ) -> str:
+        return _p(
+            self.artifacts_root,
+            "models",
+            f"model={_clean(name)}"
+        )
+
+    def experiment(
+        self,
+        name: str,
+    ) -> str:
+        return _p(
+            self.artifacts_root, 
+            "experiments",
+            f"experiment={_clean(name)}"
+        )

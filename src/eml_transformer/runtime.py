@@ -5,12 +5,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from eml_transformer.config.loader import (
+    load_config,
+)
+
+from eml_transformer.config.definitions import (
     AppConfig,
     SourceDefinition,
     FeatureDefinition,
     DatasetDefinition,
-    load_config,
+    ModelDefinition
 )
+
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.storage import Storage, make_storage
 
@@ -187,6 +192,42 @@ class Runtime:
             )
 
         return [dataset]
+
+    def models(
+        self,
+        requested: tuple[str, ...] = (),
+    ) -> list[ModelDefinition]:
+        definitions = self.config.modeling
+
+        if not requested:
+            return [
+                definition
+                for definition in definitions.values()
+                if definition.enabled
+            ]
+
+        selected: list[ModelDefinition] = []
+
+        for name in requested:
+            try:
+                definition = definitions[name]
+            except KeyError as exc:
+                available = ", ".join(sorted(definitions))
+                raise ValueError(
+                    f"Unknown model {name!r}. "
+                    f"Available models: {available}"
+                ) from exc
+
+            if not definition.enabled:
+                logger.warning(
+                    "Running disabled model %s because it "
+                    "was explicitly requested",
+                    name,
+                )
+
+            selected.append(definition)
+
+        return selected
 
 def build_runtime(config_path: str | Path) -> Runtime:
     config = load_config(config_path)

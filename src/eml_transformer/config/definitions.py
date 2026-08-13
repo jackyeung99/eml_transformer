@@ -9,7 +9,7 @@ Config = dict[str, Any]
 '''
 Dataclasses are used to add more structure to inputs of pipeline stages. Before this 
 they would take in a generic dictionary defining the configuration of that stage, Moving to 
-dataclasses improves robustness so that stages do not have to guess at what input they get.
+dataclasses improves robustness so that stages do not have to guess at what inputs they get.
 '''
 
 @dataclass(frozen=True, slots=True)
@@ -50,17 +50,23 @@ class DatasetDefinition:
 
 
 @dataclass(frozen=True, slots=True)
-class ModelingDefinition:
+class ModelDefinition:
     name: str
     enabled: bool
-    trainer: str
+    model_type: str
+
     training_input: str
     forecast_input: str
     model_output: str
     forecast_output: str
+
     target: str
     features: tuple[str, ...]
-    settings: Config = field(default_factory=dict)
+
+    retrain_after_hours: int | None
+    hyper_parameters: dict[str, Any]
+    training_settings: dict[str, Any]
+    forecast_settings: dict[str, Any]
 
 @dataclass(frozen=True, slots=True)
 class ExperimentDefinition:
@@ -73,4 +79,4 @@ class AppConfig:
     embeddings: Config
     features: dict[str, FeatureDefinition]
     datasets: dict[str, DatasetDefinition]
-    models: dict[str, ModelingDefinition]
+    modeling: dict[str, ModelDefinition]

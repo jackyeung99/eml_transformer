@@ -3,7 +3,7 @@ from eml_transformer.config.definitions import (
     Config,
     DatasetDefinition,
     FeatureDefinition,
-    ModelingDefinition,
+    ModelDefinition,
     SourceDefinition,
     StorageConfig,
 )
@@ -14,7 +14,7 @@ __all__ = [
     "Config",
     "DatasetDefinition",
     "FeatureDefinition",
-    "ModelingDefinition",
+    "ModelDefinition",
     "SourceDefinition",
     "StorageConfig",
     "load_config",

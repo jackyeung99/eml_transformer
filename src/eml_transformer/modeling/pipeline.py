@@ -4,8 +4,7 @@ from __future__ import annotations
 import logging
 
 from eml_transformer.config.definitions import (
-    ForecastDefinition,
-    TrainingDefinition,
+    ModelDefinition,
     ExperimentDefinition
 )
 from eml_transformer.modeling.results import (
@@ -16,7 +15,8 @@ from eml_transformer.modeling.results import (
 from eml_transformer.modeling.registry import create_model
 from eml_transformer.modeling.training import (
     train_model, 
-    decide_training,
+    should_train,
+    TrainingDecision
 )
 
 from eml_transformer.modeling.artifacts import ModelMetadata
@@ -38,39 +38,44 @@ class ModelingPipeline:
 
     def train(
         self,
-        definition: TrainingDefinition,
+        definition: ModelDefinition,
         *,
         force: bool = False,
     ) -> TrainingResult:
         records_read = 0
-        model_path = self.paths.model(definition.output)
+        model_path = self.paths.model(definition.model_output)
 
         try:
-            existing_metadata = (
-                self.storage.read_model_metadata(model_path)
+            existing_metadata = self.storage.read_model_metadata(
+                model_path
             )
 
-            decision = decide_training(
-                trained_at=(
-                    existing_metadata.trained_at
-                    if existing_metadata is not None
-                    else None
-                ),
-                retrain_after=definition.retrain_after,
-                force=force,
-            )
+            if force:
+                decision = TrainingDecision(
+                    should_train=True,
+                    reason="Training was forced",
+                )
+            else:
+                decision = should_train(
+                    metadata=existing_metadata,
+                    retrain_after_hours=(
+                        definition.retrain_after_hours
+                    ),
+                )
 
             if not decision.should_train:
+                assert existing_metadata is not None
+
                 return TrainingResult(
                     status="skipped",
                     name=definition.name,
                     reason=decision.reason,
-                    model_ref=definition.output,
+                    model_ref=definition.model_output,
                     trained_at=existing_metadata.trained_at,
                 )
 
             data = self.storage.read_dataset(
-                self.paths.dataset(definition.input)
+                definition.training_input
             )
             records_read = len(data)
 
@@ -78,14 +83,14 @@ class ModelingPipeline:
                 return TrainingResult(
                     status="skipped",
                     name=definition.name,
-                    reason="empty_training_dataset",
+                    reason="Training dataset is empty",
                     records_read=0,
-                    model_ref=definition.output,
+                    model_ref=definition.model_output,
                 )
 
             model = create_model(
-                definition.model,
-                definition.parameters,
+                definition.model_type,
+                definition.hyper_parameters,
             )
 
             trained = train_model(
@@ -93,33 +98,61 @@ class ModelingPipeline:
                 data,
                 features=definition.features,
                 target=definition.target,
+                timestamp_column=(
+                    definition.training_settings.get(
+                        "timestamp_column",
+                        "observed_at",
+                    )
+                ),
+                lookback_days=(
+                    definition.training_settings.get(
+                        "lookback_days",
+                        730,
+                    )
+                ),
+                validation_days=(
+                    definition.training_settings.get(
+                        "validation_days",
+                        14,
+                    )
+                ),
             )
 
+    
             trained_at = utc_now()
 
             metadata = ModelMetadata(
                 name=definition.name,
-                model_type=definition.model,
+                model_type=definition.model_type,
                 trained_at=trained_at,
                 features=trained.features,
                 target=trained.target,
+                records_used=trained.records_used,
                 records_trained=trained.records_trained,
-                parameters=definition.parameters,
+                records_validated=trained.records_validated,
+                hyper_parameters=dict(definition.hyper_parameters),
+                training_settings=dict(definition.training_settings),
+                metrics=dict(trained.metrics),
+                training_start=trained.training_start.to_pydatetime(), # FIX THIS 
+                validation_start=trained.validation_start.to_pydatetime(),
+                validation_end=trained.validation_end.to_pydatetime(),
             )
 
             self.storage.write_model(
                 model_path,
                 trained.model,
                 metadata,
-            )
+            ) 
 
             return TrainingResult(
                 status="success",
                 name=definition.name,
                 reason=decision.reason,
                 records_read=records_read,
-                records_trained=trained.records_trained,
-                model_ref=definition.output,
+                records_trained=trained.records_used,
+                records_validated=trained.records_validated,
+                metrics=trained.metrics,
+                model_ref=definition.model_output,
                 trained_at=trained_at,
             )
 
@@ -132,14 +165,15 @@ class ModelingPipeline:
             return TrainingResult(
                 status="failure",
                 name=definition.name,
-                reason="training_failed",
-                records_read=records_read,
-                model_ref=definition.output,
+                reason="Training raised an exception",
                 error=str(exc),
+                records_read=records_read,
+                model_ref=definition.model_output,
             )
+        
     def forecast(
         self,
-        definition: ForecastDefinition,
+        definition: ModelDefinition,
     ) -> ForecastResult:
         ...
 
