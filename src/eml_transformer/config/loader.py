@@ -347,12 +347,28 @@ def build_modeling_definition(
     model_output = entry.get("model_output")
     forecast_output = entry.get("forecast_output")
     target = entry.get("target")
-    features = entry.get("features")
+    features = entry.get("features", [])
     retrain_after_hours = entry.get("retrain_after_hours")
 
     hyper_parameters = entry.get("hyper_parameters", {})
-    training_settings = entry.get("training", {})
-    forecast_settings = entry.get("forecasting", {})
+    training_settings = entry.get("training_settings", {})
+    forecast_settings = entry.get("forecast_settings", {})
+
+    use_exogenous = bool(
+        hyper_parameters.get("use_exogenous", True)
+    )
+
+    if use_exogenous and not features:
+        raise ValueError(
+            f"Modeling definition {name!r} uses exogenous "
+            "variables but does not define any features"
+        )
+
+    if not use_exogenous and features:
+        raise ValueError(
+            f"Modeling definition {name!r} disables "
+            "exogenous variables but defines features"
+        )
 
     if not isinstance(enabled, bool):
         raise ValueError(
@@ -376,11 +392,14 @@ def build_modeling_definition(
                 f"a non-empty {field_name!r}"
             )
 
-    if not isinstance(features, (list, tuple)) or not features:
+
+    if not isinstance(features, (list, tuple)):
         raise ValueError(
-            f"Model definition {name!r} requires "
-            "a non-empty 'features' list"
+            f"Modeling definition {name!r} requires "
+            "'features' to be a list or tuple"
         )
+
+    features = tuple(str(feature) for feature in features)
 
     if not all(
         isinstance(feature, str) and feature.strip()

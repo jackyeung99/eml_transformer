@@ -7,13 +7,15 @@ import pandas as pd
 
 from eml_transformer.dataset.builder import (
     build_load_forecast_dataset,
+    build_daily_load_forecast_dataset
 )
 
 DatasetFunction = Callable[..., pd.DataFrame]
 
 
 DATASET_BUILDERS: dict[str, DatasetFunction] = {
-    "load_forecasting": build_load_forecast_dataset,
+    "hourly_load_forecasting": build_load_forecast_dataset,
+    "daily_load_forecasting": build_daily_load_forecast_dataset
 }
 
 

@@ -63,27 +63,42 @@ def build_eia_region_hourly(
     return features
 
 
-def build_eia_region_daily(df: pd.DataFrame) -> pd.DataFrame:
-    wide = build_eia_region_hourly(df)
+def build_eia_region_daily(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    hourly = build_eia_region_hourly(df).copy()
 
-    return (
-        wide
-        .set_index("observed_at")
-        .resample("1D")
+    hourly["observed_at"] = pd.to_datetime(
+        hourly["observed_at"],
+        utc=True,
+    )
+
+    hourly["day"] = hourly["observed_at"].dt.floor("D")
+
+    daily = (
+        hourly
+        .groupby(
+            ["day", "region"],
+            as_index=False,
+        )
         .agg(
             load_mean=("actual_load", "mean"),
             load_min=("actual_load", "min"),
             load_max=("actual_load", "max"),
             generation_total=("net_generation", "sum"),
         )
-        .reset_index()
+        .rename(columns={"day": "observed_at"})
+        .sort_values(["region", "observed_at"])
+        .reset_index(drop=True)
     )
+
+    return daily
 
 
 MISO_REGION = "Midcontinent Independent System Operator, Inc."
 
 
-def build_eia_interchange_features(
+def build_eia_interchange_totals(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     expanded = expand_dimensions(df)
@@ -109,7 +124,7 @@ def build_eia_interchange_features(
         .rename(columns={"value": "total_exports"})
     )
 
-    features = (
+    return (
         imports.merge(
             exports,
             on=index_columns,
@@ -118,6 +133,11 @@ def build_eia_interchange_features(
         .sort_values(["region", "observed_at"])
         .reset_index(drop=True)
     )
+
+def build_eia_interchange_features(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    features = build_eia_interchange_totals(df)
 
     features["total_imports_lag_24"] = (
         features.groupby("region")["total_imports"].shift(24)
@@ -136,6 +156,49 @@ def build_eia_interchange_features(
         ]
     ]
 
+def build_eia_interchange_daily(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    hourly = build_eia_interchange_totals(df).copy()
+
+    hourly["observed_at"] = pd.to_datetime(
+        hourly["observed_at"],
+        utc=True,
+    )
+
+    hourly["day"] = hourly["observed_at"].dt.floor("D")
+
+    daily = (
+        hourly
+        .groupby(
+            ["region", "day"],
+            as_index=False,
+        )
+        .agg(
+            total_imports=("total_imports", "mean"),
+            total_exports=("total_exports", "mean"),
+        )
+        .rename(columns={"day": "observed_at"})
+        .sort_values(["region", "observed_at"])
+        .reset_index(drop=True)
+    )
+
+    daily["total_imports_lag_1"] = (
+        daily.groupby("region")["total_imports"].shift(1)
+    )
+
+    daily["total_exports_lag_1"] = (
+        daily.groupby("region")["total_exports"].shift(1)
+    )
+
+    return daily[
+        [
+            "observed_at",
+            "region",
+            "total_imports_lag_1",
+            "total_exports_lag_1",
+        ]
+    ]
 # def build_iem_afos_features(df: pd.DataFrame) -> pd.DataFrame:
 #     scored = add_iem_severity(df)
 

@@ -68,6 +68,7 @@ class ModelMetadata:
             ),
             "metrics": dict(self.metrics),
             "diagnostics": dict(self.diagnostics),
+            
             "training_start": (
                 format_optional_utc_datetime(
                     self.training_start

@@ -9,7 +9,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from eml_transformer.modeling.models.base import (
-    BaseForecastModel,
+    BaseForecastModel, FloatArray
 )
 
 
@@ -30,6 +30,10 @@ class RidgeForecastModel(BaseForecastModel):
         self.solver = solver
         self.max_iter = max_iter
         self.tolerance = tolerance
+
+    @property
+    def requires_exogenous(self) -> bool:
+        return True
 
     def _fit_model(
         self,
@@ -56,11 +60,19 @@ class RidgeForecastModel(BaseForecastModel):
 
         self.estimator_.fit(X, y)
 
-    def _predict_model(
+    def _forecast_model(
         self,
-        X: NDArray[np.float64],
-    ) -> NDArray[np.float64]:
+        *,
+        steps: int,
+        X: FloatArray | None,
+    ) -> FloatArray:
+        if X is None:
+            raise ValueError(
+                "Ridge requires exogenous features"
+            )
+
         predictions = self.estimator_.predict(X)
+
         return np.asarray(predictions, dtype=float)
 
     def _build_diagnostics(

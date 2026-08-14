@@ -82,120 +82,48 @@ features:
 
   eia_region_daily:
     input: silver:eia930_region:records
-    output: gold:eia930_region:features
+    output: gold:eia930_region_daily:features
     builder: eia_region_daily
 
   eia_interchange_hourly:
     input: silver:eia930_interchange:records
     output: gold:eia930_interchange_hourly:features
-    builder: eia_interchange
+    builder: eia_interchange_hourly
+  
+  eia_interchange_daily:
+    input: silver:eia930_interchange:records
+    output: gold:eia930_interchange_daily:features
+    builder: eia_interchange_daily
 
 datasets:
-  load_forecasting:
-    builder: load_forecasting
+  hourly_load:
+    builder: hourly_load_forecasting
     inputs:
       region_features: gold:eia930_region_hourly:features
       interchange_features: gold:eia930_interchange_hourly:features
-    output: gold:load_forecasting:datasets
+    output: gold:hourly_load:datasets
+
+  daily_load:
+    builder: daily_load_forecasting
+    inputs:
+      region_daily_features: gold:eia930_region_daily:features
+      interchange_daily_features: gold:eia930_interchange_daily:features
+    output: gold:daily_load:datasets
+
 
 modeling:
-  miso_hourly_load_ridge:
-    enabled: true
-    model_type: ridge
-
-    training_input: gold:load_forecasting:datasets
-    forecast_input: gold:load_forecasting:datasets
-
-    model_output: miso_hourly_load_ridge
-    forecast_output: gold:miso_hourly_load_ridge:forecasts
-
-    target: actual_load
-
-    features:
-      - hour
-      - month
-      - is_weekend
-      - is_holiday
-      - actual_load_lag_24
-      - actual_load_lag_168
-      - total_exports_lag_24
-      - total_imports_lag_24
-
-    retrain_after_hours: 168
-
-    hyper_parameters:
-      alpha: 1.0
-      fit_intercept: true
-      scale_features: true
-      solver: auto
-      tolerance: 0.0001
-      max_iter: null
-
-    training_settings:
-      timestamp_column: observed_at
-      lookback_days: 730
-      validation_days: 14
-
-  miso_hourly_load_arima:
-    enabled: true
-    model_type: arima
-
-    training_input: gold:load_forecasting:datasets
-    forecast_input: gold:load_forecasting:datasets
-
-    model_output: miso_hourly_load_arima
-    forecast_output: gold:miso_hourly_load_arima:forecasts
-
-    target: actual_load
-
-    features:
-      - hour
-      - month
-      - is_weekend
-      - is_holiday
-      - actual_load_lag_24
-      - actual_load_lag_168
-      - total_exports_lag_24
-      - total_imports_lag_24
-
-    retrain_after_hours: 168
-
-    hyper_parameters:
-      order:
-        - 2
-        - 1
-        - 2
-      trend: null
-      use_exogenous: true
-      enforce_stationarity: true
-      enforce_invertibility: true
-
-    training_settings:
-      timestamp_column: observed_at
-      lookback_days: 730
-      validation_days: 14
-
   miso_hourly_load_sarimax:
     enabled: true
     model_type: sarimax
 
-    training_input: gold:load_forecasting:datasets
-    forecast_input: gold:load_forecasting:datasets
+    training_input: gold:hourly_load:datasets
+    forecast_input: gold:hourly_load:datasets
 
     model_output: miso_hourly_load_sarimax
     forecast_output: gold:miso_hourly_load_sarimax:forecasts
 
     target: actual_load
-
-    features:
-      - hour
-      - month
-      - is_weekend
-      - is_holiday
-      - actual_load_lag_24
-      - actual_load_lag_168
-      - total_exports_lag_24
-      - total_imports_lag_24
+    features: []
 
     retrain_after_hours: 168
 
@@ -210,7 +138,7 @@ modeling:
         - 1
         - 24
       trend: null
-      use_exogenous: true
+      use_exogenous: false
       enforce_stationarity: true
       enforce_invertibility: true
       simple_differencing: false
@@ -219,3 +147,41 @@ modeling:
       timestamp_column: observed_at
       lookback_days: 730
       validation_days: 14
+
+    forecast_settings:
+      forecast_steps: 10
+      frequency: 1d
+
+  miso_daily_peak_arima:
+    enabled: true
+    model_type: arima
+
+    training_input: gold:daily_load:datasets
+    forecast_input: gold:daily_load:datasets
+
+    model_output: miso_daily_peak_arima
+    forecast_output: gold:miso_daily_peak_arima:forecasts
+
+    target: load_max
+    features: []
+
+    retrain_after_hours: 168
+
+    hyper_parameters:
+      order:
+        - 2
+        - 1
+        - 2
+      trend: null
+      use_exogenous: false
+      enforce_stationarity: true
+      enforce_invertibility: true
+
+    training_settings:
+      timestamp_column: observed_at
+      lookback_days: 1825
+      validation_days: 30
+
+    forecast_settings:
+      forecast_steps: 3
+      frequency: 1d

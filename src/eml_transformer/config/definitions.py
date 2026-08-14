@@ -61,12 +61,13 @@ class ModelDefinition:
     forecast_output: str
 
     target: str
-    features: tuple[str, ...]
 
     retrain_after_hours: int | None
     hyper_parameters: dict[str, Any]
     training_settings: dict[str, Any]
     forecast_settings: dict[str, Any]
+
+    features: tuple[str, ...] = ()
 
 @dataclass(frozen=True, slots=True)
 class ExperimentDefinition:

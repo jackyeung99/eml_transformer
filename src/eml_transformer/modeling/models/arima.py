@@ -8,7 +8,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.arima.model import ARIMAResults
 
 
-from eml_transformer.modeling.models.base import BaseForecastModel
+from eml_transformer.modeling.models.base import BaseForecastModel, FloatArray
 from eml_transformer.modeling.models.statsmodels import (
     extract_statsmodels_diagnostics,
 )
@@ -29,16 +29,18 @@ class ArimaForecastModel(BaseForecastModel):
         self.enforce_stationarity = enforce_stationarity
         self.enforce_invertibility = enforce_invertibility
 
+    @property
+    def requires_exogenous(self) -> bool:
+        return self.use_exogenous
+
     def _fit_model(
         self,
-        X: NDArray[np.float64],
-        y: NDArray[np.float64],
+        X: FloatArray | None,
+        y: FloatArray,
     ) -> None:
-        exogenous = X if self.use_exogenous else None
-
         self.estimator_ = ARIMA(
             endog=y,
-            exog=exogenous,
+            exog=X,
             order=self.order,
             trend=self.trend,
             enforce_stationarity=self.enforce_stationarity,
@@ -47,28 +49,27 @@ class ArimaForecastModel(BaseForecastModel):
 
         self.results_ = self.estimator_.fit()
 
-    def _predict_model(
+    def _forecast_model(
         self,
-        X: NDArray[np.float64],
-    ) -> NDArray[np.float64]:
-        exogenous = X if self.use_exogenous else None
-
-        forecast = self.results_.forecast(
-            steps=len(X),
-            exog=exogenous,
+        *,
+        steps: int,
+        X: FloatArray | None,
+    ) -> FloatArray:
+        predictions = self.results_.forecast(
+            steps=steps,
+            exog=X,
         )
 
-        return np.asarray(forecast, dtype=float)
+        return np.asarray(predictions, dtype=float)
 
     def _build_diagnostics(
         self,
-        X: NDArray[np.float64],
-        y: NDArray[np.float64],
+        X: FloatArray | None,
+        y: FloatArray,
     ) -> dict[str, Any]:
         diagnostics = extract_statsmodels_diagnostics(
             self.results_
         )
-
         diagnostics.update(
             {
                 "order": list(self.order),
@@ -78,5 +79,4 @@ class ArimaForecastModel(BaseForecastModel):
                 ),
             }
         )
-
         return diagnostics

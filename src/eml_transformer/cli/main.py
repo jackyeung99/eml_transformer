@@ -119,6 +119,7 @@ app.command("embed")(stages.embed)
 app.command("features")(stages.build_features)
 app.command("dataset")(stages.build_dataset)
 app.command("train")(stages.train_models)
+app.command("forecast")(stages.forecast)
 
 # Register workflow commands.
 app.command("run")(workflows.run)

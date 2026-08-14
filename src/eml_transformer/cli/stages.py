@@ -346,6 +346,41 @@ def train_models(
 
     if any(result.status == "failure" for result in results):
         raise typer.Exit(1)
+
+def forecast(
+    names: list[str] | None = typer.Argument(
+        None,
+        help="Models to train. Defaults to all enabled models.",
+    ),
+    config: str = typer.Option(
+            "configs/dev.yaml",
+            "--config",
+            "-c",
+        ),
+) -> None:
+    from eml_transformer.cli.main import print_result_table
+
+    rt = build_runtime(config)
+
+    pipeline = ModelingPipeline(
+        storage=rt.storage,
+        paths=rt.paths,
+    )
+
+    results = [
+        pipeline.forecast(
+            definition
+        )
+        for definition in rt.models(
+            tuple(names or ())
+        )
+    ]
+
+    print_result_table("Forecasting Results", results)
+
+    if any(result.status == "failure" for result in results):
+        raise typer.Exit(1)
+
     
 def backfill(
     source: str = typer.Option(..., "--source", "-s"),

@@ -51,27 +51,48 @@ class TrainingResult:
             "error": self.error,
         }
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ForecastResult:
-    status: Status
+    status: str
     name: str
+    reason: str
+
     records_read: int = 0
     records_written: int = 0
+
     model_ref: str | None = None
-    output_ref: str | None = None
+    forecast_ref: str | None = None
+    model_version: str | None = None
+
+    forecast_origin: datetime | None = None
+    generated_at: datetime | None = None
+
     error: str | None = None
 
     def to_summary(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "status": self.status,
-            "read": self.records_read,
-            "written": self.records_written,
-            "model": self.model_ref,
-            "output": self.output_ref,
-            "error": self.error,
-        }
+            return {
+                "name": self.name,
+                "status": self.status,
+                "reason": self.reason, 
 
+                "records_read": self.records_read,
+                "records_written": self.records_written,
+
+                "model": self.model_ref,
+                "forecast_ref": self.forecast_ref,
+                "model_version": self.model_version,
+
+                "forecast_origin": self.forecast_ref,
+                "generated_at": (
+                    self.generated_at.isoformat()
+                    if self.generated_at is not None
+                    else None
+                ),
+            
+                "error": self.error,
+            }
+
+    
 
 @dataclass(slots=True)
 class BacktestResult:

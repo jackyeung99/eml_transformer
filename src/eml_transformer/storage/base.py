@@ -175,13 +175,43 @@ class Storage:
         *,
         batch_size: int = 100_000,
         mode: str = "replace",
+        dedupe_columns: Iterable[str] | None = None,
+        keep: str | bool = "last",
     ) -> int:
+        """Write a DataFrame in bounded parts with optional deduplication."""
+        if batch_size <= 0:
+            raise ValueError("Batch size must be greater than zero")
+
+        if dedupe_columns is not None:
+            columns = list(dedupe_columns)
+
+            missing = [
+                column
+                for column in columns
+                if column not in frame.columns
+            ]
+            if missing:
+                raise ValueError(
+                    f"Cannot deduplicate dataset {ref!r}; "
+                    f"missing columns: {missing}"
+                )
+
+            frame = frame.drop_duplicates(
+                subset=columns,
+                keep=keep,
+            )
+
         frames = (
             frame.iloc[start : start + batch_size]
             for start in range(0, len(frame), batch_size)
         )
-        return self.write_batches(ref, frames, mode=mode)
 
+        return self.write_batches(
+            ref,
+            frames,
+            mode=mode,
+        )
+    
     def next_part_number(self, ref: DatasetRef | str) -> int:
         prefix = self.paths.dataset(ref)
         numbers: list[int] = []
@@ -250,9 +280,9 @@ class Storage:
 
         model = joblib.load(model_path)
 
-        if not callable(getattr(model, "predict", None)):
+        if not callable(getattr(model, "forecast", None)):
             raise TypeError(
-                f"Loaded object from {model_path} does not implement predict()"
+                f"Loaded object from {model_path} does not implement forecast()"
             )
 
         return model, metadata
@@ -393,3 +423,61 @@ class Storage:
         return self.read_model(str(version_path))
 
 
+
+    def write_forecasts(
+        self,
+        ref: DatasetRef | str,
+        forecasts: pd.DataFrame,
+        *,
+        batch_size: int = 100_000,
+    ) -> int:
+        if forecasts.empty:
+            return 0
+
+        existing = self.read_dataset(ref)
+
+        if existing.empty:
+            combined = forecasts.copy()
+        else:
+            _validate_matching_columns(
+                existing,
+                forecasts,
+            )
+
+            combined = pd.concat(
+                [existing, forecasts],
+                ignore_index=True,
+            )
+
+        combined = combined.drop_duplicates(
+            subset=["forecast_id"],
+            keep="last",
+        )
+
+        return self.write_dataframe(
+            ref,
+            combined,
+            batch_size=batch_size,
+            mode="replace",
+        )
+
+
+
+
+
+
+
+def _validate_matching_columns(
+    existing: pd.DataFrame,
+    incoming: pd.DataFrame,
+) -> None:
+    existing_columns = list(existing.columns)
+    incoming_columns = list(incoming.columns)
+
+    if existing_columns != incoming_columns:
+        raise ValueError(
+            "Appended DataFrame columns do not match "
+            "the existing dataset. "
+            f"Expected {existing_columns!r}, "
+            f"received {incoming_columns!r}"
+        )

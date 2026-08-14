@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.statespace.sarimax import SARIMAXResults
 
-from eml_transformer.modeling.models.base import BaseForecastModel
+from eml_transformer.modeling.models.base import BaseForecastModel, FloatArray
 from eml_transformer.modeling.models.statsmodels import (
     extract_statsmodels_diagnostics,
 )
@@ -38,16 +38,18 @@ class SarimaxForecastModel(BaseForecastModel):
         self.enforce_invertibility = enforce_invertibility
         self.simple_differencing = simple_differencing
 
+    @property
+    def requires_exogenous(self) -> bool:
+        return self.use_exogenous
+
     def _fit_model(
         self,
-        X: NDArray[np.float64],
-        y: NDArray[np.float64],
+        X: FloatArray | None,
+        y: FloatArray,
     ) -> None:
-        exogenous = X if self.use_exogenous else None
-
         self.estimator_ = SARIMAX(
             endog=y,
-            exog=exogenous,
+            exog=X,
             order=self.order,
             seasonal_order=self.seasonal_order,
             trend=self.trend,
@@ -60,18 +62,20 @@ class SarimaxForecastModel(BaseForecastModel):
             disp=False,
         )
 
-    def _predict_model(
-        self,
-        X: NDArray[np.float64],
-    ) -> NDArray[np.float64]:
-        exogenous = X if self.use_exogenous else None
 
-        forecast = self.results_.forecast(
-            steps=len(X),
-            exog=exogenous,
+    def _forecast_model(
+        self,
+        *,
+        steps: int,
+        X: FloatArray | None,
+    ) -> FloatArray:
+        predictions = self.results_.forecast(
+            steps=steps,
+            exog=X,
         )
 
-        return np.asarray(forecast, dtype=float)
+        return np.asarray(predictions, dtype=float)
+
 
     def _build_diagnostics(
         self,

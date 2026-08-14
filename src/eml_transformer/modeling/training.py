@@ -79,15 +79,33 @@ def train_model(
         validation_days=validation_days,
     )
 
-    X_train = split.training.loc[:, features]
-    y_train = split.training.loc[:, target]
+    X_train = (
+        split.training.loc[
+            :,
+            list(features),
+        ]
+        if model.requires_exogenous
+        else None
+    )
 
-    X_validation = split.validation.loc[:, features]
-    y_validation = split.validation.loc[:, target]
+    X_validation = (
+        split.validation.loc[
+            :,
+            list(features),
+        ]
+        if model.requires_exogenous
+        else None
+    )
+
+    y_train =  split.training[target]
+    y_validation = split.validation[target]
 
     model.fit(X_train, y_train)
 
-    predictions = model.predict(X_validation)
+    predictions = model.forecast(
+        steps=len(y_validation),
+        X=X_validation,
+    )
 
     metrics = calculate_regression_metrics(
         y_validation,
