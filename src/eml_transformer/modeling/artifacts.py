@@ -4,6 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
+from eml_transformer.utils.dates import (
+    format_optional_utc_datetime,
+    format_utc_datetime,
+    parse_optional_utc_datetime,
+    parse_utc_datetime,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ModelMetadata:
@@ -20,9 +27,12 @@ class ModelMetadata:
 
     hyper_parameters: dict[str, Any]
     training_settings: dict[str, Any]
+
     metrics: dict[str, float]
+    diagnostics: dict[str, Any]
 
     training_start: datetime | None = None
+    training_end: datetime | None = None
     validation_start: datetime | None = None
     validation_end: datetime | None = None
 
@@ -30,23 +40,41 @@ class ModelMetadata:
         return {
             "name": self.name,
             "model_type": self.model_type,
-            "trained_at": self.trained_at.isoformat(),
+            "trained_at": format_utc_datetime(
+                self.trained_at
+            ),
             "features": list(self.features),
             "target": self.target,
             "records_used": self.records_used,
             "records_trained": self.records_trained,
             "records_validated": self.records_validated,
-            "hyper_parameters": dict(self.hyper_parameters),
-            "training_settings": dict(self.training_settings),
+            "hyper_parameters": dict(
+                self.hyper_parameters
+            ),
+            "training_settings": dict(
+                self.training_settings
+            ),
             "metrics": dict(self.metrics),
-            "training_start": _datetime_to_string(
-                self.training_start
+            "diagnostics": dict(self.diagnostics),
+            "training_start": (
+                format_optional_utc_datetime(
+                    self.training_start
+                )
             ),
-            "validation_start": _datetime_to_string(
-                self.validation_start
+            "training_end": (
+                format_optional_utc_datetime(
+                    self.training_end
+                )
             ),
-            "validation_end": _datetime_to_string(
-                self.validation_end
+            "validation_start": (
+                format_optional_utc_datetime(
+                    self.validation_start
+                )
+            ),
+            "validation_end": (
+                format_optional_utc_datetime(
+                    self.validation_end
+                )
             ),
         }
 
@@ -58,7 +86,7 @@ class ModelMetadata:
         return cls(
             name=str(values["name"]),
             model_type=str(values["model_type"]),
-            trained_at=_required_datetime(
+            trained_at=_required_utc_datetime(
                 values,
                 "trained_at",
             ),
@@ -68,58 +96,77 @@ class ModelMetadata:
             ),
             target=str(values["target"]),
             records_used=int(values["records_used"]),
-            records_trained=int(values["records_trained"]),
+            records_trained=int(
+                values["records_trained"]
+            ),
             records_validated=int(
                 values["records_validated"]
             ),
-            hyper_parameters=dict(
-                values.get("hyper_parameters", {})
+            hyper_parameters=_dictionary(
+                values.get("hyper_parameters")
             ),
-            training_settings=dict(
-                values.get("training_settings", {})
+            training_settings=_dictionary(
+                values.get("training_settings")
             ),
             metrics={
-                str(metric): float(value)
-                for metric, value in dict(
-                    values.get("metrics", {})
+                str(name): float(value)
+                for name, value in _dictionary(
+                    values.get("metrics")
                 ).items()
             },
-            training_start=_optional_datetime(
-                values.get("training_start")
+            diagnostics=_dictionary(
+                values.get("diagnostics")
             ),
-            validation_start=_optional_datetime(
-                values.get("validation_start")
+            training_start=(
+                parse_optional_utc_datetime(
+                    values.get("training_start")
+                )
             ),
-            validation_end=_optional_datetime(
-                values.get("validation_end")
+            training_end=(
+                parse_optional_utc_datetime(
+                    values.get("training_end")
+                )
+            ),
+            validation_start=(
+                parse_optional_utc_datetime(
+                    values.get("validation_start")
+                )
+            ),
+            validation_end=(
+                parse_optional_utc_datetime(
+                    values.get("validation_end")
+                )
             ),
         )
 
 
-def _datetime_to_string(
-    value: datetime | None,
-) -> str | None:
-    return value.isoformat() if value is not None else None
-
-
-def _optional_datetime(
-    value: Any,
-) -> datetime | None:
-    if value is None:
-        return None
-
-    return datetime.fromisoformat(str(value))
-
-
-def _required_datetime(
+def _required_utc_datetime(
     values: Mapping[str, Any],
     field: str,
 ) -> datetime:
-    value = _optional_datetime(values.get(field))
+    value = values.get(field)
 
     if value is None:
         raise ValueError(
             f"Model metadata requires {field!r}"
         )
 
-    return value
+    return parse_utc_datetime(value)
+
+
+def _dictionary(
+    value: Any,
+) -> dict[str, Any]:
+    if value is None:
+        return {}
+
+    if not isinstance(value, Mapping):
+        raise TypeError(
+            "Expected a metadata mapping, "
+            f"received {type(value).__name__!r}"
+        )
+
+    return {
+        str(key): item
+        for key, item in value.items()
+    }

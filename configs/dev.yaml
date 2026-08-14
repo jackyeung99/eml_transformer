@@ -99,35 +99,123 @@ datasets:
     output: gold:load_forecasting:datasets
 
 modeling:
-   miso_hourly_load:
-      enabled: true
-      model_type: ridge
+  miso_hourly_load_ridge:
+    enabled: true
+    model_type: ridge
 
-      training_input: gold:load_forecasting:datasets
-      forecast_input: gold:load_forecasting:datasets
+    training_input: gold:load_forecasting:datasets
+    forecast_input: gold:load_forecasting:datasets
 
-      model_output: miso_hourly_load
-      forecast_output: gold:miso_hourly_load:forecasts
+    model_output: miso_hourly_load_ridge
+    forecast_output: gold:miso_hourly_load_ridge:forecasts
 
-      target: actual_load
+    target: actual_load
 
-      features:
-        - hour
-        - month
-        - is_weekend
-        - is_holiday
-        - actual_load_lag_24
-        - actual_load_lag_168
-        - total_exports_lag_24
-        - total_imports_lag_24
+    features:
+      - hour
+      - month
+      - is_weekend
+      - is_holiday
+      - actual_load_lag_24
+      - actual_load_lag_168
+      - total_exports_lag_24
+      - total_imports_lag_24
 
-      retrain_after_hours: 168
+    retrain_after_hours: 168
 
-      hyper_parameters:
-        alpha: 1.0
-        fit_intercept: true
+    hyper_parameters:
+      alpha: 1.0
+      fit_intercept: true
+      scale_features: true
+      solver: auto
+      tolerance: 0.0001
+      max_iter: null
 
-      training_settings:
-          timestamp_column: observed_at
-          lookback_days: 730
-          validation_days: 14
+    training_settings:
+      timestamp_column: observed_at
+      lookback_days: 730
+      validation_days: 14
+
+  miso_hourly_load_arima:
+    enabled: true
+    model_type: arima
+
+    training_input: gold:load_forecasting:datasets
+    forecast_input: gold:load_forecasting:datasets
+
+    model_output: miso_hourly_load_arima
+    forecast_output: gold:miso_hourly_load_arima:forecasts
+
+    target: actual_load
+
+    features:
+      - hour
+      - month
+      - is_weekend
+      - is_holiday
+      - actual_load_lag_24
+      - actual_load_lag_168
+      - total_exports_lag_24
+      - total_imports_lag_24
+
+    retrain_after_hours: 168
+
+    hyper_parameters:
+      order:
+        - 2
+        - 1
+        - 2
+      trend: null
+      use_exogenous: true
+      enforce_stationarity: true
+      enforce_invertibility: true
+
+    training_settings:
+      timestamp_column: observed_at
+      lookback_days: 730
+      validation_days: 14
+
+  miso_hourly_load_sarimax:
+    enabled: true
+    model_type: sarimax
+
+    training_input: gold:load_forecasting:datasets
+    forecast_input: gold:load_forecasting:datasets
+
+    model_output: miso_hourly_load_sarimax
+    forecast_output: gold:miso_hourly_load_sarimax:forecasts
+
+    target: actual_load
+
+    features:
+      - hour
+      - month
+      - is_weekend
+      - is_holiday
+      - actual_load_lag_24
+      - actual_load_lag_168
+      - total_exports_lag_24
+      - total_imports_lag_24
+
+    retrain_after_hours: 168
+
+    hyper_parameters:
+      order:
+        - 1
+        - 1
+        - 1
+      seasonal_order:
+        - 1
+        - 0
+        - 1
+        - 24
+      trend: null
+      use_exogenous: true
+      enforce_stationarity: true
+      enforce_invertibility: true
+      simple_differencing: false
+
+    training_settings:
+      timestamp_column: observed_at
+      lookback_days: 730
+      validation_days: 14

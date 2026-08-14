@@ -133,9 +133,11 @@ class ModelingPipeline:
                 hyper_parameters=dict(definition.hyper_parameters),
                 training_settings=dict(definition.training_settings),
                 metrics=dict(trained.metrics),
-                training_start=trained.training_start.to_pydatetime(), # FIX THIS 
-                validation_start=trained.validation_start.to_pydatetime(),
-                validation_end=trained.validation_end.to_pydatetime(),
+                diagnostics=dict(trained.diagnostics),
+                training_start=trained.training_start,
+                training_end=trained.training_end,
+                validation_start=trained.validation_start,
+                validation_end=trained.validation_end,
             )
 
             self.storage.write_model(

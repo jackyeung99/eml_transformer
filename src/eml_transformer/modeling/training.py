@@ -1,12 +1,11 @@
-
-
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from dataclasses import dataclass
-
+from typing import Any
 import pandas as pd
-from sklearn.base import BaseEstimator
+from eml_transformer.modeling.models.base import BaseForecastModel
+
 
 
 from eml_transformer.modeling.artifacts import ModelMetadata
@@ -16,17 +15,32 @@ from eml_transformer.modeling.metrics import calculate_regression_metrics
 
 @dataclass(frozen=True, slots=True)
 class TrainedModel:
-    model: BaseEstimator
-    records_used: int
-    records_trained: int
-    records_validated: int
-    metrics: dict[str, float]
+    model: BaseForecastModel
+
     features: tuple[str, ...]
     target: str
 
+    records_used: int
+    records_trained: int
+    records_validated: int
+
+    training_start: datetime
+    training_end: datetime
+    validation_start: datetime
+    validation_end: datetime
+
+    metrics: dict[str, float]
+    diagnostics: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingDecision:
+    should_train: bool
+    reason: str
+
 
 def train_model(
-    model: BaseEstimator,
+    model: BaseForecastModel,
     data: pd.DataFrame,
     *,
     features: tuple[str, ...],
@@ -95,15 +109,19 @@ def train_model(
         model=model,
         features=features,
         target=target,
+
         records_used=len(full_window),
         records_trained=len(split.training),
         records_validated=len(split.validation),
+
+        training_start= split.training_start,
+        training_end = split.training_end,
+        validation_start= split.validation_start,
+        validation_end=split.validation_end,
+
         metrics=metrics,
+        diagnostics=model.diagnostics_
     )
-@dataclass(frozen=True, slots=True)
-class TrainingDecision:
-    should_train: bool
-    reason: str
 
 
 def should_train(

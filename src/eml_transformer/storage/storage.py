@@ -18,7 +18,7 @@ from eml_transformer.logging import get_logger
 from eml_transformer.storage.paths import DatasetRef, StoragePaths
 from eml_transformer.config.loader import StorageConfig
 from eml_transformer.modeling.artifacts import ModelMetadata
-from eml_transformer.modeling.base import ForecastModel
+from eml_transformer.modeling.models.base import BaseForecastModel
 
 logger = get_logger(__name__)
 
@@ -225,7 +225,7 @@ class Storage:
     def read_model(
         self,
         path: str,
-    ) -> tuple[ForecastModel, ModelMetadata]:
+    ) -> tuple[BaseForecastModel, ModelMetadata]:
         artifact_path = Path(path)
         model_path = artifact_path / "model.joblib"
         metadata_path = artifact_path / "metadata.json"
@@ -260,7 +260,7 @@ class Storage:
     def write_model(
         self,
         path: str,
-        model: ForecastModel,
+        model: BaseForecastModel,
         metadata: ModelMetadata,
     ) -> None:
         artifact_path = Path(path)
