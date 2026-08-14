@@ -16,7 +16,7 @@ from eml_transformer.scraping.scraper import (
 )
 from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage
+from eml_transformer.storage.base import Storage
 from eml_transformer.standardization.text_cleaning import clean_text
 
 logger = logging.getLogger(__name__)

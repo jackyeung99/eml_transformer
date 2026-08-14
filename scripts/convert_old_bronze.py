@@ -7,7 +7,7 @@ from typing import Any
 from eml_transformer.sources.registry import create_source
 from eml_transformer.ingestion.orchestrator import IngestionPipeline
 from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import LocalStorage
+from eml_transformer.storage.base import LocalStorage
 
 
 def migrate_jsonl(

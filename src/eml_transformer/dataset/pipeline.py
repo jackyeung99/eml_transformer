@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from eml_transformer.config.loader import DatasetDefinition
 from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage
+from eml_transformer.storage.base import Storage
 
 from eml_transformer.dataset.registry import get_dataset_function
 

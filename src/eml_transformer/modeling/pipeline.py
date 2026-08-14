@@ -19,10 +19,14 @@ from eml_transformer.modeling.training import (
     TrainingDecision
 )
 
-from eml_transformer.modeling.artifacts import ModelMetadata
+from eml_transformer.modeling.artifacts import (
+    ModelMetadata,
+    build_model_version
+) 
+
 from eml_transformer.utils.dates import utc_now
 from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage
+from eml_transformer.storage.base import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -120,18 +124,24 @@ class ModelingPipeline:
 
     
             trained_at = utc_now()
+            model_version = build_model_version(trained_at)
 
             metadata = ModelMetadata(
                 name=definition.name,
                 model_type=definition.model_type,
+                model_version=model_version,
                 trained_at=trained_at,
                 features=trained.features,
                 target=trained.target,
                 records_used=trained.records_used,
                 records_trained=trained.records_trained,
                 records_validated=trained.records_validated,
-                hyper_parameters=dict(definition.hyper_parameters),
-                training_settings=dict(definition.training_settings),
+                hyper_parameters=dict(
+                    definition.hyper_parameters
+                ),
+                training_settings=dict(
+                    definition.training_settings
+                ),
                 metrics=dict(trained.metrics),
                 diagnostics=dict(trained.diagnostics),
                 training_start=trained.training_start,
@@ -144,7 +154,7 @@ class ModelingPipeline:
                 model_path,
                 trained.model,
                 metadata,
-            ) 
+            )
 
             return TrainingResult(
                 status="success",

@@ -17,7 +17,8 @@ from eml_transformer.config.definitions import (
 )
 
 from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage, make_storage
+from eml_transformer.storage.base import Storage
+from eml_transformer.storage.factory import make_storage
 
 
 logger = logging.getLogger(__name__)

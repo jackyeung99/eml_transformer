@@ -9,7 +9,7 @@ import pandas as pd
 
 from eml_transformer.embeddings.encoder import SentenceTransformerEmbedder
 from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage
+from eml_transformer.storage.base import Storage
 
 logger = logging.getLogger(__name__)
 

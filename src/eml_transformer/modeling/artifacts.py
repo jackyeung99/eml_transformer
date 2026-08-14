@@ -9,13 +9,24 @@ from eml_transformer.utils.dates import (
     format_utc_datetime,
     parse_optional_utc_datetime,
     parse_utc_datetime,
+    ensure_utc,
 )
 
+
+def build_model_version(
+    trained_at: datetime,
+) -> str:
+    trained_at = ensure_utc(trained_at)
+
+    return trained_at.strftime(
+        "%Y%m%dT%H%M%S.%fZ"
+    )
 
 @dataclass(frozen=True, slots=True)
 class ModelMetadata:
     name: str
     model_type: str
+    model_version: str
     trained_at: datetime
 
     features: tuple[str, ...]
@@ -40,6 +51,7 @@ class ModelMetadata:
         return {
             "name": self.name,
             "model_type": self.model_type,
+            "model_version": self.model_version,
             "trained_at": format_utc_datetime(
                 self.trained_at
             ),
@@ -83,17 +95,27 @@ class ModelMetadata:
         cls,
         values: Mapping[str, Any],
     ) -> ModelMetadata:
+
+        trained_at = _required_utc_datetime(
+            values,
+            "trained_at",
+        )
+
+
         return cls(
             name=str(values["name"]),
             model_type=str(values["model_type"]),
-            trained_at=_required_utc_datetime(
-                values,
-                "trained_at",
+            model_version=str(
+                values.get(
+                    "model_version",
+                    build_model_version(trained_at),
+                )
             ),
-            features=tuple(
-                str(feature)
-                for feature in values["features"]
-            ),
+            trained_at=trained_at,
+                features=tuple(
+                    str(feature)
+                    for feature in values["features"]
+                ),
             target=str(values["target"]),
             records_used=int(values["records_used"]),
             records_trained=int(

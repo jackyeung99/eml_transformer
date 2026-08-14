@@ -9,7 +9,7 @@ from typing import Any
 import eml_transformer.sources  # noqa: F401
 from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage
+from eml_transformer.storage.base import Storage
 from eml_transformer.sources.base import DataSource 
 from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.utils.dates import utc_now, parse_utc_datetime
