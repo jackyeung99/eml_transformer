@@ -1,6 +1,7 @@
 storage:
-  backend: local
-  root: .
+  backend: s3
+  bucket: eml-transformer
+  prefix: .
 
 sources:
   iem_afos:
@@ -45,22 +46,6 @@ sources:
       - ingest
       - backfill
       - standardize
-
-  newsapi:
-    enabled: false
-    config: sources/news_api.yaml
-    stages:
-      - ingest
-      - standardize
-      - embed
-
-  weather_alerts:
-    enabled: false
-    config: sources/weather_alerts.yaml
-    stages:
-      - ingest
-      - standardize
-      - embed
 
 
 embeddings:
