@@ -7,7 +7,6 @@ import typer
 
 from eml_transformer.dataset.pipeline import DatasetOrchestrator
 from eml_transformer.features.pipeline import FeatureOrchestrator
-from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
 from eml_transformer.ingestion.pipeline import IngestionPipeline
 from eml_transformer.modeling.pipeline import ModelingPipeline
 from eml_transformer.standardization.pipeline import StandardizationPipeline
