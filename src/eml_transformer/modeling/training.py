@@ -118,11 +118,17 @@ def train_model(
         ignore_index=True,
     )
 
-    model.fit(
-        full_window.loc[:, features],
-        full_window.loc[:, target],
+    X_full = (
+        full_window.loc[:, list(features)]
+        if model.requires_exogenous
+        else None
     )
 
+    model.fit(
+        X_full,
+        full_window.loc[:, target],
+    )
+    
     return TrainedModel(
         model=model,
         features=features,

@@ -142,7 +142,7 @@ class StandardizationPipeline:
             )
 
             return StandardizationResult(
-                status="failed",
+                status="failure",
                 source=source_name,
                 records_read=counters["read"],
                 records_out=0,

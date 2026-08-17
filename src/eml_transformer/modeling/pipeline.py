@@ -162,7 +162,7 @@ class ModelingPipeline:
                 name=definition.name,
                 reason=decision.reason,
                 records_read=records_read,
-                records_trained=trained.records_used,
+                records_trained=trained.records_trained,
                 records_validated=trained.records_validated,
                 metrics=trained.metrics,
                 model_ref=definition.model_output,
@@ -218,9 +218,8 @@ class ModelingPipeline:
 
 
             forecast_settings = (
-                definition.forecast_settings
+                definition.forecast_settings or {}
             )
-
   
             generated = generate_forecast(
                 model,

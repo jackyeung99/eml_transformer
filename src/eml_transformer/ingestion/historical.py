@@ -35,6 +35,13 @@ def run_historical_ingestion(
         source_name=source_name,
     )
 
+    windows = list(
+        iter_date_windows(
+            from_date=from_date,
+            to_date=to_date,
+            window_days=window_days,
+        )
+    )
     logger.info(
         (
             "Starting backfill for %s from %s to %s: "
@@ -47,13 +54,6 @@ def run_historical_ingestion(
         len(windows),
     )
     
-    windows = list(
-        iter_date_windows(
-            from_date=from_date,
-            to_date=to_date,
-            window_days=window_days,
-        )
-    )
 
     results: list[IngestionResult] = []
 

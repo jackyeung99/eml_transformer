@@ -11,7 +11,7 @@ from eml_transformer.utils.stamping import stable_hash
 class TestFetchPage:
     """Test the _fetch_page method."""
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_calls_correct_url(self, mock_get, newsapi_source):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -24,7 +24,7 @@ class TestFetchPage:
 
         assert mock_get.call_args.args[0] == newsapi_source.base_url
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_passes_query_params(self, mock_get, newsapi_source):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -44,7 +44,7 @@ class TestFetchPage:
         assert params["page"] == 1
         assert params["apiKey"] == "test-key"
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_includes_date_window_when_provided(
         self,
         mock_get,
@@ -84,7 +84,7 @@ class TestFetchPage:
         assert params["from"] == from_date.isoformat()
         assert params["to"] == to_date.isoformat()
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_omits_dates_when_none(self, mock_get, newsapi_source):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -100,7 +100,7 @@ class TestFetchPage:
         assert "from" not in params
         assert "to" not in params
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_raises_on_http_error(self, mock_get, newsapi_source):
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = requests.HTTPError(
@@ -113,7 +113,7 @@ class TestFetchPage:
 class TestFetchRaw:
     """Test the _fetch_raw method."""
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_single_page_response(self, mock_get, newsapi_source):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -132,7 +132,7 @@ class TestFetchRaw:
         assert len(result["articles"]) == 2
         assert result["totalResults"] == 2
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_stops_when_articles_empty(self, mock_get, newsapi_source):
         newsapi_source.max_pages = 3
 
@@ -148,7 +148,7 @@ class TestFetchRaw:
         assert result["articles"] == []
         assert mock_get.call_count == 1
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_raises_on_non_ok_status(self, mock_get, newsapi_source):
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -163,7 +163,7 @@ class TestFetchRaw:
         ):
             newsapi_source._fetch_raw()
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_stops_when_page_smaller_than_page_size(
         self,
         mock_get,
@@ -188,7 +188,7 @@ class TestFetchRaw:
         assert len(result["articles"]) == 5
         assert mock_get.call_count == 1
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_paginates_across_multiple_pages(
         self,
         mock_get,
@@ -222,7 +222,7 @@ class TestFetchRaw:
         assert len(result["articles"]) == 5
         assert mock_get.call_count == 3
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_passes_explicit_date_window(
         self,
         mock_get,
@@ -261,7 +261,7 @@ class TestFetchRaw:
 class TestFetchRecords:
     """Test the fetch_records method."""
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_returns_empty_when_no_articles(
         self,
         mock_get,
@@ -278,7 +278,7 @@ class TestFetchRecords:
 
         assert result == []
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_returns_bronze_records(
         self,
         mock_get,
@@ -333,7 +333,7 @@ class TestFetchRecords:
             )
         )
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_skips_articles_missing_required_fields(
         self,
         mock_get,
@@ -366,7 +366,7 @@ class TestFetchRecords:
         assert len(result) == 1
         assert result[0].raw["title"] == "Valid"
 
-    @patch("eml_transformer.ingestion.sources.newsapi.requests.get")
+    @patch("eml_transformer.sources.text.newsapi.requests.get")
     def test_deduplicates_articles_by_record_id(
         self,
         mock_get,

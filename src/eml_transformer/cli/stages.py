@@ -94,7 +94,7 @@ def run_embeddings(
     model_name: str | None = None,
 ) -> list[Any]:
     # Lazy import because sentence-transformers is optional.
-    from eml_transformer.embeddings.orchestrator import (
+    from eml_transformer.embeddings.pipeline import (
         EmbeddingPipeline,
     )
 

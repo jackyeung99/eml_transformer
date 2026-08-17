@@ -8,8 +8,8 @@ from datetime import datetime
 class IngestionResult:
     status: str
     source: str
-    records_fetched: int
-    records_written: int
+    records_fetched: int = 0
+    records_written: int = 0
     records_skipped: int = 0
     # records_failed: int = 0 # can add later but each source needs to propagate this 
     from_date: datetime | None = None

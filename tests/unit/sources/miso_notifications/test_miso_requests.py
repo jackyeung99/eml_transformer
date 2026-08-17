@@ -6,7 +6,7 @@ import requests
 class TestFetchRaw:
     """Test the _fetch_raw method"""
 
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_calls_correct_url(self, mock_get, miso_source):
         mock_response = MagicMock()
         mock_response.json.return_value = []
@@ -17,7 +17,7 @@ class TestFetchRaw:
         called_url = mock_get.call_args[0][0]
         assert called_url == miso_source.base_url
 
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_passes_correct_params(self, mock_get, miso_source):
         mock_response = MagicMock()
         mock_response.json.return_value = []
@@ -29,7 +29,7 @@ class TestFetchRaw:
         assert params["topic"] == miso_source.topic
         assert params["take"] == miso_source.take
     
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_passes_headers(self, mock_get, miso_source):
         mock_response = MagicMock()
         mock_response.json.return_value = []
@@ -41,7 +41,7 @@ class TestFetchRaw:
         assert "User-Agent" in headers
         assert "Referer" in headers
 
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_passes_timeout(self, mock_get, miso_source):
         mock_response = MagicMock()
         mock_response.json.return_value = []
@@ -51,7 +51,7 @@ class TestFetchRaw:
 
         assert mock_get.call_args[1]["timeout"] == miso_source.timeout
 
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_returns_parsed_json(self, mock_get, miso_source):
         expected_data = [{"topic": "Test", "notifications": []}]
         mock_response = MagicMock()
@@ -61,7 +61,7 @@ class TestFetchRaw:
         result = miso_source._fetch_raw()
         assert result == expected_data
 
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_raises_on_http_error(self, mock_get, miso_source):
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
@@ -73,7 +73,7 @@ class TestFetchRaw:
 class TestFetchRecords:
     """Test the fetch_records method"""
 
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_returns_empty_when_no_data(self, mock_get, miso_source):
         mock_response = MagicMock()
         mock_response.json.return_value = []
@@ -82,7 +82,7 @@ class TestFetchRecords:
         result = miso_source.fetch_records()
         assert result == []
     
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_returns_bronze_records(
         self,
         mock_get,
@@ -137,7 +137,7 @@ class TestFetchRecords:
 
         mock_response.raise_for_status.assert_called_once()
 
-    @patch("eml_transformer.ingestion.sources.miso.requests.get")
+    @patch("eml_transformer.sources.text.miso_notifications.requests.get")
     def test_flattens_multiple_topics(self, mock_get, miso_source):
         mock_response = MagicMock()
         mock_response.json.return_value = [

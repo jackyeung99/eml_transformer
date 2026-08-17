@@ -142,19 +142,20 @@ def ingest_window(
         expected_source=source_name,
     )
 
-    logger.debug(
-        "Wrote Bronze records for %s: received=%d written=%d skipped=%d",
-        source_name,
-        write_result.records_received,
-        write_result.records_written,
-        write_result.records_skipped,
-    )
 
     write_result = storage.write_bronze(
         bronze_key=paths.bronze_records(source_name),
         # Consider partitioning Bronze by ingestion date or run ID if this file becomes too large.
         dedupe_key=paths.dedupe_state(source_name),
         records=records,
+    )
+
+    logger.debug(
+        "Wrote Bronze records for %s: received=%d written=%d skipped=%d",
+        source_name,
+        write_result.records_received,
+        write_result.records_written,
+        write_result.records_skipped,
     )
 
     return IngestionResult(
