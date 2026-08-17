@@ -2,20 +2,28 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+
 import typer
 
 from eml_transformer.dataset.pipeline import DatasetOrchestrator
 from eml_transformer.features.pipeline import FeatureOrchestrator
-from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
+from eml_transformer.ingestion.historical_orchestrator import (
+    BackfillPipeline,
+)
 from eml_transformer.ingestion.orchestrator import IngestionPipeline
-from eml_transformer.scraping.pipeline import ScrapingPipeline
-from eml_transformer.standardization.pipeline import StandardizationPipeline
 from eml_transformer.modeling.pipeline import ModelingPipeline
-
-
 from eml_transformer.runtime import Runtime, build_runtime
+from eml_transformer.scraping.pipeline import ScrapingPipeline
+from eml_transformer.standardization.pipeline import (
+    StandardizationPipeline,
+)
 from eml_transformer.utils.dates import parse_utc_datetime
 
+
+DEFAULT_CONFIG = "configs/dev.yaml"
+
+
+# Pipeline runners
 
 def run_ingestion(
     runtime: Runtime,
@@ -26,17 +34,15 @@ def run_ingestion(
         paths=runtime.paths,
     )
 
-    definitions = runtime.sources_for_stage(
-        "ingest",
-        requested=source,
-    )
-
     return [
         pipeline.run_source(
             source_name=definition.name,
             source_config=definition.settings,
         )
-        for definition in definitions
+        for definition in runtime.sources_for_stage(
+            "ingest",
+            requested=source,
+        )
     ]
 
 
@@ -49,17 +55,15 @@ def run_standardization(
         paths=runtime.paths,
     )
 
-    definitions = runtime.sources_for_stage(
-        "standardize",
-        requested=source,
-    )
-
     return [
         pipeline.run_source(
             source_name=definition.name,
             source_config=definition.settings,
         )
-        for definition in definitions
+        for definition in runtime.sources_for_stage(
+            "standardize",
+            requested=source,
+        )
     ]
 
 
@@ -72,17 +76,15 @@ def run_scraping(
         paths=runtime.paths,
     )
 
-    definitions = runtime.sources_for_stage(
-        "scrape",
-        requested=source,
-    )
-
     return [
         pipeline.run_source(
             source_name=definition.name,
             source_config=definition.settings,
         )
-        for definition in definitions
+        for definition in runtime.sources_for_stage(
+            "scrape",
+            requested=source,
+        )
     ]
 
 
@@ -91,7 +93,7 @@ def run_embeddings(
     source: str = "all",
     model_name: str | None = None,
 ) -> list[Any]:
-    # Keep this lazy if sentence-transformers is optional.
+    # Lazy import because sentence-transformers is optional.
     from eml_transformer.embeddings.orchestrator import (
         EmbeddingPipeline,
     )
@@ -101,19 +103,15 @@ def run_embeddings(
         paths=runtime.paths,
     )
 
-    definitions = runtime.sources_for_stage(
+    results: list[Any] = []
+
+    for definition in runtime.sources_for_stage(
         "embed",
         requested=source,
-    )
-
-    results = []
-
-    for definition in definitions:
-        embedding_config = (
-            runtime.effective_embedding_config(
-                definition,
-                model_name=model_name,
-            )
+    ):
+        embedding_config = runtime.effective_embedding_config(
+            definition,
+            model_name=model_name,
         )
 
         results.append(
@@ -156,6 +154,38 @@ def run_datasets(
     ]
 
 
+def run_training(
+    runtime: Runtime,
+    models: tuple[str, ...] = (),
+    *,
+    force: bool = False,
+) -> list[Any]:
+    pipeline = ModelingPipeline(
+        storage=runtime.storage,
+        paths=runtime.paths,
+    )
+
+    return [
+        pipeline.train(definition, force=force)
+        for definition in runtime.models(models)
+    ]
+
+
+def run_forecasting(
+    runtime: Runtime,
+    models: tuple[str, ...] = (),
+) -> list[Any]:
+    pipeline = ModelingPipeline(
+        storage=runtime.storage,
+        paths=runtime.paths,
+    )
+
+    return [
+        pipeline.forecast(definition)
+        for definition in runtime.models(models)
+    ]
+
+
 def run_backfill(
     runtime: Runtime,
     source: str,
@@ -168,14 +198,8 @@ def run_backfill(
         storage=runtime.storage,
         paths=runtime.paths,
     )
-
     pipeline = BackfillPipeline(
         ingestion_pipeline=ingestion_pipeline,
-    )
-
-    definitions = runtime.sources_for_stage(
-        "backfill",
-        requested=source,
     )
 
     return [
@@ -187,60 +211,77 @@ def run_backfill(
             window_days=window_days,
             seed_checkpoint=init_checkpoint,
         )
-        for definition in definitions
+        for definition in runtime.sources_for_stage(
+            "backfill",
+            requested=source,
+        )
     ]
 
 
-# Typer Commands
+# Command helpers
+
+def print_results(
+    title: str,
+    results: list[Any],
+    *,
+    exit_on_failure: bool = True,
+) -> None:
+    from eml_transformer.cli.main import print_result_table
+
+    print_result_table(title, results)
+
+    if exit_on_failure and any(
+        getattr(result, "status", None) == "failure"
+        for result in results
+    ):
+        raise typer.Exit(1)
+
+
+# Typer commands
+
 def ingest(
     source: str = typer.Option("all", "--source", "-s"),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
     results = run_ingestion(
         build_runtime(config),
         source=source,
     )
-    print_result_table("Ingestion Results", results)
+    print_results("Ingestion Results", results)
 
 
 def standardize(
     source: str = typer.Option("all", "--source", "-s"),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
     results = run_standardization(
         build_runtime(config),
         source=source,
     )
-    print_result_table("Standardization Results", results)
+    print_results("Standardization Results", results)
 
 
 def scrape(
     source: str = typer.Option("all", "--source", "-s"),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
     results = run_scraping(
         build_runtime(config),
         source=source,
     )
-    print_result_table("Scraping Results", results)
+    print_results("Scraping Results", results)
 
 
 def embed(
@@ -251,19 +292,17 @@ def embed(
         "-m",
     ),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
     results = run_embeddings(
         build_runtime(config),
         source=source,
         model_name=model_name,
     )
-    print_result_table("Embedding Results", results)
+    print_results("Embedding Results", results)
 
 
 def build_features(
@@ -273,18 +312,16 @@ def build_features(
         "-f",
     ),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
     results = run_features(
         build_runtime(config),
         feature=feature,
     )
-    print_result_table("Feature Results", results)
+    print_results("Feature Results", results)
 
 
 def build_dataset(
@@ -294,18 +331,17 @@ def build_dataset(
         "-d",
     ),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
     results = run_datasets(
         build_runtime(config),
         dataset=dataset,
     )
-    print_result_table("Dataset Results", results)
+    print_results("Dataset Results", results)
+
 
 def train_models(
     names: list[str] | None = typer.Argument(
@@ -318,70 +354,37 @@ def train_models(
         help="Train even when the existing model is current.",
     ),
     config: str = typer.Option(
-            "configs/dev.yaml",
-            "--config",
-            "-c",
-        ),
+        DEFAULT_CONFIG,
+        "--config",
+        "-c",
+    ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
-    rt = build_runtime(config)
-
-    pipeline = ModelingPipeline(
-        storage=rt.storage,
-        paths=rt.paths,
+    results = run_training(
+        build_runtime(config),
+        models=tuple(names or ()),
+        force=force,
     )
+    print_results("Training Results", results)
 
-    results = [
-        pipeline.train(
-            definition,
-            force=force,
-        )
-        for definition in rt.models(
-            tuple(names or ())
-        )
-    ]
-
-    print_result_table("Training", results)
-
-    if any(result.status == "failure" for result in results):
-        raise typer.Exit(1)
 
 def forecast(
     names: list[str] | None = typer.Argument(
         None,
-        help="Models to train. Defaults to all enabled models.",
+        help="Models to forecast. Defaults to all enabled models.",
     ),
     config: str = typer.Option(
-            "configs/dev.yaml",
-            "--config",
-            "-c",
-        ),
+        DEFAULT_CONFIG,
+        "--config",
+        "-c",
+    ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
-    rt = build_runtime(config)
-
-    pipeline = ModelingPipeline(
-        storage=rt.storage,
-        paths=rt.paths,
+    results = run_forecasting(
+        build_runtime(config),
+        models=tuple(names or ()),
     )
+    print_results("Forecasting Results", results)
 
-    results = [
-        pipeline.forecast(
-            definition
-        )
-        for definition in rt.models(
-            tuple(names or ())
-        )
-    ]
 
-    print_result_table("Forecasting Results", results)
-
-    if any(result.status == "failure" for result in results):
-        raise typer.Exit(1)
-
-    
 def backfill(
     source: str = typer.Option(..., "--source", "-s"),
     from_date: str = typer.Option(..., "--from-date"),
@@ -396,13 +399,11 @@ def backfill(
         "--init-checkpoint",
     ),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
-
     start = parse_utc_datetime(from_date)
     end = parse_utc_datetime(to_date)
 
@@ -419,5 +420,4 @@ def backfill(
         window_days=window_days,
         init_checkpoint=init_checkpoint,
     )
-
-    print_result_table("Backfill Results", results)
+    print_results("Backfill Results", results)

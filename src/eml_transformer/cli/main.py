@@ -7,9 +7,9 @@ import pandas as pd
 import typer
 from dotenv import load_dotenv
 
-from eml_transformer.cli import stages, workflows
 from eml_transformer.logging import setup_logging
-from eml_transformer.runtime import build_runtime
+from eml_transformer.cli import inspect, stages, workflows
+
 
 load_dotenv()
 
@@ -58,59 +58,12 @@ def main(
     )
 
 
-@app.command()
-def sources(
-    stage: str | None = typer.Option(
-        None,
-        "--stage",
-        "-s",
-        help="Filter sources by stage.",
-    ),
-    config: str = typer.Option(
-        "configs/dev.yaml",
-        "--config",
-        "-c",
-    ),
-) -> None:
-    runtime = build_runtime(config)
 
-    if stage is not None:
-        definitions = runtime.sources_for_stage(
-            stage=stage,
-            requested="all",
-        )
+app = typer.Typer(
+    help="EML Transformer data and modeling pipelines.",
+)
 
-        typer.echo(f"Enabled sources for {stage!r}:")
-
-        if not definitions:
-            typer.echo("  None")
-            return
-
-        for definition in definitions:
-            typer.echo(f"- {definition.name}")
-
-        return
-
-    typer.echo("Configured sources:")
-
-    for definition in runtime.config.sources.values():
-        status = (
-            "enabled"
-            if definition.enabled
-            else "disabled"
-        )
-        configured_stages = (
-            ", ".join(sorted(definition.stages))
-            or "none"
-        )
-
-        typer.echo(
-            f"- {definition.name} "
-            f"({status}; stages: {configured_stages})"
-        )
-
-
-# Register stage commands.
+# Individual pipeline stages remain top-level.
 app.command("ingest")(stages.ingest)
 app.command("backfill")(stages.backfill)
 app.command("standardize")(stages.standardize)
@@ -121,9 +74,16 @@ app.command("dataset")(stages.build_dataset)
 app.command("train")(stages.train_models)
 app.command("forecast")(stages.forecast)
 
-# Register workflow commands.
-app.command("run")(workflows.run)
+# Register command groups.
+app.add_typer(
+    workflows.workflow_app,
+    name="workflow",
+)
 
+app.add_typer(
+    inspect.inspect_app,
+    name="show",
+)
 
 if __name__ == "__main__":
     app()
