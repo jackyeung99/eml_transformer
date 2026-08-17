@@ -16,6 +16,8 @@ from eml_transformer.modeling.artifacts import ModelMetadata
 from eml_transformer.modeling.models.base import BaseForecastModel
 from eml_transformer.storage.paths import DatasetRef, StoragePaths
 from eml_transformer.schema.records import BronzeRecord
+from eml_transformer.utils.dates import utc_now
+
 
 logger = get_logger(__name__)
 
@@ -149,7 +151,14 @@ class Storage:
 
     def write_seen_ids(self, key: str, seen_ids: set[str]) -> None:
         """Persist deduplication identifiers in deterministic order."""
-        self.write_json(sorted(seen_ids), key)
+        self.write_json(
+            {
+                "seen": sorted(seen_ids),
+                "updated_at": utc_now().isoformat(),
+                "count": len(seen_ids),
+            },
+            key,
+        )
 
     def write_bronze(
         self,
