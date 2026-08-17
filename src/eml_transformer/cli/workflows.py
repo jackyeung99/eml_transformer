@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import typer
+from datetime import datetime
 
 from eml_transformer.cli.stages import (
     run_datasets,
@@ -11,10 +12,18 @@ from eml_transformer.cli.stages import (
     run_forecasting,
     run_ingestion,
     run_scraping,
+    run_backfill,
     run_standardization,
     run_training,
 )
 from eml_transformer.runtime import Runtime, build_runtime
+from eml_transformer.utils.dates import parse_utc_datetime
+from eml_transformer.cli.shared import (
+    DEFAULT_CONFIG,
+    exit_on_failure,
+    print_result_table,
+)
+
 
 
 workflow_app = typer.Typer(
@@ -169,11 +178,64 @@ def run_modeling_workflow(
 
     return results
 
+def run_historical_workflow(
+    runtime: Runtime,
+    *,
+    source: str,
+    from_date: datetime,
+    to_date: datetime,
+    window_days: int = 30,
+    init_checkpoint: bool = False,
+    build_downstream: bool = False,
+    feature: str = "all",
+    dataset: str = "all",
+) -> dict[str, list[Any]]:
+    results: dict[str, list[Any]] = {}
+
+    results["backfill"] = run_backfill(
+        runtime=runtime,
+        source=source,
+        from_date=from_date,
+        to_date=to_date,
+        window_days=window_days,
+        init_checkpoint=init_checkpoint,
+    )
+    _stop_on_failure("Backfill", results["backfill"])
+
+    results["standardization"] = run_standardization(
+        runtime,
+        source=source,
+    )
+    _stop_on_failure(
+        "Standardization",
+        results["standardization"],
+    )
+
+    if build_downstream:
+        results["features"] = run_features(
+            runtime,
+            feature=feature,
+        )
+        _stop_on_failure(
+            "Features",
+            results["features"],
+        )
+
+        results["datasets"] = run_datasets(
+            runtime,
+            dataset=dataset,
+        )
+        _stop_on_failure(
+            "Datasets",
+            results["datasets"],
+        )
+
+    return results
 
 def _print_workflow_results(
     results: dict[str, list[Any]],
 ) -> None:
-    from eml_transformer.cli.main import print_result_table
+
 
     for stage, stage_results in results.items():
         print_result_table(
@@ -268,6 +330,85 @@ def modeling(
             dataset=dataset,
             models=tuple(models or ()),
             force_train=force_train,
+        )
+    except RuntimeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+    _print_workflow_results(results)
+
+
+@workflow_app.command("historical")
+def historical(
+    source: str = typer.Option(
+        ...,
+        "--source",
+        "-s",
+        help="Source to backfill.",
+    ),
+    from_date: str = typer.Option(
+        ...,
+        "--from-date",
+        help="Inclusive backfill start date.",
+    ),
+    to_date: str = typer.Option(
+        ...,
+        "--to-date",
+        help="Exclusive backfill end date.",
+    ),
+    window_days: int = typer.Option(
+        30,
+        "--window-days",
+        min=1,
+        help="Number of days processed per backfill window.",
+    ),
+    init_checkpoint: bool = typer.Option(
+        False,
+        "--init-checkpoint",
+        help="Initialize the ingestion checkpoint after backfilling.",
+    ),
+    build_downstream: bool = typer.Option(
+        False,
+        "--build-downstream",
+        help="Build configured features and datasets after standardization.",
+    ),
+    feature: str = typer.Option(
+        "all",
+        "--feature",
+        "-f",
+        help="Feature definition to build when downstream processing is enabled.",
+    ),
+    dataset: str = typer.Option(
+        "all",
+        "--dataset",
+        "-d",
+        help="Dataset definition to build when downstream processing is enabled.",
+    ),
+    config: str = typer.Option(
+        DEFAULT_CONFIG,
+        "--config",
+        "-c",
+    ),
+) -> None:
+    start = parse_utc_datetime(from_date)
+    end = parse_utc_datetime(to_date)
+
+    if start >= end:
+        raise typer.BadParameter(
+            "--from-date must be earlier than --to-date"
+        )
+
+    try:
+        results = run_historical_workflow(
+            build_runtime(config),
+            source=source,
+            from_date=start,
+            to_date=end,
+            window_days=window_days,
+            init_checkpoint=init_checkpoint,
+            build_downstream=build_downstream,
+            feature=feature,
+            dataset=dataset,
         )
     except RuntimeError as exc:
         typer.echo(str(exc), err=True)

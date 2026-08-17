@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
-
-import pandas as pd
 import typer
 from dotenv import load_dotenv
 
@@ -16,25 +13,6 @@ load_dotenv()
 app = typer.Typer(
     help="EML Transformer data and modeling pipelines.",
 )
-
-
-def print_result_table(
-    title: str,
-    results: list[Any],
-) -> None:
-    rows = [result.to_summary() for result in results]
-
-    if not rows:
-        typer.echo(f"\n{title}: no results")
-        return
-
-    frame = pd.DataFrame(rows)
-
-    typer.echo("\n" + "=" * 100)
-    typer.echo(title.upper())
-    typer.echo("=" * 100)
-    typer.echo(frame.to_string(index=False, max_colwidth=40))
-    typer.echo("=" * 100 + "\n")
 
 
 @app.callback()
@@ -69,8 +47,8 @@ app.command("backfill")(stages.backfill)
 app.command("standardize")(stages.standardize)
 app.command("scrape")(stages.scrape)
 app.command("embed")(stages.embed)
-app.command("features")(stages.build_features)
-app.command("dataset")(stages.build_dataset)
+app.command("build-features")(stages.build_features)
+app.command("build-dataset")(stages.build_dataset)
 app.command("train")(stages.train_models)
 app.command("forecast")(stages.forecast)
 

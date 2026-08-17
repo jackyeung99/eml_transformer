@@ -7,20 +7,23 @@ import typer
 
 from eml_transformer.dataset.pipeline import DatasetOrchestrator
 from eml_transformer.features.pipeline import FeatureOrchestrator
-from eml_transformer.ingestion.historical_orchestrator import (
-    BackfillPipeline,
-)
+from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
 from eml_transformer.ingestion.orchestrator import IngestionPipeline
 from eml_transformer.modeling.pipeline import ModelingPipeline
-from eml_transformer.runtime import Runtime, build_runtime
+from eml_transformer.standardization.pipeline import StandardizationPipeline
 from eml_transformer.scraping.pipeline import ScrapingPipeline
-from eml_transformer.standardization.pipeline import (
-    StandardizationPipeline,
-)
+
+from eml_transformer.runtime import Runtime, build_runtime
+
 from eml_transformer.utils.dates import parse_utc_datetime
 
 
-DEFAULT_CONFIG = "configs/dev.yaml"
+from eml_transformer.cli.shared import (
+    DEFAULT_CONFIG,
+    exit_on_failure,
+    print_result_table,
+)
+
 
 
 # Pipeline runners
@@ -218,24 +221,6 @@ def run_backfill(
     ]
 
 
-# Command helpers
-
-def print_results(
-    title: str,
-    results: list[Any],
-    *,
-    exit_on_failure: bool = True,
-) -> None:
-    from eml_transformer.cli.main import print_result_table
-
-    print_result_table(title, results)
-
-    if exit_on_failure and any(
-        getattr(result, "status", None) == "failure"
-        for result in results
-    ):
-        raise typer.Exit(1)
-
 
 # Typer commands
 
@@ -251,7 +236,9 @@ def ingest(
         build_runtime(config),
         source=source,
     )
-    print_results("Ingestion Results", results)
+    
+    print_result_table("Ingestion Results", results)
+    exit_on_failure(results)
 
 
 def standardize(
@@ -266,7 +253,9 @@ def standardize(
         build_runtime(config),
         source=source,
     )
-    print_results("Standardization Results", results)
+    
+    print_result_table("Standardization Results", results)
+    exit_on_failure(results)
 
 
 def scrape(
@@ -281,7 +270,9 @@ def scrape(
         build_runtime(config),
         source=source,
     )
-    print_results("Scraping Results", results)
+    
+    print_result_table("Scraping Results", results)
+    exit_on_failure(results)
 
 
 def embed(
@@ -302,7 +293,9 @@ def embed(
         source=source,
         model_name=model_name,
     )
-    print_results("Embedding Results", results)
+    
+    print_result_table("Embedding Results", results)
+    exit_on_failure(results)
 
 
 def build_features(
@@ -321,7 +314,9 @@ def build_features(
         build_runtime(config),
         feature=feature,
     )
-    print_results("Feature Results", results)
+    
+    print_result_table("Feature Building Results", results)
+    exit_on_failure(results)
 
 
 def build_dataset(
@@ -340,7 +335,9 @@ def build_dataset(
         build_runtime(config),
         dataset=dataset,
     )
-    print_results("Dataset Results", results)
+    
+    print_result_table("Dataset Building Results", results)
+    exit_on_failure(results)
 
 
 def train_models(
@@ -364,7 +361,9 @@ def train_models(
         models=tuple(names or ()),
         force=force,
     )
-    print_results("Training Results", results)
+    
+    print_result_table("Training Results", results)
+    exit_on_failure(results)
 
 
 def forecast(
@@ -382,7 +381,9 @@ def forecast(
         build_runtime(config),
         models=tuple(names or ()),
     )
-    print_results("Forecasting Results", results)
+    
+    print_result_table("Forecasting Results", results)
+    exit_on_failure(results)
 
 
 def backfill(
@@ -420,4 +421,6 @@ def backfill(
         window_days=window_days,
         init_checkpoint=init_checkpoint,
     )
-    print_results("Backfill Results", results)
+    
+    print_result_table("Backfill Results", results)
+    exit_on_failure(results)
