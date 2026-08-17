@@ -10,7 +10,6 @@ class MISOLoadForecastSource(DataSource):
     ingestion_method = "api"
     update_mode = "incremental"
     supports_backfill = True
-    default_lookback_days = 3
 
 
 

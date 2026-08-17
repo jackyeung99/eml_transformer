@@ -1,6 +1,6 @@
 storage:
   backend: local
-  root: .
+  root: test_data
 
 sources:
   iem_afos:

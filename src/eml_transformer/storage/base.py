@@ -1,28 +1,34 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
-from typing import Any, Optional, TypeVar
-from collections.abc import Iterable, Iterator
-from itertools import islice
-import pandas as pd
-import pyarrow.parquet as pq
-import s3fs
-
 import json
-import joblib
-import pickle
 import uuid
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
+from itertools import islice
+from pathlib import Path, PurePosixPath
+from typing import Any, TypeVar
+
+import joblib
+import pandas as pd
 
 from eml_transformer.logging import get_logger
-from eml_transformer.storage.paths import DatasetRef, StoragePaths
-from eml_transformer.config.loader import StorageConfig
 from eml_transformer.modeling.artifacts import ModelMetadata
 from eml_transformer.modeling.models.base import BaseForecastModel
+from eml_transformer.storage.paths import DatasetRef, StoragePaths
+from eml_transformer.schema.records import BronzeRecord
 
 logger = get_logger(__name__)
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class BronzeWriteResult:
+    """Counts produced by a deduplicated bronze append."""
+
+    records_received: int
+    records_written: int
+    records_skipped: int
 
 
 def batched(values: Iterable[T], size: int) -> Iterator[list[T]]:
@@ -36,21 +42,15 @@ def batched(values: Iterable[T], size: int) -> Iterator[list[T]]:
         yield batch
 
 
-
 class Storage:
     paths: StoragePaths
 
     def exists(self, key: str) -> bool:
-
-        logger.debug(f"checking file path: {key}")
+        logger.debug("Checking file path: %s", key)
         raise NotImplementedError
-    
-    def list(self, prefix: str) -> list[str]:
-        """
-        List keys under a prefix (non-recursive or recursive depending on backend).
 
-        Returns keys relative to storage root (same format used in read/write).
-        """
+    def list(self, prefix: str) -> list[str]:
+        """List keys beneath a prefix relative to the storage root."""
         raise NotImplementedError
 
     def delete_prefix(self, prefix: str) -> None:
@@ -58,15 +58,15 @@ class Storage:
         raise NotImplementedError
 
     def read_parquet(self, key: str) -> pd.DataFrame:
-        logger.debug(f"reading file: {key}")
+        logger.debug("Reading Parquet file: %s", key)
         raise NotImplementedError
 
     def write_parquet(self, df: pd.DataFrame, key: str) -> None:
-        logger.info(f"Writing {len(df)} rows to {key}")
+        logger.info("Writing %s rows to %s", len(df), key)
         raise NotImplementedError
 
     def read_csv(self, key: str) -> pd.DataFrame:
-        logger.debug(f"reading csv file: {key}")
+        logger.debug("Reading CSV file: %s", key)
         raise NotImplementedError
 
     def write_csv(
@@ -75,26 +75,127 @@ class Storage:
         key: str,
         index: bool = False,
     ) -> None:
-        logger.info(f"Writing {len(df)} rows to csv {key}")
+        logger.info("Writing %s rows to CSV %s", len(df), key)
         raise NotImplementedError
-    
 
     def read_json(self, key: str) -> Any:
-        logger.debug(f"reading file: {key}")
+        logger.debug("Reading JSON file: %s", key)
         raise NotImplementedError
 
     def write_json(self, obj: Any, key: str) -> None:
-        logger.info(f"Writing json to {key}")
+        logger.info("Writing JSON file: %s", key)
+        raise NotImplementedError
+
+    def iter_jsonl(
+        self,
+        key: str,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield JSON objects from a JSONL file."""
+        raise NotImplementedError
+
+    def append_jsonl(
+        self,
+        key: str,
+        records: Iterable[dict[str, Any]],
+    ) -> None:
+        """Append JSON records using the active storage backend."""
         raise NotImplementedError
     
 
-    def read_pickle(self, key):
-        logger.info(f"reading file:{key}")
+    def read_pickle(self, key: str) -> Any:
+        logger.debug("Reading pickle file: %s", key)
         raise NotImplementedError
-    
-    def write_pickle(self, obj: Any, key: str):
-        logger.info(f"Writing Pickle to {key}")
+
+    def write_pickle(self, obj: Any, key: str) -> None:
+        logger.info("Writing pickle file: %s", key)
         raise NotImplementedError
+
+    # =====================
+    # Ingestion artifacts
+    # =====================
+    def read_checkpoint(self, key: str) -> dict[str, Any] | None:
+        """Read an ingestion checkpoint, returning None when absent."""
+        if not self.exists(key):
+            return None
+
+        checkpoint = self.read_json(key)
+        if not isinstance(checkpoint, dict):
+            raise TypeError(
+                f"Checkpoint at {key!r} must contain a JSON object"
+            )
+
+        return checkpoint
+
+    def write_checkpoint(
+        self,
+        key: str,
+        checkpoint: dict[str, Any],
+    ) -> None:
+        """Persist an ingestion checkpoint."""
+        self.write_json(checkpoint, key)
+
+    def read_seen_ids(self, key: str) -> set[str]:
+        """Read the identifiers already persisted for a bronze dataset."""
+        if not self.exists(key):
+            return set()
+
+        values = self.read_json(key)
+        if not isinstance(values, list):
+            raise TypeError(
+                f"Seen-ID index at {key!r} must contain a JSON array"
+            )
+
+        return {str(value) for value in values}
+
+    def write_seen_ids(self, key: str, seen_ids: set[str]) -> None:
+        """Persist deduplication identifiers in deterministic order."""
+        self.write_json(sorted(seen_ids), key)
+
+    def write_bronze(
+        self,
+        *,
+        bronze_key: str,
+        dedupe_key: str,
+        records: list[BronzeRecord],
+    ) -> BronzeWriteResult:
+        """Append unseen bronze records and update the dedupe index."""
+        existing_ids = self.read_seen_ids(dedupe_key)
+
+        new_records: list[BronzeRecord] = []
+        new_ids: set[str] = set()
+
+        for record in records:
+            if (
+                record.record_id in existing_ids
+                or record.record_id in new_ids
+            ):
+                continue
+
+            new_records.append(record)
+            new_ids.add(record.record_id)
+
+        if new_records:
+            # Write data before marking identifiers as seen.
+            self.append_jsonl(
+                bronze_key,
+                [
+                    record.to_dict()
+                    for record in new_records
+                ],
+            )
+
+            self.write_seen_ids(
+                dedupe_key,
+                existing_ids | new_ids,
+            )
+
+        return BronzeWriteResult(
+            records_received=len(records),
+            records_written=len(new_records),
+            records_skipped=(
+                len(records) - len(new_records)
+            ),
+        )
 
     # =====================
     # Dataset batching

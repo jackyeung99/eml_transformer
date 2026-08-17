@@ -95,7 +95,7 @@ class StandardizationPipeline:
             bronze_key = self.paths.bronze_records(
                 source=source.name,
             )
-
+            
             silver_key = self.paths.dataset(output_ref)
 
             if not self.storage.exists(bronze_key):

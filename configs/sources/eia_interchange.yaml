@@ -5,6 +5,6 @@ ingestion:
   direction: both
 
 standardization:
-  output: silver:eia930_interchange:records
+  output: silver:eia_interchange:records
   batch_size: 100000
   write_mode: replace

@@ -8,7 +8,7 @@ import typer
 from eml_transformer.dataset.pipeline import DatasetOrchestrator
 from eml_transformer.features.pipeline import FeatureOrchestrator
 from eml_transformer.ingestion.historical_orchestrator import BackfillPipeline
-from eml_transformer.ingestion.orchestrator import IngestionPipeline
+from eml_transformer.ingestion.pipeline import IngestionPipeline
 from eml_transformer.modeling.pipeline import ModelingPipeline
 from eml_transformer.standardization.pipeline import StandardizationPipeline
 from eml_transformer.scraping.pipeline import ScrapingPipeline
@@ -27,7 +27,6 @@ from eml_transformer.cli.shared import (
 
 
 # Pipeline runners
-
 def run_ingestion(
     runtime: Runtime,
     source: str = "all",
@@ -38,9 +37,8 @@ def run_ingestion(
     )
 
     return [
-        pipeline.run_source(
-            source_name=definition.name,
-            source_config=definition.settings,
+        pipeline.incremental(
+            definition=definition,
         )
         for definition in runtime.sources_for_stage(
             "ingest",
@@ -197,18 +195,14 @@ def run_backfill(
     window_days: int,
     init_checkpoint: bool,
 ) -> list[Any]:
-    ingestion_pipeline = IngestionPipeline(
+    pipeline = IngestionPipeline(
         storage=runtime.storage,
         paths=runtime.paths,
     )
-    pipeline = BackfillPipeline(
-        ingestion_pipeline=ingestion_pipeline,
-    )
 
     return [
-        pipeline.run_source(
-            source_name=definition.name,
-            source_config=definition.settings,
+        pipeline.historical(
+            definition=definition,
             from_date=from_date,
             to_date=to_date,
             window_days=window_days,

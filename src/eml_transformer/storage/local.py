@@ -30,7 +30,8 @@ class LocalStorage(Storage):
         return (self.base_dir / key).resolve()
 
     def exists(self, key: str) -> bool:
-        return self._path(key).exists()
+        path = self._path(key)
+        return path.exists()
     
     def list(self, prefix: str) -> list[str]:
         base = self.base_dir.resolve()

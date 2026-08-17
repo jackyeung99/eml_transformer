@@ -35,12 +35,11 @@ class EIA930RegionSource:
         TI -> total_interchange
     """
 
-    name = "eia930_region"
+    name = "eia_region"
     source_type = "numeric"
 
     update_mode = "incremental"
     supports_backfill = True
-    default_lookback_days = 3
 
     route = "electricity/rto/region-data"
 

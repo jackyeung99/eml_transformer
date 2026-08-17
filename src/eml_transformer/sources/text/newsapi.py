@@ -28,7 +28,7 @@ class NewsAPISource(DataSource):
     source_type = "text"
     update_mode = "incremental"
     supports_backfill = True
-    default_lookback_days = 3
+
 
     def __init__(
         self,

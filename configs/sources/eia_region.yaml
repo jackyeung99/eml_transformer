@@ -8,6 +8,6 @@ ingestion:
     - TI
 
 standardization:
-  output: silver:eia930_region:records
+  output: silver:eia_region:records
   batch_size: 100000
   write_mode: replace

@@ -30,12 +30,12 @@ class EIA930InterchangeSource:
         period × fromba × toba
     """
 
-    name = "eia930_interchange"
+    name = "eia_interchange"
     source_type = "numeric"
 
     update_mode = "incremental"
     supports_backfill = True
-    default_lookback_days = 3
+   
 
     route = "electricity/rto/interchange-data"
 
