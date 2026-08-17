@@ -21,8 +21,7 @@ dependencies = [
     "typer",
     "dotenv",
     "polars>=1.43.1",
-    "fastapi[standard]>=0.140.13",
-    "s3fs>=2026.7.0",
+    "statsmodels>=0.14.6",
 ]
 
 [project.optional-dependencies]
@@ -61,4 +60,4 @@ testpaths = ["tests"]
 where = ["src"]
 
 [project.scripts]
-eml_transformer = "eml_transformer.cli:app"
+eml_transformer = "eml_transformer.cli.main:app"

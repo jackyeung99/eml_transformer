@@ -1,0 +1,13 @@
+standardization:
+  output: silver:miso_notifications:records
+  batch_size: 100000
+  write_mode: replace
+
+embedding:
+  input: silver:miso_notifications:records
+  output: gold:miso_notifications:embeddings
+  write_mode: append
+  embedding_batch_size: 32
+  text_columns:
+    - title
+    - text

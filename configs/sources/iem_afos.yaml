@@ -1,0 +1,35 @@
+ 
+
+ingestion:
+  pil: null
+  wfos:
+    - IND
+    - IWX
+    - LOT
+    - ILX
+    - LSX
+    - DVN
+    - DMX
+  product_types:
+    - AFD
+    - HWO
+    - NPW
+    - WSW
+    - SPS
+  limit: 100
+  fmt: text
+  timeout: 30
+
+standardization:
+  output: silver:iem_afos:records
+  batch_size: 100000
+  write_mode: replace
+
+embedding:
+  input: silver:iem_afos:records
+  output: gold:iem_afos:embeddings
+  write_mode: append
+  embedding_batch_size: 32
+  text_columns:
+    - title
+    - text

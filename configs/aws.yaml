@@ -1,9 +1,0 @@
-storage:
-  backend: s3
-  bucket: eml-transformer
-  prefix: "data"
-
-sources:
-  gdelt: {}
-  iem_afos: {}
-  miso_notifications: {}

@@ -1,53 +1,247 @@
+from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
 
-from eml_transformer.storage.paths import StoragePaths
-from eml_transformer.storage.storage import Storage, make_storage
-from eml_transformer.utils.config import (
-    build_source_configs,
+from eml_transformer.config.loader import (
     load_config,
 )
 
+from eml_transformer.config.definitions import (
+    AppConfig,
+    SourceDefinition,
+    FeatureDefinition,
+    DatasetDefinition,
+    ModelDefinition
+)
 
-@dataclass
+from eml_transformer.storage.paths import StoragePaths
+from eml_transformer.storage.base import Storage
+from eml_transformer.storage.factory import make_storage
+
+
+logger = logging.getLogger(__name__)
+
+SOURCE_STAGES = frozenset(
+    {
+        "ingest",
+        "backfill",
+        "standardize",
+        "scrape",
+        "embed",
+    }
+)
+
+
+@dataclass(slots=True)
 class Runtime:
-    cfg: dict
+    config: AppConfig
     storage: Storage
     paths: StoragePaths
-    source_configs: dict[str, dict]
 
     @property
-    def source_names(self) -> list[str]:
-        return list(self.source_configs.keys())
+    def source_names(self) -> tuple[str, ...]:
+        return tuple(self.config.sources)
 
     @property
-    def ingestion_config(self) -> dict:
-        return self.cfg.get("ingestion", {})
+    def enabled_source_names(self) -> tuple[str, ...]:
+        return tuple(
+            source.name
+            for source in self.config.sources.values()
+            if source.enabled
+        )
 
     @property
-    def standardization_config(self) -> dict:
-        return self.cfg.get("standardization", {})
+    def embedding_config(self) -> dict[str, object]:
+        return dict(self.config.embeddings)
 
-    @property
-    def embedding_config(self) -> dict:
-        return self.cfg.get("embeddings", {})
+    def get_source(self, name: str) -> SourceDefinition:
+        try:
+            return self.config.sources[name]
+        except KeyError as exc:
+            available = ", ".join(sorted(self.config.sources))
 
+            raise ValueError(
+                f"Unknown source {name!r}. "
+                f"Available sources: {available}"
+            ) from exc
 
-def build_runtime(config_path: str) -> Runtime:
-    cfg = load_config(config_path)
+    def sources_for_stage(
+        self,
+        stage: str,
+        *,
+        requested: str = "all",
+    ) -> list[SourceDefinition]:
+        """
+        Resolve the sources that a CLI command should execute.
 
-    storage = make_storage(cfg["storage"])
+        `all` returns enabled sources that support the stage.
 
-    paths = StoragePaths(
-        root=cfg.get("paths", {}).get("root", ".")
+        An explicitly named source may be disabled, but it must support
+        the requested stage.
+        """
+        if stage not in SOURCE_STAGES:
+            available = ", ".join(sorted(SOURCE_STAGES))
+
+            raise ValueError(
+                f"Unknown stage {stage!r}. "
+                f"Available stages: {available}"
+            )
+
+        if requested.lower() == "all":
+            return [
+                source
+                for source in self.config.sources.values()
+                if source.enabled and stage in source.stages
+            ]
+
+        source = self.get_source(requested)
+
+        if stage not in source.stages:
+            supported = ", ".join(sorted(source.stages)) or "none"
+
+            raise ValueError(
+                f"Source {source.name!r} does not support "
+                f"stage {stage!r}. Supported stages: {supported}"
+            )
+
+        if not source.enabled:
+            logger.warning(
+                "Running disabled source=%s because it was "
+                "explicitly requested",
+                source.name,
+            )
+
+        return [source]
+
+    def effective_embedding_config(
+        self,
+        source: SourceDefinition,
+        *,
+        model_name: str | None = None,
+    ) -> dict[str, object]:
+        """
+        Merge global embedding settings with source-level overrides.
+        """
+        config = {
+            **self.config.embeddings,
+            **source.settings.get("embedding", {}),
+        }
+
+        if model_name is not None:
+            config["model"] = model_name
+
+        return config
+
+    def features(
+        self,
+        requested: str = "all",
+    ) -> list[FeatureDefinition]:
+        if requested.lower() == "all":
+            return [
+                feature
+                for feature in self.config.features.values()
+                if feature.enabled
+            ]
+
+        try:
+            feature = self.config.features[requested]
+        except KeyError as exc:
+            available = ", ".join(sorted(self.config.features))
+
+            raise ValueError(
+                f"Unknown feature {requested!r}. "
+                f"Available features: {available}"
+            ) from exc
+
+        if not feature.enabled:
+            logger.warning(
+                "Running disabled feature=%s because it was "
+                "explicitly requested",
+                feature.name,
+            )
+
+        return [feature]
+
+    def datasets(
+        self,
+        requested: str = "all",
+    ) -> list[DatasetDefinition]:
+        if requested.lower() == "all":
+            return [
+                dataset
+                for dataset in self.config.datasets.values()
+                if dataset.enabled
+            ]
+
+        try:
+            dataset = self.config.datasets[requested]
+        except KeyError as exc:
+            available = ", ".join(sorted(self.config.datasets))
+
+            raise ValueError(
+                f"Unknown dataset {requested!r}. "
+                f"Available datasets: {available}"
+            ) from exc
+
+        if not dataset.enabled:
+            logger.warning(
+                "Running disabled dataset=%s because it was "
+                "explicitly requested",
+                dataset.name,
+            )
+
+        return [dataset]
+
+    def models(
+        self,
+        requested: tuple[str, ...] = (),
+    ) -> list[ModelDefinition]:
+        definitions = self.config.modeling
+
+        if not requested:
+            return [
+                definition
+                for definition in definitions.values()
+                if definition.enabled
+            ]
+
+        selected: list[ModelDefinition] = []
+
+        for name in requested:
+            try:
+                definition = definitions[name]
+            except KeyError as exc:
+                available = ", ".join(sorted(definitions))
+                raise ValueError(
+                    f"Unknown model {name!r}. "
+                    f"Available models: {available}"
+                ) from exc
+
+            if not definition.enabled:
+                logger.warning(
+                    "Running disabled model %s because it "
+                    "was explicitly requested",
+                    name,
+                )
+
+            selected.append(definition)
+
+        return selected
+
+def build_runtime(config_path: str | Path) -> Runtime:
+    config = load_config(config_path)
+
+    paths = StoragePaths()
+
+    storage = make_storage(
+        config.storage,
+        paths=paths,
     )
 
-    source_configs = build_source_configs(cfg)
-
     return Runtime(
-        cfg=cfg,
-        storage=storage,
+        config=config,
         paths=paths,
-        source_configs=source_configs,
+        storage=storage,
     )

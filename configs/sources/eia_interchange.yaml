@@ -1,0 +1,10 @@
+ingestion:
+  api_key_env: EIA_API_KEY
+  balancing_authority: MISO
+  neighbors: null
+  direction: both
+
+standardization:
+  output: silver:eia_interchange:records
+  batch_size: 100000
+  write_mode: replace
