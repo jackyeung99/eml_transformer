@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local data — especially important for your large Parquet files
+data/
+*.parquet
+*.jsonl
+
+# Local configuration and secrets
+.env
+.env.*
+.aws/
+*.pem
+*.key
+
+# Tests and development files
+tests/
+notebooks/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
