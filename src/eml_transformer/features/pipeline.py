@@ -13,8 +13,9 @@ from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.base import Storage
 from eml_transformer.config.loader import FeatureDefinition
 
-logger = logging.getLogger(__name__)
+from eml_transformer.logging import get_logger
 
+logger = get_logger(__name__)
 
 @dataclass(slots=True)
 class FeatureResult:

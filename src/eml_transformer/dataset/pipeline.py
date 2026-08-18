@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+
 from dataclasses import dataclass
 
 from eml_transformer.config.loader import DatasetDefinition
@@ -9,8 +9,9 @@ from eml_transformer.storage.base import Storage
 
 from eml_transformer.dataset.registry import get_dataset_function
 
-logger = logging.getLogger(__name__)
+from eml_transformer.logging import get_logger
 
+logger = get_logger(__name__)
 
 @dataclass(slots=True)
 class DatasetResult:

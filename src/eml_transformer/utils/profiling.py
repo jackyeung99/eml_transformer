@@ -7,7 +7,9 @@ from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, TypeVar
 
-logger = logging.getLogger(__name__)
+from eml_transformer.logging import get_logger
+
+logger = get_logger(__name__)
 
 P = ParamSpec("P")
 T = TypeVar("T")

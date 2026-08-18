@@ -18,8 +18,9 @@ from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.base import Storage
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.config.loader import resolve_api_keys
-logger = logging.getLogger(__name__)
+from eml_transformer.logging import get_logger
 
+logger = get_logger(__name__)
 
 class IngestionPipeline:
     def __init__(
@@ -52,17 +53,14 @@ class IngestionPipeline:
         )
 
         try:
-            settings = resolve_api_keys(
-                definition.settings,
+            ingestion_settings = resolve_api_keys(
+                definition.settings.get("ingestion", {}),
                 source_name=definition.name,
             )
 
             source = create_source(
-                source_name,
-                **definition.settings.get(
-                    "ingestion",
-                    {},
-                ),
+                definition.name,
+                **ingestion_settings,
             )
 
             logger.debug(
@@ -141,13 +139,16 @@ class IngestionPipeline:
         )
 
         try:
+            ingestion_settings = resolve_api_keys(
+                            definition.settings.get("ingestion", {}),
+                            source_name=definition.name,
+                        )
+
             source = create_source(
-                source_name,
-                **definition.settings.get(
-                    "ingestion",
-                    {},
-                ),
+                definition.name,
+                **ingestion_settings,
             )
+
 
             logger.debug(
                 (

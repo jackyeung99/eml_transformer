@@ -13,8 +13,9 @@ from eml_transformer.schema.records import BronzeRecord, TextRecord
 from eml_transformer.utils.dates import parse_utc_datetime, utc_now
 
 
-logger = logging.getLogger(__name__)
+from eml_transformer.logging import get_logger
 
+logger = get_logger(__name__)
 
 MISO_AREAS = [
     "IN",

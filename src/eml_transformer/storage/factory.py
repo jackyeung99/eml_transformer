@@ -12,7 +12,7 @@ from eml_transformer.config.loader import StorageConfig
 from eml_transformer.storage.base import Storage
 from eml_transformer.storage.local import LocalStorage
 from eml_transformer.storage.s3 import S3Storage
-
+from eml_transformer.logging import get_logger
 
 logger = get_logger(__name__)
 

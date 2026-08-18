@@ -14,6 +14,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 
+
 class EIAClient:
     BASE_URL = "https://api.eia.gov/v2"
     MAX_PAGE_SIZE = 5_000

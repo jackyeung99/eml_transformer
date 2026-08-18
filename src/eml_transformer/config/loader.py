@@ -7,10 +7,11 @@ from typing import Any
 from collections.abc import Mapping
 
 import yaml
-import logging 
 
-logger = logging.getLogger(__name__)
 
+from eml_transformer.logging import get_logger
+
+logger = get_logger(__name__)
 
 from eml_transformer.config.definitions import (
     AppConfig,

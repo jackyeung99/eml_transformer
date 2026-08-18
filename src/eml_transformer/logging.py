@@ -18,7 +18,9 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 logging.getLogger("transformers").setLevel(logging.WARNING)
-
+logging.getLogger(
+    "urllib3.connectionpool"
+).setLevel(logging.ERROR)
 
 def setup_logging(
     level: int = logging.INFO,

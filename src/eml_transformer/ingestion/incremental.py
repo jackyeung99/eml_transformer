@@ -8,9 +8,9 @@ from eml_transformer.ingestion.results import IngestionResult
 from eml_transformer.utils.dates import utc_now, parse_utc_datetime
 from eml_transformer.storage.base import Storage
 from eml_transformer.storage.paths import StoragePaths
-import logging
+from eml_transformer.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def run_incremental_ingestion(
     *,

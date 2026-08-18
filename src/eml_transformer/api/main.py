@@ -13,7 +13,9 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from eml_transformer.runtime import Runtime, build_runtime
 
 
-logger = logging.getLogger(__name__)
+from eml_transformer.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -134,6 +136,7 @@ def get_records(
         raise HTTPException(404, f"Unknown source: {source}")
 
     ref = f"silver:{source}:records"
+    print(ref)
     frame = _read_dataset(runtime, ref, f"source {source}")
     total, records = _records_response(frame, limit=limit, offset=offset)
     return {

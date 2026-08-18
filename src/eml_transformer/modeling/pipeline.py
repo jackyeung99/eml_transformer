@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-import logging
+
 
 from eml_transformer.config.definitions import (
     ModelDefinition,
@@ -28,8 +28,9 @@ from eml_transformer.modeling.artifacts import (
 from eml_transformer.utils.dates import utc_now
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.base import Storage
+from eml_transformer.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ModelingPipeline:

@@ -20,7 +20,9 @@ from eml_transformer.schema.records import TextRecord, BronzeRecord
 from eml_transformer.utils.stamping import stable_hash
 from eml_transformer.utils.dates import utc_now
 
-logger = logging.getLogger(__name__)
+from eml_transformer.logging import get_logger
+
+logger = get_logger(__name__)
 
 _AFOS_TZ_MAP = {
     "EST": "America/New_York",

@@ -18,8 +18,9 @@ from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.base import Storage
 from eml_transformer.standardization.text_cleaning import clean_text
+from eml_transformer.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 NON_RETRYABLE_STATUSES = {
     "success",
@@ -27,6 +28,15 @@ NON_RETRYABLE_STATUSES = {
     "not_found",
 }
 
+
+'''
+BROKEN:
+
+- update dataset read to take in input and call storage.dataset 
+- switch to AWS batch for large workloads
+- consider scrapy 
+
+'''
 
 @dataclass
 class ScrapingResult:

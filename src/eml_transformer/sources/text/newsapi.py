@@ -12,9 +12,9 @@ from eml_transformer.schema.records import BronzeRecord, TextRecord
 from eml_transformer.utils.dates import parse_utc_datetime, utc_now
 from eml_transformer.utils.stamping import stable_hash
 
+from eml_transformer.logging import get_logger
 
-logger = logging.getLogger(__name__)
-
+logger = get_logger(__name__)
 
 @register_source("newsapi")
 class NewsAPISource(DataSource):

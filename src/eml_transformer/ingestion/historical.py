@@ -14,9 +14,9 @@ from eml_transformer.logging import silence_loggers
 from eml_transformer.storage.base import Storage
 from eml_transformer.storage.paths import StoragePaths
 
-import logging
+from eml_transformer.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def run_historical_ingestion(
     *,
