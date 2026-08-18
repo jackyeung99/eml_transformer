@@ -7,6 +7,9 @@ from typing import Any
 from collections.abc import Mapping
 
 import yaml
+import logging 
+
+logger = logging.getLogger(__name__)
 
 
 from eml_transformer.config.definitions import (
@@ -69,7 +72,10 @@ def resolve_api_keys(
         api_key_env = value.get("api_key_env")
 
         if api_key_env is not None:
-            if not isinstance(api_key_env, str) or not api_key_env:
+            if (
+                not isinstance(api_key_env, str)
+                or not api_key_env
+            ):
                 raise ValueError(
                     f"Source {source_name!r} has an invalid "
                     "'api_key_env'"
@@ -78,6 +84,13 @@ def resolve_api_keys(
             api_key = os.getenv(api_key_env)
 
             if not api_key:
+                logger.warning(
+                    "API key could not be resolved | "
+                    "source=%s environment_variable=%s",
+                    source_name,
+                    api_key_env,
+                )
+
                 raise EnvironmentError(
                     f"Source {source_name!r} requires environment "
                     f"variable {api_key_env!r}"
@@ -121,11 +134,13 @@ def build_source_definition(
         config_dir / config_file
     ).resolve()
 
+    # Load the configuration without resolving environment variables.
     settings = load_yaml(source_config_path)
-    settings = resolve_api_keys(
-        settings,
-        source_name=name,
-    )
+
+    if not isinstance(settings, dict):
+        raise TypeError(
+            f"Configuration for source {name!r} must be a mapping"
+        )
 
     raw_stages = entry.get("stages", [])
 
@@ -134,7 +149,10 @@ def build_source_definition(
             f"Stages for source {name!r} must be a list"
         )
 
-    if not all(isinstance(stage, str) for stage in raw_stages):
+    if not all(
+        isinstance(stage, str)
+        for stage in raw_stages
+    ):
         raise TypeError(
             f"Every stage for source {name!r} must be a string"
         )
@@ -147,8 +165,8 @@ def build_source_definition(
         valid = ", ".join(sorted(SOURCE_STAGES))
 
         raise ValueError(
-            f"Source {name!r} contains unknown stages: {unknown}. "
-            f"Valid stages: {valid}"
+            f"Source {name!r} contains unknown stages: "
+            f"{unknown}. Valid stages: {valid}"
         )
 
     enabled = entry.get("enabled", True)

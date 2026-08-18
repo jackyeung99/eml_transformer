@@ -17,7 +17,7 @@ from eml_transformer.ingestion.results import (
 from eml_transformer.sources.registry import create_source
 from eml_transformer.storage.base import Storage
 from eml_transformer.storage.paths import StoragePaths
-
+from eml_transformer.config.loader import resolve_api_keys
 logger = logging.getLogger(__name__)
 
 
@@ -52,6 +52,11 @@ class IngestionPipeline:
         )
 
         try:
+            settings = resolve_api_keys(
+                definition.settings,
+                source_name=definition.name,
+            )
+
             source = create_source(
                 source_name,
                 **definition.settings.get(

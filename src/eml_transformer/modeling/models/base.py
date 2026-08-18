@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Self
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ class BaseForecastModel(
         self,
         X: pd.DataFrame | None,
         y: pd.Series,
-    ) -> Self:
+    ):
         """
         Fit the forecasting model.
 

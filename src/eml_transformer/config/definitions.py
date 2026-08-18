@@ -19,6 +19,8 @@ class StorageConfig:
     bucket: str | None = None
     prefix: str = ""
     region: str | None = None
+    profile: str | None = None
+    endpoint_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
