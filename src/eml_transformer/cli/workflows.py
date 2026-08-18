@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import typer
-from datetime import datetime
 
 from eml_transformer.cli.stages import (
+    run_backfill,
     run_datasets,
     run_embeddings,
     run_features,
     run_forecasting,
     run_ingestion,
     run_scraping,
-    run_backfill,
     run_standardization,
     run_training,
 )
@@ -20,11 +20,8 @@ from eml_transformer.runtime import Runtime, build_runtime
 from eml_transformer.utils.dates import parse_utc_datetime
 from eml_transformer.cli.shared import (
     DEFAULT_CONFIG,
-    exit_on_failure,
     print_result_table,
 )
-
-
 
 workflow_app = typer.Typer(
     help="Run multi-stage pipeline workflows.",
@@ -178,6 +175,7 @@ def run_modeling_workflow(
 
     return results
 
+
 def run_historical_workflow(
     runtime: Runtime,
     *,
@@ -232,11 +230,10 @@ def run_historical_workflow(
 
     return results
 
+
 def _print_workflow_results(
     results: dict[str, list[Any]],
 ) -> None:
-
-
     for stage, stage_results in results.items():
         print_result_table(
             stage.replace("_", " ").title(),
@@ -244,6 +241,7 @@ def _print_workflow_results(
         )
 
 
+@workflow_app.command("numeric")
 def numeric(
     source: str = typer.Option("all", "--source", "-s"),
     feature: str = typer.Option("all", "--feature", "-f"),
@@ -258,7 +256,7 @@ def numeric(
         "--force-train",
     ),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
@@ -279,6 +277,7 @@ def numeric(
     _print_workflow_results(results)
 
 
+@workflow_app.command("text")
 def text(
     source: str = typer.Option("all", "--source", "-s"),
     model_name: str | None = typer.Option(
@@ -287,7 +286,7 @@ def text(
         "-m",
     ),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),
@@ -305,6 +304,7 @@ def text(
     _print_workflow_results(results)
 
 
+@workflow_app.command("modeling")
 def modeling(
     feature: str = typer.Option("all", "--feature", "-f"),
     dataset: str = typer.Option("all", "--dataset", "-d"),
@@ -318,7 +318,7 @@ def modeling(
         "--force-train",
     ),
     config: str = typer.Option(
-        "configs/dev.yaml",
+        DEFAULT_CONFIG,
         "--config",
         "-c",
     ),

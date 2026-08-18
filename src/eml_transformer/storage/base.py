@@ -137,14 +137,26 @@ class Storage:
         self.write_json(checkpoint, key)
 
     def read_seen_ids(self, key: str) -> set[str]:
-        """Read the identifiers already persisted for a bronze dataset."""
+        """Read identifiers already persisted for a bronze dataset."""
         if not self.exists(key):
             return set()
 
-        values = self.read_json(key)
+        data = self.read_json(key)
+
+        # Backward compatibility with the previous list-only format.
+        if isinstance(data, list):
+            values = data
+        elif isinstance(data, dict):
+            values = data.get("seen", [])
+        else:
+            raise TypeError(
+                f"Seen-ID index at {key!r} must contain a JSON object"
+            )
+
         if not isinstance(values, list):
             raise TypeError(
-                f"Seen-ID index at {key!r} must contain a JSON array"
+                f"Seen-ID index field 'seen' at {key!r} "
+                "must contain a JSON array"
             )
 
         return {str(value) for value in values}

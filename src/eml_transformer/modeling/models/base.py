@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.utils.validation import (
-    check_array,
-    check_is_fitted,
-    check_X_y,
-)
+from sklearn.utils.validation import check_is_fitted
+
 
 FloatArray = NDArray[np.float64]
+
 
 class BaseForecastModel(
     RegressorMixin,
@@ -23,7 +21,7 @@ class BaseForecastModel(
     """
     Scikit-learn-compatible base class for forecasting models.
 
-    Subclasses implement the model-specific fitting, prediction,
+    Subclasses implement model-specific fitting, forecasting,
     and diagnostic behavior.
     """
 
@@ -36,7 +34,18 @@ class BaseForecastModel(
         self,
         X: pd.DataFrame | None,
         y: pd.Series,
-    ):
+    ) -> Self:
+        """
+        Fit the forecasting model.
+
+        Parameters
+        ----------
+        X:
+            Historical exogenous features. Must be provided when
+            ``requires_exogenous`` is True.
+        y:
+            Historical target values.
+        """
         y_values = self._validate_target(y)
 
         if self.requires_exogenous:
@@ -45,11 +54,7 @@ class BaseForecastModel(
                 expected_rows=len(y_values),
             )
         else:
-            if X is not None and not X.empty:
-                raise ValueError(
-                    f"{type(self).__name__} does not use "
-                    "exogenous features"
-                )
+            self._validate_no_exogenous_features(X)
 
             X_values = None
             self.feature_names_in_ = np.asarray(
@@ -60,24 +65,40 @@ class BaseForecastModel(
 
         self.records_fitted_ = len(y_values)
 
-        self._fit_model(X_values, y_values)
+        self._fit_model(
+            X=X_values,
+            y=y_values,
+        )
 
         self.diagnostics_ = self._build_diagnostics(
-            X_values,
-            y_values,
+            X=X_values,
+            y=y_values,
         )
         self.is_fitted_ = True
 
         return self
 
-    
     def forecast(
         self,
         *,
         steps: int,
         X: pd.DataFrame | None = None,
     ) -> FloatArray:
+        """
+        Generate a multi-step forecast.
+
+        Parameters
+        ----------
+        steps:
+            Number of future periods to forecast.
+        X:
+            Future exogenous features. The number of rows must
+            match ``steps``.
+        """
         check_is_fitted(self, "is_fitted_")
+
+        if not isinstance(steps, int):
+            raise TypeError("steps must be an integer")
 
         if steps <= 0:
             raise ValueError("steps must be positive")
@@ -88,12 +109,7 @@ class BaseForecastModel(
                 expected_rows=steps,
             )
         else:
-            if X is not None and not X.empty:
-                raise ValueError(
-                    f"{type(self).__name__} does not use "
-                    "exogenous features"
-                )
-
+            self._validate_no_exogenous_features(X)
             X_values = None
 
         predictions = self._forecast_model(
@@ -103,7 +119,7 @@ class BaseForecastModel(
 
         values = np.asarray(
             predictions,
-            dtype=float,
+            dtype=np.float64,
         ).reshape(-1)
 
         if len(values) != steps:
@@ -113,51 +129,48 @@ class BaseForecastModel(
                 f"received {len(values)}"
             )
 
+        if not np.isfinite(values).all():
+            raise ValueError(
+                "Model returned non-finite forecast values"
+            )
+
         return values
 
     def get_diagnostics(self) -> dict[str, Any]:
+        """Return a copy of the fitted model diagnostics."""
         check_is_fitted(self, "is_fitted_")
         return dict(self.diagnostics_)
 
     @abstractmethod
     def _fit_model(
         self,
-        X: NDArray[np.float64],
-        y: NDArray[np.float64],
+        X: FloatArray | None,
+        y: FloatArray,
     ) -> None:
         """Fit the model-specific estimator."""
 
+    @abstractmethod
+    def _forecast_model(
+        self,
+        *,
+        steps: int,
+        X: FloatArray | None,
+    ) -> FloatArray:
+        """Generate forecasts from the fitted model."""
+
     def _build_diagnostics(
         self,
-        X: NDArray[np.float64],
-        y: NDArray[np.float64],
+        X: FloatArray | None,
+        y: FloatArray,
     ) -> dict[str, Any]:
         """
-        Return model-specific, JSON-serializable diagnostics.
+        Return JSON-serializable model diagnostics.
 
-        Subclasses can override this when they have useful
-        diagnostics to report.
+        Subclasses can override this method when they have useful
+        model-specific diagnostics.
         """
         return {}
 
-    @staticmethod
-    def _get_feature_names(
-        X: pd.DataFrame,
-    ) -> tuple[str, ...]:
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError(
-                "Forecast models require X to be a DataFrame "
-                "so feature names can be preserved"
-            )
-
-        if X.columns.has_duplicates:
-            raise ValueError(
-                "Forecast features cannot contain duplicate names"
-            )
-
-        return tuple(str(column) for column in X.columns)
-
-    
     @staticmethod
     def _validate_target(
         y: pd.Series,
@@ -173,7 +186,14 @@ class BaseForecastModel(
                 "Target contains missing values"
             )
 
-        return y.to_numpy(dtype=float)
+        values = y.to_numpy(dtype=np.float64)
+
+        if not np.isfinite(values).all():
+            raise ValueError(
+                "Target contains non-finite values"
+            )
+
+        return values
 
     def _validate_training_features(
         self,
@@ -187,10 +207,7 @@ class BaseForecastModel(
                 "exogenous features"
             )
 
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError(
-                "X must be a pandas DataFrame"
-            )
+        self._validate_feature_frame(X)
 
         if X.empty:
             raise ValueError(
@@ -199,26 +216,20 @@ class BaseForecastModel(
 
         if len(X) != expected_rows:
             raise ValueError(
-                "Target and feature row counts do not match"
+                "Target and feature row counts do not match: "
+                f"expected {expected_rows}, "
+                f"received {len(X)}"
             )
 
-        if X.columns.has_duplicates:
-            raise ValueError(
-                "Feature names contain duplicates"
-            )
-
-        if X.isna().any().any():
-            raise ValueError(
-                "Exogenous features contain missing values"
-            )
+        feature_names = self._get_feature_names(X)
 
         self.feature_names_in_ = np.asarray(
-            [str(column) for column in X.columns],
+            feature_names,
             dtype=object,
         )
         self.n_features_in_ = X.shape[1]
 
-        return X.to_numpy(dtype=float)
+        return self._to_feature_array(X)
 
     def _validate_prediction_features(
         self,
@@ -232,6 +243,8 @@ class BaseForecastModel(
                 "exogenous features"
             )
 
+        self._validate_feature_frame(X)
+
         if len(X) != expected_rows:
             raise ValueError(
                 "Future feature row count must match "
@@ -243,7 +256,7 @@ class BaseForecastModel(
             str(feature)
             for feature in self.feature_names_in_
         )
-        received = tuple(str(column) for column in X.columns)
+        received = self._get_feature_names(X)
 
         if received != expected:
             raise ValueError(
@@ -252,10 +265,73 @@ class BaseForecastModel(
                 f"received {received!r}"
             )
 
-        if X.isna().any().any():
-            raise ValueError(
-                "Future exogenous features contain "
-                "missing values"
+        return self._to_feature_array(X)
+
+    @staticmethod
+    def _validate_feature_frame(
+        X: pd.DataFrame,
+    ) -> None:
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "X must be a pandas DataFrame"
             )
 
-        return X.to_numpy(dtype=float)
+        if X.columns.has_duplicates:
+            raise ValueError(
+                "Feature names contain duplicates"
+            )
+
+        if X.shape[1] == 0:
+            raise ValueError(
+                "Feature data does not contain any columns"
+            )
+
+        if X.isna().any().any():
+            raise ValueError(
+                "Exogenous features contain missing values"
+            )
+
+    @staticmethod
+    def _get_feature_names(
+        X: pd.DataFrame,
+    ) -> tuple[str, ...]:
+        return tuple(
+            str(column)
+            for column in X.columns
+        )
+
+    @staticmethod
+    def _to_feature_array(
+        X: pd.DataFrame,
+    ) -> FloatArray:
+        try:
+            values = X.to_numpy(dtype=np.float64)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Exogenous features must be numeric"
+            ) from error
+
+        if not np.isfinite(values).all():
+            raise ValueError(
+                "Exogenous features contain non-finite values"
+            )
+
+        return values
+
+    def _validate_no_exogenous_features(
+        self,
+        X: pd.DataFrame | None,
+    ) -> None:
+        if X is None:
+            return
+
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError(
+                "X must be a pandas DataFrame or None"
+            )
+
+        if not X.empty:
+            raise ValueError(
+                f"{type(self).__name__} does not use "
+                "exogenous features"
+            )

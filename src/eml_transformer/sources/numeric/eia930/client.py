@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
+import time
 
 from datetime import datetime, timezone
 
@@ -83,6 +84,9 @@ class EIAClient:
             ("api_key", self.api_key),
             *(params or []),
         ]
+
+        # Limit requests to approximately two per second.
+        time.sleep(0.5)
 
         response = self.session.get(
             url,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
 
 from eml_transformer.config.definitions import SourceDefinition
 from eml_transformer.ingestion.historical import (
@@ -37,31 +36,78 @@ class IngestionPipeline:
         *,
         to_date: datetime | None = None,
     ) -> IngestionResult:
+        source_name = definition.name
+
+        logger.info(
+            (
+                "Starting incremental ingestion pipeline "
+                "for source=%s to_date=%s"
+            ),
+            source_name,
+            (
+                to_date.isoformat()
+                if to_date is not None
+                else "current time"
+            ),
+        )
+
         try:
             source = create_source(
-                definition.name,
-                **definition.settings.get("ingestion", {}),
+                source_name,
+                **definition.settings.get(
+                    "ingestion",
+                    {},
+                ),
             )
 
-            return run_incremental_ingestion(
+            logger.debug(
+                (
+                    "Created source adapter for "
+                    "source=%s adapter=%s"
+                ),
+                source_name,
+                type(source).__name__,
+            )
+
+            result = run_incremental_ingestion(
                 source=source,
-                source_name=definition.name,
+                source_name=source_name,
                 source_config=definition.settings,
                 storage=self.storage,
                 paths=self.paths,
                 to_date=to_date,
             )
 
+            logger.info(
+                (
+                    "Incremental ingestion pipeline completed "
+                    "for source=%s: status=%s fetched=%d "
+                    "written=%d skipped=%d"
+                ),
+                source_name,
+                result.status,
+                result.records_fetched,
+                result.records_written,
+                result.records_skipped,
+            )
+
+            return result
+
         except Exception as exc:
             logger.exception(
-                "Incremental ingestion failed for %s",
-                definition.name,
+                (
+                    "Incremental ingestion pipeline failed "
+                    "for source=%s"
+                ),
+                source_name,
             )
 
             return IngestionResult(
                 status="failure",
-                source=definition.name,
-                reason="Incremental ingestion raised an exception",
+                source=source_name,
+                reason=(
+                    "Incremental ingestion raised an exception"
+                ),
                 error=str(exc),
             )
 
@@ -74,15 +120,42 @@ class IngestionPipeline:
         window_days: int = 30,
         seed_checkpoint: bool = False,
     ) -> BackfillResult:
+        source_name = definition.name
+
+        logger.info(
+            (
+                "Starting historical ingestion pipeline "
+                "for source=%s from=%s to=%s "
+                "window_days=%d seed_checkpoint=%s"
+            ),
+            source_name,
+            from_date.isoformat(),
+            to_date.isoformat(),
+            window_days,
+            seed_checkpoint,
+        )
+
         try:
             source = create_source(
-                definition.name,
-                **definition.settings.get("ingestion", {}),
+                source_name,
+                **definition.settings.get(
+                    "ingestion",
+                    {},
+                ),
             )
 
-            return run_historical_ingestion(
+            logger.debug(
+                (
+                    "Created source adapter for "
+                    "source=%s adapter=%s"
+                ),
+                source_name,
+                type(source).__name__,
+            )
+
+            result = run_historical_ingestion(
                 source=source,
-                source_name=definition.name,
+                source_name=source_name,
                 source_config=definition.settings,
                 storage=self.storage,
                 paths=self.paths,
@@ -92,15 +165,37 @@ class IngestionPipeline:
                 seed_checkpoint=seed_checkpoint,
             )
 
+            logger.info(
+                (
+                    "Historical ingestion pipeline completed "
+                    "for source=%s: status=%s "
+                    "windows=%d/%d fetched=%d written=%d "
+                    "skipped=%d failed=%d"
+                ),
+                source_name,
+                result.status,
+                result.windows_completed,
+                result.windows_total,
+                result.records_fetched,
+                result.records_written,
+                result.records_skipped,
+                result.records_failed,
+            )
+
+            return result
+
         except Exception as exc:
             logger.exception(
-                "Historical ingestion failed for %s",
-                definition.name,
+                (
+                    "Historical ingestion pipeline failed "
+                    "for source=%s"
+                ),
+                source_name,
             )
 
             return BackfillResult(
                 status="failure",
-                source=definition.name,
+                source=source_name,
                 from_date=from_date,
                 to_date=to_date,
                 window_days=window_days,

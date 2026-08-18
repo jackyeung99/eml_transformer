@@ -36,11 +36,6 @@ def main(
     )
 
 
-
-app = typer.Typer(
-    help="EML Transformer data and modeling pipelines.",
-)
-
 # Individual pipeline stages remain top-level.
 app.command("ingest")(stages.ingest)
 app.command("backfill")(stages.backfill)

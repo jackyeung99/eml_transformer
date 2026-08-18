@@ -42,6 +42,7 @@ def run_historical_ingestion(
             window_days=window_days,
         )
     )
+
     logger.info(
         (
             "Starting backfill for %s from %s to %s: "
@@ -53,9 +54,9 @@ def run_historical_ingestion(
         window_days,
         len(windows),
     )
-    
 
     results: list[IngestionResult] = []
+    last_successful_window_end: datetime | None = None
 
     with tqdm(
         total=len(windows),
@@ -75,17 +76,19 @@ def run_historical_ingestion(
             with silence_loggers(
                 "eml_transformer.ingestion.pipeline",
                 "eml_transformer.ingestion",
-            ):  
-
+            ):
                 logger.debug(
-                    "Processing backfill window %d/%d for %s from %s to %s",
+                    (
+                        "Processing backfill window %d/%d "
+                        "for %s from %s to %s"
+                    ),
                     index,
                     len(windows),
                     source_name,
                     window_start.isoformat(),
                     window_end.isoformat(),
                 )
-                
+
                 result = ingest_window(
                     source=source,
                     source_name=source_name,
@@ -93,20 +96,6 @@ def run_historical_ingestion(
                     paths=paths,
                     from_date=window_start,
                     to_date=window_end,
-                )
-
-                logger.debug(
-                    (
-                        "Backfill window %d/%d completed for %s: "
-                        "status=%s fetched=%d written=%d skipped=%d"
-                    ),
-                    index,
-                    len(windows),
-                    source_name,
-                    result.status,
-                    result.records_fetched,
-                    result.records_written,
-                    result.records_skipped,
                 )
 
             results.append(result)
@@ -121,7 +110,46 @@ def run_historical_ingestion(
             progress.update(1)
 
             if result.status != "success":
+                logger.error(
+                    (
+                        "Backfill stopped for %s after "
+                        "window %d/%d failed"
+                    ),
+                    source_name,
+                    index,
+                    len(windows),
+                )
                 break
+
+            last_successful_window_end = window_end
+
+            if seed_checkpoint:
+                storage.write_checkpoint(
+                    paths.checkpoint_key(source_name),
+                    {
+                        "source": source_name,
+                        "last_successful_run_id": (
+                            "backfill_seed"
+                        ),
+                        "last_checkpoint_value": (
+                            last_successful_window_end
+                        ),
+                    },
+                )
+
+            logger.debug(
+                (
+                    "Backfill window %d/%d completed for %s: "
+                    "status=%s fetched=%d written=%d skipped=%d"
+                ),
+                index,
+                len(windows),
+                source_name,
+                result.status,
+                result.records_fetched,
+                result.records_written,
+                result.records_skipped,
+            )
 
     failed_result = next(
         (
@@ -132,17 +160,33 @@ def run_historical_ingestion(
         None,
     )
 
-    status = "failure" if failed_result else "success"
+    status = (
+        "failure"
+        if failed_result is not None
+        else "success"
+    )
 
-    if seed_checkpoint and status == "success" and windows:
-        storage.write_checkpoint(
-            paths.checkpoint_key(source_name),
-            {
-                "source": source_name,
-                "last_successful_run_id": "backfill_seed",
-                "last_checkpoint_value": windows[-1][1],
-            },
-        )
+    windows_completed = sum(
+        result.status == "success"
+        for result in results
+    )
+
+    logger.info(
+        (
+            "Historical ingestion completed for %s: "
+            "status=%s windows_completed=%d/%d "
+            "last_successful_checkpoint=%s"
+        ),
+        source_name,
+        status,
+        windows_completed,
+        len(windows),
+        (
+            last_successful_window_end.isoformat()
+            if last_successful_window_end is not None
+            else None
+        ),
+    )
 
     return summarize_historical_ingestion(
         source_name=source_name,
@@ -158,7 +202,6 @@ def run_historical_ingestion(
             else None
         ),
     )
-
 
 def validate_historical_source(
     *,
@@ -226,7 +269,10 @@ def summarize_historical_ingestion(
         to_date=to_date,
         window_days=window_days,
         windows_total=windows_total,
-        windows_completed=len(results),
+        windows_completed=sum(
+            result.status == "success"
+            for result in results
+        ),
         records_fetched=sum(
             result.records_fetched
             for result in results

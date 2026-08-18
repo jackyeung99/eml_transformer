@@ -4,33 +4,6 @@ storage:
   prefix: .
 
 sources:
-  iem_afos:
-    enabled: true
-    config: sources/iem_afos.yaml
-    stages:
-      - ingest
-      - backfill
-      - standardize
-      - embed
-
-  miso_notifications:
-    enabled: true
-    config: sources/miso_notifications.yaml
-    stages: 
-      - ingest
-      - standardize
-      - embed
-
-  gdelt:
-    enabled: true
-    config: sources/gdelt.yaml
-    stages:
-      - ingest
-      - backfill
-      - standardize
-      - scrape
-      - embed
-
   eia_region:
     enabled: true
     config: sources/eia_region.yaml
@@ -46,18 +19,6 @@ sources:
       - ingest
       - backfill
       - standardize
-
-
-embeddings:
-  provider: sentence_transformer
-  model: nvidia/llama-nemotron-embed-vl-1b-v2
-  batch_size: 32
-  device: cuda
-  normalize_embeddings: true
-  trust_remote_code: true
-  text_columns:
-    - title
-    - text
 
 features:
   eia_region_hourly:
@@ -108,7 +69,14 @@ modeling:
     forecast_output: gold:miso_hourly_load_sarimax:forecasts
 
     target: actual_load
-    features: []
+
+    # Known-future calendar features are generated from each
+    # forecast timestamp in the forecasting layer.
+    features:
+      - hour
+      - day_of_week
+      - is_weekend
+      - month
 
     retrain_after_hours: 168
 
@@ -123,7 +91,7 @@ modeling:
         - 1
         - 24
       trend: null
-      use_exogenous: false
+      use_exogenous: true
       enforce_stationarity: true
       enforce_invertibility: true
       simple_differencing: false
@@ -134,12 +102,13 @@ modeling:
       validation_days: 14
 
     forecast_settings:
-      forecast_steps: 10
-      frequency: 1d
+      # Full hourly load curve:
+      forecast_steps: 24
+      frequency: 1h
 
   miso_daily_peak_arima:
     enabled: true
-    model_type: custom_model 
+    model_type: arima
 
     training_input: gold:daily_load:datasets
     forecast_input: gold:daily_load:datasets
