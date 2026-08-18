@@ -247,7 +247,7 @@ def _prepare_exogenous_forecast_input(
 
     future = add_calendar_features(
         future,
-        timestamp_column=timestamp_column,
+        time_column=timestamp_column,
     )
 
     requested_calendar_features = [
