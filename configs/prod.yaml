@@ -146,5 +146,5 @@ modeling:
       validation_days: 30
 
     forecast_settings:
-      forecast_steps: 3
+      forecast_steps: 1
       frequency: 1d

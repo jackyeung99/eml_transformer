@@ -556,6 +556,43 @@ class Storage:
 
         return model, metadata
 
+    def write_forecasts(
+        self,
+        ref: DatasetRef | str,
+        forecasts: pd.DataFrame,
+        *,
+        batch_size: int = 100_000,
+    ) -> int:
+        if forecasts.empty:
+            return 0
+
+        existing = self.read_dataset(ref)
+
+        if existing.empty:
+            combined = forecasts.copy()
+        else:
+            _validate_matching_columns(
+                existing,
+                forecasts,
+            )
+
+            combined = pd.concat(
+                [existing, forecasts],
+                ignore_index=True,
+            )
+
+        combined = combined.drop_duplicates(
+            subset=["forecast_id"],
+            keep="last",
+        )
+
+        return self.write_dataframe(
+            ref,
+            combined,
+            batch_size=batch_size,
+            mode="replace",
+        )
+
 
 
 def _validate_matching_columns(

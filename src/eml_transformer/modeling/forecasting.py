@@ -17,11 +17,17 @@ from eml_transformer.utils.dates import (
     ensure_utc,
 )
 
-from eml_transformer.features.transformations.calendar import add_calendar_features
+from eml_transformer.features.transformations.calendar import (
+    add_calendar_features,
+    add_holiday_feature,
+    add_local_timestamp,
+)
 
 
-# Calendar features that can be calculated exactly for future
-# timestamps. These should never be forward-filled.
+MARKET_TIMEZONE = "America/New_York"
+
+# Features calculated directly from future Eastern timestamps.
+# These must never be forward-filled.
 CALENDAR_FEATURES = frozenset(
     {
         "hour",
@@ -30,6 +36,7 @@ CALENDAR_FEATURES = frozenset(
         "day_type",
         "month",
         "is_weekend",
+        "is_holiday",
     }
 )
 
@@ -92,6 +99,7 @@ def generate_forecast(
         forecast_origin=origin,
         forecast_steps=forecast_steps,
         frequency=frequency,
+        timezone=MARKET_TIMEZONE,
     )
 
     if model.requires_exogenous:
@@ -121,6 +129,18 @@ def generate_forecast(
             f"received {len(predictions)}"
         )
 
+    forecast_for_et = forecast_for.tz_convert(
+        MARKET_TIMEZONE
+    )
+
+    forecast_origin_et = origin.tz_convert(
+        MARKET_TIMEZONE
+    )
+
+    generated_at_et = pd.Timestamp(
+            generated_at
+    ).tz_convert(MARKET_TIMEZONE)
+
     records = pd.DataFrame(
         {
             "forecast_id": [
@@ -136,9 +156,17 @@ def generate_forecast(
             "model_type": metadata.model_type,
             "model_version": metadata.model_version,
             "model_trained_at": metadata.trained_at,
-            "generated_at": generated_at,
-            "forecast_origin": origin,
-            "forecast_for": forecast_for,
+
+            # Canonical UTC timestamps
+            "generated_at_utc": generated_at,
+            "forecast_origin_utc": origin,
+            "forecast_for_utc": forecast_for,
+
+            # User-facing Eastern timestamps
+            "generated_at_et": generated_at_et,
+            "forecast_origin_et": forecast_origin_et,
+            "forecast_for_et": forecast_for_et,
+
             "horizon": range(
                 1,
                 forecast_steps + 1,
@@ -159,6 +187,7 @@ def _build_future_timestamps(
     forecast_origin: pd.Timestamp,
     forecast_steps: int,
     frequency: str,
+    timezone: str,
 ) -> pd.DatetimeIndex:
     try:
         offset = pd.tseries.frequencies.to_offset(
@@ -169,14 +198,24 @@ def _build_future_timestamps(
             f"Invalid forecast frequency {frequency!r}"
         ) from exc
 
-    first_forecast = forecast_origin + offset
+    origin_utc = pd.Timestamp(forecast_origin)
 
-    return pd.date_range(
-        start=first_forecast,
-        periods=forecast_steps,
+    if origin_utc.tzinfo is None:
+        origin_utc = origin_utc.tz_localize("UTC")
+    else:
+        origin_utc = origin_utc.tz_convert("UTC")
+
+    origin_et = origin_utc.tz_convert(timezone)
+
+    # Starting from the origin avoids applying a fixed 24-hour
+    # offset before constructing an Eastern daily range.
+    forecast_for_et = pd.date_range(
+        start=origin_et,
+        periods=forecast_steps + 1,
         freq=offset,
-    )
+    )[1:]
 
+    return forecast_for_et.tz_convert("UTC")
 
 def _resolve_forecast_origin(
     data: pd.DataFrame,
@@ -245,9 +284,22 @@ def _prepare_exogenous_forecast_input(
         }
     )
 
+    future = add_local_timestamp(
+        future,
+        source_column=timestamp_column,
+        output_column="observed_at_et",
+        timezone=MARKET_TIMEZONE,
+    )
+
     future = add_calendar_features(
         future,
-        time_column=timestamp_column,
+        time_column="observed_at_et",
+    )
+
+    future = add_holiday_feature(
+        future,
+        time_column="observed_at_et",
+        timezone=MARKET_TIMEZONE,
     )
 
     requested_calendar_features = [

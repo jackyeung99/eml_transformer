@@ -16,6 +16,8 @@ from eml_transformer.features.transformations.temporal import (
     add_lags
 )
 
+MARKET_TIMEZONE = "America/New_York"
+MISO_REGION = "Midcontinent Independent System Operator, Inc."
 
 def build_eia_region_hourly(
     df: pd.DataFrame,
@@ -37,7 +39,7 @@ def build_eia_region_hourly(
     features = add_local_timestamp(
         features,
         source_column="observed_at",
-        output_column="observed_at_eta",
+        output_column="observed_at_et",
         timezone="America/New_York",
     )
 
@@ -51,12 +53,12 @@ def build_eia_region_hourly(
 
     features = add_calendar_features(
         features,
-        time_column="observed_at_eta",
+        time_column="observed_at_et",
     )
 
     features = add_holiday_feature(
         features,
-        time_column="observed_at_eta",
+        time_column="observed_at_et",
         timezone="America/New_York",
     )
 
@@ -67,18 +69,12 @@ def build_eia_region_daily(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     hourly = build_eia_region_hourly(df).copy()
-
-    hourly["observed_at"] = pd.to_datetime(
-        hourly["observed_at"],
-        utc=True,
-    )
-
-    hourly["day"] = hourly["observed_at"].dt.floor("D")
+    hourly["day_et"] = hourly["observed_at_et"].dt.floor("D")
 
     daily = (
         hourly
         .groupby(
-            ["day", "region"],
+            ["day_et", "region"],
             as_index=False,
         )
         .agg(
@@ -87,15 +83,18 @@ def build_eia_region_daily(
             load_max=("actual_load", "max"),
             generation_total=("net_generation", "sum"),
         )
-        .rename(columns={"day": "observed_at"})
-        .sort_values(["region", "observed_at"])
+        .rename(columns={"day_et": "observed_at_et"})
+        .sort_values(["region", "observed_at_et"])
         .reset_index(drop=True)
+    )
+
+    daily["observed_at"] = (
+        daily["observed_at_et"].dt.tz_convert("UTC")
     )
 
     return daily
 
 
-MISO_REGION = "Midcontinent Independent System Operator, Inc."
 
 
 def build_eia_interchange_totals(
@@ -124,8 +123,9 @@ def build_eia_interchange_totals(
         .rename(columns={"value": "total_exports"})
     )
 
-    return (
-        imports.merge(
+    features = (
+        imports
+        .merge(
             exports,
             on=index_columns,
             how="outer",
@@ -133,6 +133,17 @@ def build_eia_interchange_totals(
         .sort_values(["region", "observed_at"])
         .reset_index(drop=True)
     )
+
+    features = add_local_timestamp(
+        features,
+        source_column="observed_at",
+        output_column="observed_at_et",
+        timezone=MARKET_TIMEZONE,
+    )
+
+    return features
+
+
 
 def build_eia_interchange_features(
     df: pd.DataFrame,
@@ -150,6 +161,7 @@ def build_eia_interchange_features(
     return features[
         [
             "observed_at",
+            "observed_at_et",
             "region",
             "total_imports_lag_24",
             "total_exports_lag_24",
@@ -161,26 +173,25 @@ def build_eia_interchange_daily(
 ) -> pd.DataFrame:
     hourly = build_eia_interchange_totals(df).copy()
 
-    hourly["observed_at"] = pd.to_datetime(
-        hourly["observed_at"],
-        utc=True,
-    )
-
-    hourly["day"] = hourly["observed_at"].dt.floor("D")
+    hourly["day_et"] = hourly["observed_at_et"].dt.floor("D")
 
     daily = (
         hourly
         .groupby(
-            ["region", "day"],
+            ["day_et", "region"],
             as_index=False,
         )
         .agg(
             total_imports=("total_imports", "mean"),
             total_exports=("total_exports", "mean"),
         )
-        .rename(columns={"day": "observed_at"})
-        .sort_values(["region", "observed_at"])
+        .rename(columns={"day_et": "observed_at_et"})
+        .sort_values(["region", "observed_at_et"])
         .reset_index(drop=True)
+    )
+
+    daily["observed_at"] = (
+        daily["observed_at_et"].dt.tz_convert("UTC")
     )
 
     daily["total_imports_lag_1"] = (
@@ -194,6 +205,7 @@ def build_eia_interchange_daily(
     return daily[
         [
             "observed_at",
+            "observed_at_et",
             "region",
             "total_imports_lag_1",
             "total_exports_lag_1",
