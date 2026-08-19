@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.runtime = build_runtime(Path("configs/dev.yaml"))
+    app.state.runtime = build_runtime(Path("configs/prod.yaml"))
     yield
 
 

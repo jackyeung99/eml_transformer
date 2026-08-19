@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 import eml_transformer.sources  # noqa: F401
+from eml_transformer.logging import get_logger
 from eml_transformer.schema.records import BronzeRecord
 from eml_transformer.sources.registry import create_source
-from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.storage.base import Storage
-from eml_transformer.utils.profiling import profile
-
-from eml_transformer.logging import get_logger
+from eml_transformer.storage.paths import StoragePaths
 
 logger = get_logger(__name__)
+
+
 @dataclass(slots=True)
 class StandardizationResult:
     status: str
@@ -56,6 +56,8 @@ class StandardizationPipeline:
         source_name: str,
         source_config: dict[str, Any],
     ) -> StandardizationResult:
+        started_at = perf_counter()
+
         bronze_key: str | None = None
         silver_key: str | None = None
 
@@ -63,6 +65,11 @@ class StandardizationPipeline:
             "read": 0,
             "failed": 0,
         }
+
+        logger.info(
+            "Starting standardization | source=%s",
+            source_name,
+        )
 
         try:
             stage_config = source_config.get(
@@ -95,10 +102,34 @@ class StandardizationPipeline:
             bronze_key = self.paths.bronze_records(
                 source=source.name,
             )
-            
+
             silver_key = self.paths.dataset(output_ref)
 
+            logger.debug(
+                "Resolved standardization paths "
+                "| source=%s | bronze=%s | silver=%s "
+                "| batch_size=%s | write_mode=%s",
+                source.name,
+                bronze_key,
+                silver_key,
+                batch_size,
+                write_mode,
+            )
+
             if not self.storage.exists(bronze_key):
+                error = (
+                    "No bronze data found for source: "
+                    f"{source.name}"
+                )
+
+                logger.warning(
+                    "Skipping standardization "
+                    "| source=%s | bronze=%s | reason=%s",
+                    source.name,
+                    bronze_key,
+                    error,
+                )
+
                 return StandardizationResult(
                     status="skipped",
                     source=source.name,
@@ -106,10 +137,7 @@ class StandardizationPipeline:
                     records_out=0,
                     bronze_key=bronze_key,
                     silver_key=silver_key,
-                    error=(
-                        "No bronze data found for source: "
-                        f"{source.name}"
-                    ),
+                    error=error,
                 )
 
             records = self._iter_standardized_records(
@@ -125,6 +153,19 @@ class StandardizationPipeline:
                 mode=write_mode,
             )
 
+            elapsed_seconds = perf_counter() - started_at
+
+            logger.info(
+                "Standardization completed "
+                "| source=%s | read=%s | out=%s "
+                "| failed=%s | elapsed_seconds=%.2f",
+                source.name,
+                counters["read"],
+                records_out,
+                counters["failed"],
+                elapsed_seconds,
+            )
+
             return StandardizationResult(
                 status="success",
                 source=source.name,
@@ -136,9 +177,16 @@ class StandardizationPipeline:
             )
 
         except Exception as exc:
+            elapsed_seconds = perf_counter() - started_at
+
             logger.exception(
-                "Standardization failed | source=%s",
+                "Standardization failed "
+                "| source=%s | read=%s | failed=%s "
+                "| elapsed_seconds=%.2f",
                 source_name,
+                counters["read"],
+                counters["failed"],
+                elapsed_seconds,
             )
 
             return StandardizationResult(
@@ -158,6 +206,13 @@ class StandardizationPipeline:
         bronze_key: str,
         counters: dict[str, int],
     ) -> Iterator[dict[str, Any]]:
+        logger.debug(
+            "Reading bronze records "
+            "| source=%s | bronze=%s",
+            source.name,
+            bronze_key,
+        )
+
         for row_number, row in enumerate(
             self.storage.iter_jsonl(bronze_key),
             start=1,
@@ -198,7 +253,7 @@ class StandardizationPipeline:
         stage_config: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Remove orchestration settings before passing configuration
+        Remove pipeline settings before passing configuration
         to the source constructor.
 
         A nested `options` mapping is preferred, but the older flat

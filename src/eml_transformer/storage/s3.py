@@ -12,7 +12,11 @@ import s3fs
 
 from eml_transformer.storage.base import Storage
 from eml_transformer.storage.paths import StoragePaths
+from eml_transformer.logging import get_logger
 
+
+
+logger = get_logger(__name__)
 
 @dataclass
 class S3Storage(Storage):
@@ -52,8 +56,21 @@ class S3Storage(Storage):
     )
 
     def _init_fs(self) -> None:
+
+        
         if self._fs is not None:
             return
+
+
+        logger.info(
+            "Initializing S3 storage: bucket=%r prefix=%r "
+            "region=%r profile=%r endpoint_url=%r",
+            self.bucket,
+            self.prefix,
+            self.region,
+            self.profile,
+            self.endpoint_url,
+        )
 
         client_kwargs: dict[str, Any] = {}
 

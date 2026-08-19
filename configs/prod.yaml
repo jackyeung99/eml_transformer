@@ -1,7 +1,7 @@
 storage:
   backend: s3
   bucket: eml-transformer
-  prefix: .
+  prefix: ""
   region: us-east-2
 
 sources:

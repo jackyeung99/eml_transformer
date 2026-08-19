@@ -518,12 +518,33 @@ def load_config(path: str | Path) -> AppConfig:
 
     backend = storage_cfg.get("backend", "local")
     root = storage_cfg.get("root", "data")
+    bucket = storage_cfg.get("bucket")
+    prefix = storage_cfg.get("prefix", "")
+    region = storage_cfg.get("region")
+    profile = storage_cfg.get("profile")
+    endpoint_url = storage_cfg.get("endpoint_url")
 
     if not isinstance(backend, str) or not backend:
-        raise TypeError("'storage.backend' must be a nonempty string")
+        raise TypeError(
+            "'storage.backend' must be a nonempty string"
+        )
 
     if not isinstance(root, str) or not root:
-        raise TypeError("'storage.base_dir' must be a nonempty string")
+        raise TypeError(
+            "'storage.root' must be a nonempty string"
+        )
+
+    if backend == "s3":
+        if not isinstance(bucket, str) or not bucket:
+            raise TypeError(
+                "'storage.bucket' must be a nonempty string "
+                "when backend is 's3'"
+            )
+
+        if region is not None and not isinstance(region, str):
+            raise TypeError(
+                "'storage.region' must be a string"
+            )
 
     embeddings = cfg.get("embeddings", {})
 
@@ -534,6 +555,11 @@ def load_config(path: str | Path) -> AppConfig:
         storage=StorageConfig(
             backend=backend,
             root=root,
+            bucket=bucket,
+            prefix=prefix,
+            region=region,
+            profile=profile,
+            endpoint_url=endpoint_url,
         ),
         sources=build_source_definitions(
             cfg,
@@ -541,6 +567,6 @@ def load_config(path: str | Path) -> AppConfig:
         ),
         embeddings=dict(embeddings),
         features=build_feature_definitions(cfg),
-        datasets=build_dataset_definitions(cfg), 
-        modeling=build_modeling_definitions(cfg)
+        datasets=build_dataset_definitions(cfg),
+        modeling=build_modeling_definitions(cfg),
     )

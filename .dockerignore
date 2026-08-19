@@ -17,6 +17,7 @@ env/
 
 # Local data — especially important for your large Parquet files
 data/
+artifacts/
 *.parquet
 *.jsonl
 
