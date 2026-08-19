@@ -84,10 +84,9 @@ class TextRecord:
             "url": self.url,
             "region": self.region,
             "categories": self.categories,
-            "dimensions": self.dimensions,
-            "metadata": self.metadata,
+            "dimensions": self.dimensions or None,
+            "metadata": self.metadata or None,
         }
-
 
 # Silver numeric schema
 @dataclass(slots=True)
@@ -114,8 +113,8 @@ class NumericRecord:
             "retrieved_at": self.retrieved_at,
             "region": self.region,
             "unit": self.unit,
-            "dimensions": self.dimensions,
-            "metadata": self.metadata,
+            "dimensions": self.dimensions or None,
+            "metadata": self.metadata or None,
         }
 
 
@@ -134,6 +133,7 @@ TEXT_RECORD_COLUMNS = [
     "region",
     "categories",
     "metadata",
+    "dimensions"
 ]
 
 
@@ -148,4 +148,5 @@ NUMERIC_RECORD_COLUMNS = [
     "region",
     "unit",
     "metadata",
+    "dimensions"
 ]

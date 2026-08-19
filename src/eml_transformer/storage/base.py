@@ -353,239 +353,208 @@ class Storage:
     # Model Archiving
     # =====================
 
+    
     def read_model_metadata(
         self,
-        path: str,
+        name: str,
     ) -> ModelMetadata | None:
-        artifact_path = Path(path)
-        model_path = artifact_path / "model.joblib"
-        metadata_path = artifact_path / "metadata.json"
+        model_key = self.paths.model_file(name)
+        metadata_key = self.paths.model_metadata(name)
 
-        # Only report a model as available when the complete artifact exists.
-        if not model_path.exists() or not metadata_path.exists():
+        # Only report the model as available when both
+        # required artifacts exist.
+        if (
+            not self.exists(model_key)
+            or not self.exists(metadata_key)
+        ):
             return None
 
-        with metadata_path.open(
-            "r",
-            encoding="utf-8",
-        ) as file:
-            values = json.load(file)
+        values = self.read_json(metadata_key)
 
         return ModelMetadata.from_dict(values)
 
 
     def read_model(
         self,
-        path: str,
-    ) -> tuple[BaseForecastModel, ModelMetadata]:
-        artifact_path = Path(path)
-        model_path = artifact_path / "model.joblib"
-        metadata_path = artifact_path / "metadata.json"
+        name: str,
+    ) -> tuple[
+        BaseForecastModel,
+        ModelMetadata,
+    ]:
+        model_key = self.paths.model_file(name)
+        metadata_key = self.paths.model_metadata(name)
 
-        if not model_path.exists():
+        if not self.exists(model_key):
             raise FileNotFoundError(
-                f"Model file does not exist: {model_path}"
+                f"Model file does not exist: {model_key}"
             )
 
-        if not metadata_path.exists():
+        if not self.exists(metadata_key):
             raise FileNotFoundError(
-                f"Model metadata does not exist: {metadata_path}"
+                "Model metadata does not exist: "
+                f"{metadata_key}"
             )
 
-        with metadata_path.open(
-            "r",
-            encoding="utf-8",
-        ) as file:
-            metadata = ModelMetadata.from_dict(
-                json.load(file)
-            )
+        metadata = ModelMetadata.from_dict(
+            self.read_json(metadata_key)
+        )
 
-        model = joblib.load(model_path)
+        model = self.read_pickle(model_key)
 
-        if not callable(getattr(model, "forecast", None)):
+        if not callable(
+            getattr(model, "forecast", None)
+        ):
             raise TypeError(
-                f"Loaded object from {model_path} does not implement forecast()"
+                f"Loaded object from {model_key} "
+                "does not implement forecast()"
             )
 
         return model, metadata
 
+
     def _write_model_artifact(
         self,
-        artifact_path: Path,
+        *,
+        model_key: str,
+        metadata_key: str,
         model: BaseForecastModel,
         metadata: ModelMetadata,
     ) -> None:
-        artifact_path.mkdir(
-            parents=True,
-            exist_ok=True,
+        self.write_pickle(
+            model,
+            model_key,
         )
 
-        model_path = artifact_path / "model.joblib"
-        metadata_path = artifact_path / "metadata.json"
-
-        token = uuid.uuid4().hex
-
-        temporary_model_path = (
-            artifact_path / f".model-{token}.joblib"
-        )
-        temporary_metadata_path = (
-            artifact_path / f".metadata-{token}.json"
+        self.write_json(
+            metadata.to_dict(),
+            metadata_key,
         )
 
-        try:
-            joblib.dump(
-                model,
-                temporary_model_path,
-            )
-
-            temporary_metadata_path.write_text(
-                json.dumps(
-                    metadata.to_dict(),
-                    indent=2,
-                    sort_keys=True,
-                ),
-                encoding="utf-8",
-            )
-
-            temporary_model_path.replace(model_path)
-            temporary_metadata_path.replace(
-                metadata_path
-            )
-
-        finally:
-            temporary_model_path.unlink(
-                missing_ok=True
-            )
-            temporary_metadata_path.unlink(
-                missing_ok=True
-            )
 
     def write_model(
         self,
-        path: str,
+        name: str,
         model: BaseForecastModel,
         metadata: ModelMetadata,
     ) -> None:
-        artifact_path = Path(path)
-
-        version_path = (
-            artifact_path
-            / "versions"
-            / metadata.model_version
+        version_model_key = (
+            self.paths.model_version_file(
+                name,
+                metadata.model_version,
+            )
         )
 
-        if version_path.exists():
+        version_metadata_key = (
+            self.paths.model_version_metadata(
+                name,
+                metadata.model_version,
+            )
+        )
+
+        if (
+            self.exists(version_model_key)
+            or self.exists(version_metadata_key)
+        ):
             raise FileExistsError(
                 "Model version already exists: "
-                f"{version_path}"
+                f"{self.paths.model_version(name, metadata.model_version)}"
             )
 
-        # Preserve this exact historical model and its diagnostics.
+        # Preserve the immutable historical version.
         self._write_model_artifact(
-            version_path,
-            model,
-            metadata,
+            model_key=version_model_key,
+            metadata_key=version_metadata_key,
+            model=model,
+            metadata=metadata,
         )
 
-        # Update the model used for current inference.
+        # Update the artifacts used for current inference.
         self._write_model_artifact(
-            artifact_path,
-            model,
-            metadata,
+            model_key=self.paths.model_file(name),
+            metadata_key=(
+                self.paths.model_metadata(name)
+            ),
+            model=model,
+            metadata=metadata,
         )
+
 
     def read_model_metadata_history(
         self,
-        path: str,
+        name: str,
     ) -> list[ModelMetadata]:
-        versions_path = Path(path) / "versions"
+        versions_prefix = self.paths.model_versions(
+            name
+        )
 
-        if not versions_path.exists():
-            return []
+        metadata_keys = [
+            key
+            for key in self.list(versions_prefix)
+            if key.endswith("/metadata.json")
+        ]
 
         history: list[ModelMetadata] = []
 
-        for version_path in versions_path.iterdir():
-            if not version_path.is_dir():
-                continue
+        for metadata_key in metadata_keys:
+            values = self.read_json(metadata_key)
 
-            metadata_path = (
-                version_path / "metadata.json"
+            history.append(
+                ModelMetadata.from_dict(values)
             )
-
-            if not metadata_path.exists():
-                continue
-
-            with metadata_path.open(
-                "r",
-                encoding="utf-8",
-            ) as file:
-                metadata = ModelMetadata.from_dict(
-                    json.load(file)
-                )
-
-            history.append(metadata)
 
         return sorted(
             history,
             key=lambda item: item.trained_at,
         )
 
+
     def read_model_version(
         self,
-        path: str,
+        name: str,
         version: str,
-    ) -> tuple[BaseForecastModel, ModelMetadata]:
-        version_path = (
-            Path(path)
-            / "versions"
-            / version
+    ) -> tuple[
+        BaseForecastModel,
+        ModelMetadata,
+    ]:
+        model_key = self.paths.model_version_file(
+            name,
+            version,
         )
 
-        return self.read_model(str(version_path))
+        metadata_key = (
+            self.paths.model_version_metadata(
+                name,
+                version,
+            )
+        )
 
-
-
-    def write_forecasts(
-        self,
-        ref: DatasetRef | str,
-        forecasts: pd.DataFrame,
-        *,
-        batch_size: int = 100_000,
-    ) -> int:
-        if forecasts.empty:
-            return 0
-
-        existing = self.read_dataset(ref)
-
-        if existing.empty:
-            combined = forecasts.copy()
-        else:
-            _validate_matching_columns(
-                existing,
-                forecasts,
+        if not self.exists(model_key):
+            raise FileNotFoundError(
+                "Model version file does not exist: "
+                f"{model_key}"
             )
 
-            combined = pd.concat(
-                [existing, forecasts],
-                ignore_index=True,
+        if not self.exists(metadata_key):
+            raise FileNotFoundError(
+                "Model version metadata does not exist: "
+                f"{metadata_key}"
             )
 
-        combined = combined.drop_duplicates(
-            subset=["forecast_id"],
-            keep="last",
+        metadata = ModelMetadata.from_dict(
+            self.read_json(metadata_key)
         )
 
-        return self.write_dataframe(
-            ref,
-            combined,
-            batch_size=batch_size,
-            mode="replace",
-        )
+        model = self.read_pickle(model_key)
 
+        if not callable(
+            getattr(model, "forecast", None)
+        ):
+            raise TypeError(
+                f"Loaded object from {model_key} "
+                "does not implement forecast()"
+            )
 
-
-
+        return model, metadata
 
 
 

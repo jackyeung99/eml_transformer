@@ -21,40 +21,48 @@ sources:
       - backfill
       - standardize
 
+  miso_notifications:
+    enabled: true
+    config: sources/miso_notifications.yaml
+    stages: 
+      - ingest
+      - standardize
+      - embed
+
 features:
   eia_region_hourly:
-    input: silver:eia930_region:records
-    output: gold:eia930_region_hourly:features
+    input: silver:eia_region:records
+    output: gold:eia_region_hourly:features
     builder: eia_region_hourly
 
   eia_region_daily:
-    input: silver:eia930_region:records
-    output: gold:eia930_region_daily:features
+    input: silver:eia_region:records
+    output: gold:eia_region_daily:features
     builder: eia_region_daily
 
   eia_interchange_hourly:
-    input: silver:eia930_interchange:records
-    output: gold:eia930_interchange_hourly:features
+    input: silver:eia_interchange:records
+    output: gold:eia_interchange_hourly:features
     builder: eia_interchange_hourly
   
   eia_interchange_daily:
-    input: silver:eia930_interchange:records
-    output: gold:eia930_interchange_daily:features
+    input: silver:eia_interchange:records
+    output: gold:eia_interchange_daily:features
     builder: eia_interchange_daily
 
 datasets:
   hourly_load:
     builder: hourly_load_forecasting
     inputs:
-      region_features: gold:eia930_region_hourly:features
-      interchange_features: gold:eia930_interchange_hourly:features
+      region_features: gold:eia_region_hourly:features
+      interchange_features: gold:eia_interchange_hourly:features
     output: gold:hourly_load:datasets
 
   daily_load:
     builder: daily_load_forecasting
     inputs:
-      region_daily_features: gold:eia930_region_daily:features
-      interchange_daily_features: gold:eia930_interchange_daily:features
+      region_daily_features: gold:eia_region_daily:features
+      interchange_daily_features: gold:eia_interchange_daily:features
     output: gold:daily_load:datasets
 
 

@@ -248,6 +248,159 @@ class StandardizationPipeline:
                     row_number,
                 )
 
+    # def _iter_standardized_records(
+    #     self,
+    #     source: Any,
+    #     bronze_key: str,
+    #     counters: dict[str, int],
+    # ) -> Iterator[dict[str, Any]]:
+    #     from time import perf_counter
+
+    #     logger.info(
+    #         "Starting Bronze standardization "
+    #         "| source=%s | bronze=%s",
+    #         source.name,
+    #         bronze_key,
+    #     )
+
+    #     rows = iter(
+    #         self.storage.iter_jsonl(bronze_key)
+    #     )
+
+    #     started_at = perf_counter()
+    #     last_report_at = started_at
+
+    #     read_seconds = 0.0
+    #     transform_seconds = 0.0
+    #     yielded = 0
+    #     skipped = 0
+    #     row_number = 0
+
+    #     try:
+    #         while True:
+    #             read_started_at = perf_counter()
+
+    #             try:
+    #                 row = next(rows)
+    #             except StopIteration:
+    #                 break
+
+    #             read_seconds += (
+    #                 perf_counter() - read_started_at
+    #             )
+
+    #             row_number += 1
+    #             counters["read"] += 1
+
+    #             transform_started_at = perf_counter()
+    #             output_rows: list[dict[str, Any]] = []
+
+    #             try:
+    #                 bronze_record = BronzeRecord.from_dict(
+    #                     row
+    #                 )
+
+    #                 result = source.standardize_record(
+    #                     bronze_record,
+    #                 )
+
+    #                 if result is None:
+    #                     skipped += 1
+    #                 else:
+    #                     standardized_records = (
+    #                         result
+    #                         if isinstance(
+    #                             result,
+    #                             (list, tuple),
+    #                         )
+    #                         else (result,)
+    #                     )
+
+    #                     output_rows = [
+    #                         record.to_dict()
+    #                         for record in standardized_records
+    #                     ]
+
+    #             except Exception:
+    #                 counters["failed"] += 1
+
+    #                 logger.exception(
+    #                     "Failed to standardize record "
+    #                     "| source=%s | row=%s",
+    #                     source.name,
+    #                     row_number,
+    #                 )
+
+    #             transform_seconds += (
+    #                 perf_counter() - transform_started_at
+    #             )
+
+    #             yielded += len(output_rows)
+
+    #             now = perf_counter()
+
+    #             if (
+    #                 row_number % 10_000 == 0
+    #                 or now - last_report_at >= 30
+    #             ):
+    #                 elapsed = now - started_at
+    #                 rate = (
+    #                     row_number / elapsed
+    #                     if elapsed
+    #                     else 0.0
+    #                 )
+
+    #                 logger.info(
+    #                     "Standardization progress "
+    #                     "| source=%s "
+    #                     "| read=%d "
+    #                     "| yielded=%d "
+    #                     "| skipped=%d "
+    #                     "| failed=%d "
+    #                     "| rate=%.0f records/s "
+    #                     "| read_time=%.1fs "
+    #                     "| transform_time=%.1fs "
+    #                     "| elapsed=%.1fs",
+    #                     source.name,
+    #                     row_number,
+    #                     yielded,
+    #                     skipped,
+    #                     counters["failed"],
+    #                     rate,
+    #                     read_seconds,
+    #                     transform_seconds,
+    #                     elapsed,
+    #                 )
+
+    #                 last_report_at = now
+
+    #             yield from output_rows
+
+    #     finally:
+    #         elapsed = perf_counter() - started_at
+
+    #         logger.info(
+    #             "Finished Bronze standardization "
+    #             "| source=%s "
+    #             "| read=%,d "
+    #             "| yielded=%,d "
+    #             "| skipped=%,d "
+    #             "| failed=%,d "
+    #             "| rate=%.0f records/s "
+    #             "| read_time=%.1fs "
+    #             "| transform_time=%.1fs "
+    #             "| elapsed=%.1fs",
+    #             source.name,
+    #             row_number,
+    #             yielded,
+    #             skipped,
+    #             counters["failed"],
+    #             row_number / elapsed if elapsed else 0.0,
+    #             read_seconds,
+    #             transform_seconds,
+    #             elapsed,
+    #         )
+
     @staticmethod
     def _source_options(
         stage_config: dict[str, Any],

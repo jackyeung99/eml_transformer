@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 import json
 import pickle
 import uuid
+import tempfile
 
 import pandas as pd
 import s3fs
@@ -13,8 +15,6 @@ import s3fs
 from eml_transformer.storage.base import Storage
 from eml_transformer.storage.paths import StoragePaths
 from eml_transformer.logging import get_logger
-
-
 
 logger = get_logger(__name__)
 
@@ -470,10 +470,21 @@ class S3Storage(Storage):
     ) -> Iterator[dict[str, Any]]:
         self._init_fs()
 
-        path = self._s3_path(key)
 
-        try:
-            with self._fs.open(path, "rb") as file:
+        '''
+        Instead of streaming it directly from aws we download the file and then stream locally
+        '''
+
+        s3_path = self._s3_path(key)
+        
+        with tempfile.TemporaryDirectory() as directory:
+            local_path = Path(directory) / "records.jsonl"
+
+            self._fs.get(
+                s3_path,
+                str(local_path),
+            )
+            with local_path.open("rb") as file:
                 for line_number, line in enumerate(
                     file,
                     start=1,
@@ -494,15 +505,11 @@ class S3Storage(Storage):
                     if not isinstance(row, dict):
                         raise ValueError(
                             f"Expected a JSON object in "
-                            f"{key!r} at line "
-                            f"{line_number}, received "
-                            f"{type(row).__name__}"
+                            f"{key!r} at line {line_number}, "
+                            f"received {type(row).__name__}"
                         )
 
                     yield row
-
-        except FileNotFoundError:
-            return
 
     def read_jsonl(
         self,

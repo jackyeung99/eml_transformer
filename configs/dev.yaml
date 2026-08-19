@@ -4,7 +4,7 @@ storage:
 
 sources:
   iem_afos:
-    enabled: true
+    enabled: false
     config: sources/iem_afos.yaml
     stages:
       - ingest
@@ -21,7 +21,7 @@ sources:
       - embed
 
   gdelt:
-    enabled: true
+    enabled: false
     config: sources/gdelt.yaml
     stages:
       - ingest

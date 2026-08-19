@@ -42,10 +42,15 @@ class DatasetRef:
     
 
 
+
 @dataclass(frozen=True, slots=True)
 class StoragePaths:
     datasets_root: str = "data"
     artifacts_root: str = "artifacts"
+
+    # =====================
+    # Datasets
+    # =====================
 
     def dataset(
         self,
@@ -53,7 +58,6 @@ class StoragePaths:
     ) -> str:
         if isinstance(ref, str):
             ref = DatasetRef.parse(ref)
-
 
         if ref.layer == "gold":
             return _p(
@@ -89,11 +93,17 @@ class StoragePaths:
             self.datasets_root,
             "bronze",
             f"source={_clean(source)}",
-            # f"ingest_date={ingest_date}",
             "records.jsonl",
         )
 
-    def dedupe_state(self, source: str) -> str:
+    # =====================
+    # Metadata
+    # =====================
+
+    def dedupe_state(
+        self,
+        source: str,
+    ) -> str:
         return _p(
             self.datasets_root,
             "metadata",
@@ -101,13 +111,20 @@ class StoragePaths:
             f"source={_clean(source)}.json",
         )
 
-    def checkpoint_key(self, source: str) -> str:
+    def checkpoint_key(
+        self,
+        source: str,
+    ) -> str:
         return _p(
             self.datasets_root,
             "metadata",
             "checkpoints",
             f"source={_clean(source)}.json",
         )
+
+    # =====================
+    # Models
+    # =====================
 
     def model(
         self,
@@ -116,15 +133,82 @@ class StoragePaths:
         return _p(
             self.artifacts_root,
             "models",
-            f"model={_clean(name)}"
+            f"model={_clean(name)}",
         )
+
+    def model_file(
+        self,
+        name: str,
+    ) -> str:
+        return _p(
+            self.model(name),
+            "model.joblib",
+        )
+
+    def model_metadata(
+        self,
+        name: str,
+    ) -> str:
+        return _p(
+            self.model(name),
+            "metadata.json",
+        )
+
+    def model_versions(
+        self,
+        name: str,
+    ) -> str:
+        return _p(
+            self.model(name),
+            "versions",
+        )
+
+    def model_version(
+        self,
+        name: str,
+        version: str,
+    ) -> str:
+        return _p(
+            self.model_versions(name),
+            _clean(version),
+        )
+
+    def model_version_file(
+        self,
+        name: str,
+        version: str,
+    ) -> str:
+        return _p(
+            self.model_version(
+                name,
+                version,
+            ),
+            "model.joblib",
+        )
+
+    def model_version_metadata(
+        self,
+        name: str,
+        version: str,
+    ) -> str:
+        return _p(
+            self.model_version(
+                name,
+                version,
+            ),
+            "metadata.json",
+        )
+
+    # =====================
+    # Experiments
+    # =====================
 
     def experiment(
         self,
         name: str,
     ) -> str:
         return _p(
-            self.artifacts_root, 
+            self.artifacts_root,
             "experiments",
-            f"experiment={_clean(name)}"
+            f"experiment={_clean(name)}",
         )
