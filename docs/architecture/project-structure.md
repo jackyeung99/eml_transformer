@@ -194,6 +194,7 @@ Several packages use similar file types to separate high-level responsibilities.
 | `base.py` | Defines a shared interface for interchangeable implementations, such as forecasting models or storage backends. |
 | `registry.py` | Maps names used in configuration to their corresponding Python implementations. |
 | `schemas.py` | Defines shared record structures and data contracts used between components. |
+| `factory.py` | Creates an instance of a class with the specified init settings such as  |
 | `results.py` | Defines structured pipeline results used to communicate run status, outputs, record counts, and errors to callers such as the CLI. A separate file is most useful when a package contains multiple pipelines or result types. |
 
 

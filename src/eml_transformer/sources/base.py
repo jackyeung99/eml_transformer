@@ -18,7 +18,6 @@ class DataSource(ABC):
     # ingestion_method: str     # "api", "file", "scrape"
     update_mode: str          # "snapshot" or "incremental"
     supports_backfill: bool
-    default_lookback_days: int
 
     @abstractmethod
     def fetch_records(
