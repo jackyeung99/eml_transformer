@@ -17,7 +17,10 @@ def build_load_forecast_dataset(
         )
 
     return region_features.merge(
-        interchange_features,
+        interchange_features.drop(
+            columns=["observed_at_et"],
+            errors="ignore",
+        ),
         on=["observed_at", "region"],
         how="left",
         validate="one_to_one",
@@ -39,7 +42,10 @@ def build_daily_load_forecast_dataset(
 
     return (
         region_features.merge(
-            interchange_features,
+            interchange_features.drop(
+                columns=["observed_at_et"],
+                errors="ignore",
+            ),
             on=["observed_at", "region"],
             how="left",
             validate="one_to_one",
