@@ -107,3 +107,29 @@ The refactor should also add or verify:
 - Safe operation within temporary ECS task storage
 
 This will allow scraping to run consistently during local development and as an ECS task in AWS while following the same dataset-reference conventions as the rest of the pipeline.
+
+### 5. Normalize Result Statuses (4/5 Severity)
+
+Pipeline result classes currently use both `failure` and `failed`. The CLI and workflow helpers do not interpret these values consistently; workflow failure detection checks only for `failure`.
+
+Define one shared status type or enumeration and use it across every result class. CLI exit handling and workflow stopping logic should treat the shared failure value consistently so a failed stage cannot be followed by downstream work.
+
+### 6. Repair Verbose Feature Inspection (2/5 Severity)
+
+`show features --verbose` reads `definition.inputs`, but `FeatureDefinition` exposes the singular field `input`. Update the inspection command and add a CLI test for verbose output.
+
+### 7. Align the Forecast API with Current Storage Schemas (4/5 Severity)
+
+The API should pass the configured model name to storage metadata methods rather than resolving a physical model path and allowing storage to resolve it a second time. Forecast ordering and latest-forecast selection should also use the current forecast fields, including `forecast_for_utc` and `generated_at_utc`, instead of earlier column names.
+
+Add endpoint tests using the same local storage implementation and schemas used by the pipelines.
+
+### 8. Tighten Configuration and Schema Validation (3/5 Severity)
+
+Configuration loading and schema constants should be reviewed together. In particular:
+
+- Validate each dataset input reference value, not only the input alias.
+- Make configuration errors describe the actual expected mapping structure.
+- Keep the declared numeric output columns aligned with `NumericRecord`; avoid fields such as `source_type` unless they are part of the record schema.
+
+These checks should run while loading configuration or immediately before writing a dataset so invalid contracts fail early.
